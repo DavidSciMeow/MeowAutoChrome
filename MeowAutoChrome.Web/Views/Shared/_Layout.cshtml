@@ -1,0 +1,64 @@
+﻿@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
+
+    string NavLinkClass(string controller, string action)
+        => string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase)
+            ? "app-nav-link app-nav-link-active"
+            : "app-nav-link";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - MeowAutoChrome</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/fontawesome/css/fontawesome.min.css" />
+    <link rel="stylesheet" href="~/lib/fontawesome/css/solid.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/MeowAutoChrome.Web.styles.css" asp-append-version="true" />
+</head>
+<body class="app-shell">
+    <header>
+        <nav class="navbar bg-white border-bottom box-shadow app-nav">
+            <div class="container-fluid app-nav-shell">
+                <a class="navbar-brand app-brand" asp-area="" asp-controller="Browser" asp-action="Index">
+                    <span class="app-brand-mark"><i class="fa-brands fa-chrome"></i></span>
+                    <span>MeowAutoChrome</span>
+                </a>
+                <div class="app-nav-links">
+                    <a class="@NavLinkClass("Browser", "Index")" asp-controller="Browser" asp-action="Index">
+                        <i class="fa-solid fa-globe"></i>
+                        <span>浏览器</span>
+                    </a>
+                    <a class="@NavLinkClass("Home", "Settings")" asp-controller="Home" asp-action="Settings">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>设置</span>
+                    </a>
+                    <a class="@NavLinkClass("Home", "Privacy")" asp-controller="Home" asp-action="Privacy">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Privacy</span>
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <div class="container-fluid px-3 px-xl-4 app-content">
+        <main role="main" class="app-main">
+            @RenderBody()
+        </main>
+    </div>
+    <footer class="app-footer text-muted">
+        <div class="container-fluid px-3 px-xl-4">
+            @@Electronicute 萌喵电子
+        </div>
+    </footer>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

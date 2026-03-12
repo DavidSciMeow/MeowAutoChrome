@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../MeowAutoChrome.Contracts/MeowAutoChrome.Contracts.csproj" />
+  <Project Path="../MeowAutoChrome.ExamplePlugin/MeowAutoChrome.ExamplePlugin.csproj" />
+  <Project Path="MeowAutoChrome.Web.csproj" />
+</Solution>

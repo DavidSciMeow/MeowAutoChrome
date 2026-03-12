@@ -1,0 +1,908 @@
+﻿@model MeowAutoChrome.Web.Warpper.PlayWrightWarpper
+@{
+    ViewData["Title"] = "浏览器控制台";
+    Layout = "_Layout";
+}
+
+<div class="browser-workspace" id="browserWorkspace">
+    <div class="browser-pane browser-pane-left">
+        <div class="browser-control-panel mb-3">
+            <div class="browser-chrome">
+                <div class="browser-tabstrip-meta">
+                    <div class="browser-tabs-shell">
+                        <button type="button" class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn" id="tabsScrollLeftBtn" title="向左滚动" aria-label="向左滚动">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <div id="tabsBar" class="browser-tabs"></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn" id="tabsScrollRightBtn" title="向右滚动" aria-label="向右滚动">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn" id="newTabBtn" title="New Tab" aria-label="New Tab">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary browser-live-toggle" id="liveToggleBtn">实时画面</button>
+                    <small class="browser-tabstrip-metric" id="cpuDisplay">CPU --</small>
+                    <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
+                    <small class="browser-tabstrip-metric" id="fpsDisplay">FPS --</small>
+                    <span id="connStatus" class="badge bg-secondary">未连接</span>
+                </div>
+
+                <div class="browser-toolbar">
+                    <div class="browser-toolbar-group">
+                        <button type="button" class="btn btn-outline-secondary browser-chrome-icon-btn" id="backBtn" title="Back" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary browser-chrome-icon-btn" id="forwardBtn" title="Forward" aria-label="Forward"><i class="fa-solid fa-arrow-right"></i></button>
+                        <button type="button" class="btn btn-outline-secondary browser-chrome-icon-btn" id="reloadBtn" title="Reload" aria-label="Reload"><i class="fa-solid fa-rotate-right"></i></button>
+                    </div>
+
+                    <div class="browser-omnibox">
+                        <span class="browser-omnibox-icon"><i class="fa-solid fa-globe"></i></span>
+                        <input id="urlInput" class="form-control" placeholder="输入地址，例如 https://example.com" />
+                        <button type="button" class="btn btn-primary browser-omnibox-go" id="goBtn" title="Go" aria-label="Go"><i class="fa-solid fa-up-right-from-square"></i></button>
+                    </div>
+
+                    <div class="browser-toolbar-group">
+                        <button type="button" class="btn btn-outline-primary browser-chrome-icon-btn" id="shotBtn" title="Screenshot" aria-label="Screenshot"><i class="fa-solid fa-camera"></i></button>
+                    </div>
+                </div>
+
+                <div class="browser-toolbar-footer">
+                    <div class="browser-page-url" id="pageUrl">--</div>
+                </div>
+
+                <div id="browserError" class="alert alert-warning d-none mt-3 mb-0" role="alert"></div>
+            </div>
+        </div>
+
+        <div class="browser-stage">
+            <canvas id="browserCanvas"
+                    tabindex="0">
+            </canvas>
+            <div id="tabsStatusPanel" class="tabs-status-panel d-none"></div>
+            <div id="noSignal"
+                 style="position:absolute;inset:0;display:flex;align-items:center;
+                        justify-content:center;color:#555;font-size:1.2rem;">
+                等待画面...
+            </div>
+        </div>
+    </div>
+    <div class="browser-pane-divider" id="browserPaneDivider" role="separator" aria-orientation="vertical" aria-label="调整浏览器区与插件区宽度" tabindex="0"></div>
+    <div class="browser-pane browser-pane-right">
+        <div class="card h-100 plugin-panel">
+            <div class="card-header">插件区</div>
+            <div class="card-body">
+                <div id="pluginHost" class="vstack gap-3 small text-muted"></div>
+                <div id="pluginResult" class="alert alert-secondary d-none mt-3 mb-0 small"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/signalr/dist/browser/signalr.min.js"></script>
+    <script>
+        (function () {
+            const canvas = document.getElementById("browserCanvas");
+            const ctx    = canvas.getContext("2d");
+            const browserStage = canvas.closest(".browser-stage");
+            const browserWorkspace = document.getElementById("browserWorkspace");
+            const browserPaneDivider = document.getElementById("browserPaneDivider");
+            const status = document.getElementById("connStatus");
+            const noSig  = document.getElementById("noSignal");
+            const cpuTxt = document.getElementById("cpuDisplay");
+            const memoryTxt = document.getElementById("memoryDisplay");
+            const fpsTxt = document.getElementById("fpsDisplay");
+            const pageUrl = document.getElementById("pageUrl");
+            const browserError = document.getElementById("browserError");
+            const urlInput = document.getElementById("urlInput");
+            const tabsBar = document.getElementById("tabsBar");
+            const tabsScrollLeftBtn = document.getElementById("tabsScrollLeftBtn");
+            const tabsScrollRightBtn = document.getElementById("tabsScrollRightBtn");
+            const liveToggleBtn = document.getElementById("liveToggleBtn");
+            const tabsStatusPanel = document.getElementById("tabsStatusPanel");
+            const pluginHost = document.getElementById("pluginHost");
+            const pluginResult = document.getElementById("pluginResult");
+            let statusBusy = false;
+            let isEditingUrl = false;
+            let liveDisplayEnabled = true;
+            let measuredFps = 0;
+            let targetFrameIntervalMs = 100;
+            let resizeSyncTimer = null;
+            let applyingScreencastSettings = false;
+            let pendingScreencastSync = false;
+            let pluginPanelWidth = @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth;
+            let pointerResizeActive = false;
+
+            function clampPluginPanelWidth(width) {
+                const workspaceWidth = Math.max(0, browserWorkspace?.clientWidth || 0);
+                const maxAllowedByWorkspace = workspaceWidth > 0
+                    ? Math.max(@MeowAutoChrome.Web.Models.ProgramSettings.MinPluginPanelWidth, workspaceWidth - 360)
+                    : @MeowAutoChrome.Web.Models.ProgramSettings.MaxPluginPanelWidth;
+                const hardMax = Math.min(@MeowAutoChrome.Web.Models.ProgramSettings.MaxPluginPanelWidth, maxAllowedByWorkspace);
+                return Math.max(@MeowAutoChrome.Web.Models.ProgramSettings.MinPluginPanelWidth, Math.min(hardMax, Math.round(Number(width) || @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth)));
+            }
+
+            function applyPluginPanelWidth(width) {
+                pluginPanelWidth = clampPluginPanelWidth(width);
+                document.documentElement.style.setProperty("--plugin-panel-width", pluginPanelWidth + "px");
+            }
+
+            async function savePluginPanelWidth(width) {
+                try {
+                    const result = await postJson("/Browser/Layout", { pluginPanelWidth: clampPluginPanelWidth(width) });
+                    applyPluginPanelWidth(result.pluginPanelWidth);
+                } catch (e) {
+                    showError(e.message || "布局保存失败。");
+                }
+            }
+
+            function beginPanelResize() {
+                if (window.matchMedia("(max-width: 1199.98px)").matches)
+                    return false;
+
+                pointerResizeActive = true;
+                browserWorkspace.classList.add("browser-workspace-resizing");
+                return true;
+            }
+
+            function updatePanelResize(clientX) {
+                if (!pointerResizeActive || !browserWorkspace)
+                    return;
+
+                const rect = browserWorkspace.getBoundingClientRect();
+                applyPluginPanelWidth(rect.right - clientX);
+            }
+
+            function endPanelResize(shouldPersist = true) {
+                if (!pointerResizeActive)
+                    return;
+
+                pointerResizeActive = false;
+                browserWorkspace.classList.remove("browser-workspace-resizing");
+                if (shouldPersist)
+                    savePluginPanelWidth(pluginPanelWidth).catch(() => { });
+            }
+
+            // ── FPS 计数 ──────────────────────────────────────────────
+            let frameCount = 0, lastFpsTime = performance.now();
+            function renderFpsDisplay() {
+                fpsTxt.textContent = "FPS " + measuredFps + " / " + intervalToFps(targetFrameIntervalMs);
+            }
+
+            function renderResourceMetrics(data) {
+                cpuTxt.textContent = "CPU " + Number(data.cpuUsagePercent || 0).toFixed(1) + "%";
+                memoryTxt.textContent = "RAM " + Number(data.memoryUsageMb || 0).toFixed(1) + " MB";
+            }
+
+            function updateFps() {
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFpsTime >= 1000) {
+                    measuredFps = frameCount;
+                    renderFpsDisplay();
+                    frameCount = 0;
+                    lastFpsTime = now;
+                }
+            }
+
+            // ── 渲染队列 ──────────────────────────────────────────────
+            const img   = new Image();
+            let pending = null, busy = false, activeFrame = null;
+
+            img.onload = function () {
+                const targetWidth = activeFrame?.width ?? img.naturalWidth;
+                const targetHeight = activeFrame?.height ?? img.naturalHeight;
+
+                if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+                    canvas.width  = targetWidth;
+                    canvas.height = targetHeight;
+                }
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                noSig.style.display = "none";
+                updateFps();
+                busy = false;
+                if (pending !== null) { const n = pending; pending = null; drawFrame(n); }
+            };
+
+            function drawFrame(frame) {
+                if (busy) { pending = frame; return; }
+                busy = true;
+                activeFrame = frame;
+                img.src = "data:image/jpeg;base64," + frame.data;
+            }
+
+            // ── SignalR ───────────────────────────────────────────────
+            const conn = new signalR.HubConnectionBuilder()
+                .withUrl("/browserHub")
+                .withAutomaticReconnect()
+                .build();
+
+            conn.on("ReceiveFrame", drawFrame);
+            conn.on("ScreencastDisabled", () => {
+                noSig.textContent = "实时画面已关闭";
+                noSig.style.display = "flex";
+            });
+
+            conn.onreconnecting(() => { status.textContent = "重连中..."; status.className = "badge bg-warning text-dark"; });
+            conn.onreconnected(()  => { status.textContent = "已连接";   status.className = "badge bg-success"; });
+            conn.onclose(()        => {
+                status.textContent = "已断开"; status.className = "badge bg-danger";
+                noSig.style.display = "flex";
+            });
+
+            conn.start()
+                .then(async () => {
+                    status.textContent = "已连接";
+                    status.className = "badge bg-success";
+                    await refreshStatus();
+                    await loadPlugins();
+                    scheduleScreencastSync(true);
+                })
+                .catch(e  => { status.textContent = "连接失败"; status.className = "badge bg-danger"; console.error(e); });
+
+            async function postJson(url, body) {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body ?? {})
+                });
+
+                if (!response.ok)
+                    throw new Error("请求失败: " + response.status);
+
+                return await response.json();
+            }
+
+            function showError(message) {
+                browserError.textContent = message || "操作失败，请稍后重试。";
+                browserError.classList.remove("d-none");
+            }
+
+            function clearError() {
+                browserError.textContent = "";
+                browserError.classList.add("d-none");
+            }
+
+            function showCanvasOverlay(message, fillBlack = false) {
+                if (!liveDisplayEnabled) {
+                    noSig.style.display = "none";
+                    return;
+                }
+
+                if (fillBlack) {
+                    const viewport = getCanvasViewportSize();
+                    resizeCanvasBuffer(viewport.width, viewport.height);
+                    ctx.fillStyle = "#000";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+
+                noSig.textContent = message;
+                noSig.style.display = "flex";
+            }
+
+            function hideTemporaryCanvasOverlay() {
+                if (noSig.textContent === "Resetting Canvas")
+                    noSig.style.display = "none";
+            }
+
+            function setLiveDisplayEnabled(enabled) {
+                liveDisplayEnabled = enabled;
+                liveToggleBtn.textContent = enabled ? "实时画面" : "TAB 状态";
+                liveToggleBtn.className = "btn btn-sm browser-live-toggle " + (enabled ? "btn-primary" : "btn-danger");
+                liveToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+                canvas.classList.toggle("d-none", !enabled);
+                tabsStatusPanel.classList.toggle("d-none", enabled);
+                if (!enabled)
+                    noSig.style.display = "none";
+            }
+
+            function applyStatus(data) {
+                document.title = (data.title || "浏览器控制台") + " - MeowAutoChrome";
+                pageUrl.textContent = data.url || "(空地址)";
+                if (!isEditingUrl)
+                    urlInput.value = data.url || "";
+                if (data.errorMessage)
+                    showError(data.errorMessage);
+                else
+                    clearError();
+                setLiveDisplayEnabled(data.screencastEnabled);
+                targetFrameIntervalMs = data.screencastFrameIntervalMs;
+                resizeCanvasBuffer(data.screencastMaxWidth, data.screencastMaxHeight);
+                renderFpsDisplay();
+                renderResourceMetrics(data);
+                renderTabs(data.tabs || []);
+                renderTabsStatus(data.tabs || []);
+
+                if (!pointerResizeActive && data.pluginPanelWidth)
+                    applyPluginPanelWidth(data.pluginPanelWidth);
+
+                if (!data.screencastEnabled) {
+                    noSig.style.display = "none";
+                } else {
+                    hideTemporaryCanvasOverlay();
+                }
+            }
+
+            function renderPluginResult(result) {
+                pluginResult.replaceChildren();
+
+                if (result.message) {
+                    const summary = document.createElement("div");
+                    summary.className = "fw-semibold mb-2";
+                    summary.textContent = result.message;
+                    pluginResult.appendChild(summary);
+                }
+
+                if (result.state) {
+                    const state = document.createElement("div");
+                    state.className = "mb-2";
+                    state.textContent = "state: " + result.state;
+                    pluginResult.appendChild(state);
+                }
+
+                for (const [key, value] of Object.entries(result.data || {})) {
+                    const row = document.createElement("div");
+                    row.textContent = key + ": " + (value || "");
+                    pluginResult.appendChild(row);
+                }
+
+                pluginResult.classList.remove("d-none");
+            }
+
+            function renderPlugins(plugins) {
+                pluginHost.replaceChildren();
+
+                if (!plugins.length) {
+                    const empty = document.createElement("div");
+                    empty.textContent = "未发现可用插件。";
+                    pluginHost.appendChild(empty);
+                    return;
+                }
+
+                for (const plugin of plugins) {
+                    const card = document.createElement("div");
+                    card.className = "border rounded p-2";
+
+                    const title = document.createElement("div");
+                    title.className = "fw-semibold";
+                    title.textContent = plugin.name;
+                    card.appendChild(title);
+
+                    if (plugin.description) {
+                        const desc = document.createElement("div");
+                        desc.className = "text-muted mb-2";
+                        desc.textContent = plugin.description;
+                        card.appendChild(desc);
+                    }
+
+                    const state = document.createElement("div");
+                    state.className = "mb-2 small";
+                    state.textContent = "状态: " + (plugin.state || "Unknown");
+                    card.appendChild(state);
+
+                    const controls = document.createElement("div");
+                    controls.className = "d-flex flex-wrap gap-2 mb-3";
+
+                    function createControlButton(text, command, disabled) {
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "btn btn-sm btn-outline-secondary";
+                        button.textContent = text;
+                        button.disabled = disabled;
+                        button.addEventListener("click", async () => {
+                            button.disabled = true;
+                            try {
+                                const result = await postJson("/Browser/ControlPlugin", {
+                                    pluginId: plugin.id,
+                                    command
+                                });
+                                renderPluginResult(result);
+                                await loadPlugins();
+                            } catch (e) {
+                                showError(e.message || "插件控制失败。");
+                            } finally {
+                                button.disabled = false;
+                            }
+                        });
+
+                        return button;
+                    }
+
+                    controls.appendChild(createControlButton("启动", "start", plugin.state === "Running"));
+                    controls.appendChild(createControlButton("停止", "stop", plugin.state === "Stopped"));
+                    controls.appendChild(createControlButton("暂停", "pause", !plugin.supportsPause || plugin.state !== "Running"));
+                    controls.appendChild(createControlButton("恢复", "resume", !plugin.supportsPause || plugin.state !== "Paused"));
+                    card.appendChild(controls);
+
+                    const functionCard = document.createElement("div");
+                    functionCard.className = "border rounded p-2 bg-light-subtle";
+
+                    const functionLabel = document.createElement("label");
+                    functionLabel.className = "form-label mb-1";
+                    functionLabel.textContent = "导出函数";
+                    functionCard.appendChild(functionLabel);
+
+                    const functionSelect = document.createElement("select");
+                    functionSelect.className = "form-select form-select-sm mb-2";
+
+                    const emptyOption = document.createElement("option");
+                    emptyOption.value = "";
+                    emptyOption.textContent = plugin.functions?.length ? "请选择函数" : "无可用函数";
+                    functionSelect.appendChild(emptyOption);
+
+                    for (const fn of plugin.functions || []) {
+                        const option = document.createElement("option");
+                        option.value = fn.id;
+                        option.textContent = fn.name;
+                        functionSelect.appendChild(option);
+                    }
+
+                    functionCard.appendChild(functionSelect);
+
+                    const functionDescription = document.createElement("div");
+                    functionDescription.className = "text-muted mb-2 small";
+                    functionCard.appendChild(functionDescription);
+
+                    const parameterHost = document.createElement("div");
+                    parameterHost.className = "vstack gap-2";
+                    functionCard.appendChild(parameterHost);
+
+                    const parameterInputs = {};
+
+                    function renderFunctionInputs(fn) {
+                        parameterHost.replaceChildren();
+                        Object.keys(parameterInputs).forEach(key => delete parameterInputs[key]);
+
+                        functionDescription.textContent = fn?.description || "";
+
+                        for (const parameter of fn?.parameters || []) {
+                            const field = document.createElement("div");
+
+                            const label = document.createElement("label");
+                            label.className = "form-label mb-1";
+                            label.textContent = parameter.label + (parameter.required ? " *" : "");
+                            field.appendChild(label);
+
+                            const input = document.createElement("input");
+                            input.type = "text";
+                            input.className = "form-control form-control-sm";
+                            input.value = parameter.defaultValue || "";
+                            input.placeholder = parameter.description || parameter.label;
+                            field.appendChild(input);
+
+                            if (parameter.description) {
+                                const help = document.createElement("div");
+                                help.className = "form-text mt-1";
+                                help.textContent = parameter.description;
+                                field.appendChild(help);
+                            }
+
+                            parameterInputs[parameter.name] = { input, parameter };
+                            parameterHost.appendChild(field);
+                        }
+                    }
+
+                    functionSelect.addEventListener("change", () => {
+                        const selected = (plugin.functions || []).find(item => item.id === functionSelect.value);
+                        renderFunctionInputs(selected);
+                    });
+
+                    const executeButton = document.createElement("button");
+                    executeButton.type = "button";
+                    executeButton.className = "btn btn-sm btn-outline-primary mt-2";
+                    executeButton.textContent = "执行函数";
+                    executeButton.addEventListener("click", async () => {
+                        const selected = (plugin.functions || []).find(item => item.id === functionSelect.value);
+                        if (!selected) {
+                            showError("请先选择要执行的导出函数。");
+                            functionSelect.focus();
+                            return;
+                        }
+
+                        const argumentsPayload = {};
+                        for (const [name, entry] of Object.entries(parameterInputs)) {
+                            const value = entry.input.value.trim();
+                            if (entry.parameter.required && !value) {
+                                showError("请填写参数：" + entry.parameter.label);
+                                entry.input.focus();
+                                return;
+                            }
+
+                            if (value)
+                                argumentsPayload[name] = value;
+                        }
+
+                        executeButton.disabled = true;
+                        try {
+                            const result = await postJson("/Browser/RunPluginFunction", {
+                                pluginId: plugin.id,
+                                functionId: selected.id,
+                                arguments: argumentsPayload
+                            });
+                            renderPluginResult(result);
+                            await loadPlugins();
+                            await refreshStatus();
+                        } catch (e) {
+                            showError(e.message || "插件函数执行失败。");
+                        } finally {
+                            executeButton.disabled = false;
+                        }
+                    });
+
+                    functionCard.appendChild(executeButton);
+                    card.appendChild(functionCard);
+                    pluginHost.appendChild(card);
+                }
+            }
+
+            function renderTabs(tabs) {
+                tabsBar.innerHTML = "";
+
+                if (!tabs.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "small text-muted";
+                    empty.textContent = "暂无 TAB";
+                    tabsBar.appendChild(empty);
+                    updateTabScrollButtons();
+                    return;
+                }
+
+                for (const tab of tabs) {
+                    const tabItem = document.createElement("div");
+                    tabItem.className = "browser-tab-item" + (tab.isSelected ? " browser-tab-item-active" : "");
+
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "browser-tab btn btn-sm" + (tab.isSelected ? " browser-tab-active" : "");
+                    btn.title = tab.url || tab.title || "about:blank";
+                    btn.textContent = tab.title || tab.url || "about:blank";
+                    btn.addEventListener("click", async () => {
+                        try {
+                            applyStatus(await postJson("/Browser/SelectTab", { tabId: tab.id }));
+                        } catch (e) {
+                            showError(e.message || "切换标签页失败。");
+                        }
+                    });
+
+                    const closeBtn = document.createElement("button");
+                    closeBtn.type = "button";
+                    closeBtn.className = "browser-tab-close btn btn-sm btn-light border-0";
+                    closeBtn.title = "关闭 TAB";
+                    closeBtn.setAttribute("aria-label", "关闭 TAB");
+                    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    closeBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        try {
+                            applyStatus(await postJson("/Browser/CloseTab", { tabId: tab.id }));
+                        } catch (e) {
+                            showError(e.message || "关闭标签页失败。");
+                        }
+                    });
+
+                    tabItem.appendChild(btn);
+                    tabItem.appendChild(closeBtn);
+                    tabsBar.appendChild(tabItem);
+                }
+
+                updateTabScrollButtons();
+            }
+
+            function renderTabsStatus(tabs) {
+                tabsStatusPanel.replaceChildren();
+
+                const title = document.createElement("div");
+                title.className = "tabs-status-title";
+                title.textContent = "TAB 状态";
+                tabsStatusPanel.appendChild(title);
+
+                if (!tabs.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "tabs-status-empty";
+                    empty.textContent = "暂无 TAB";
+                    tabsStatusPanel.appendChild(empty);
+                    return;
+                }
+
+                for (const tab of tabs) {
+                    const card = document.createElement("div");
+                    card.className = "tabs-status-card" + (tab.isSelected ? " tabs-status-card-active" : "");
+
+                    const row = document.createElement("div");
+                    row.className = "tabs-status-row";
+
+                    const heading = document.createElement("div");
+                    heading.className = "tabs-status-name";
+                    heading.textContent = tab.title || "(无标题)";
+                    row.appendChild(heading);
+
+                    const badge = document.createElement("span");
+                    badge.className = "badge rounded-pill " + (tab.isSelected ? "text-bg-primary" : "text-bg-secondary");
+                    badge.textContent = tab.isSelected ? "当前" : "后台";
+                    row.appendChild(badge);
+
+                    card.appendChild(row);
+
+                    const url = document.createElement("div");
+                    url.className = "tabs-status-url";
+                    url.textContent = tab.url || "about:blank";
+                    card.appendChild(url);
+
+                    tabsStatusPanel.appendChild(card);
+                }
+            }
+
+            function updateTabScrollButtons() {
+                const maxScrollLeft = Math.max(0, tabsBar.scrollWidth - tabsBar.clientWidth);
+                tabsScrollLeftBtn.disabled = tabsBar.scrollLeft <= 0;
+                tabsScrollRightBtn.disabled = tabsBar.scrollLeft >= maxScrollLeft - 1;
+            }
+
+            async function refreshStatus() {
+                if (statusBusy) return;
+                statusBusy = true;
+                try {
+                    const response = await fetch("/Browser/Status");
+                    if (!response.ok)
+                        throw new Error("状态获取失败: " + response.status);
+
+                    applyStatus(await response.json());
+                } catch (e) {
+                    showError(e.message || "状态获取失败。");
+                } finally {
+                    statusBusy = false;
+                }
+            }
+
+            async function loadPlugins() {
+                try {
+                    const response = await fetch("/Browser/Plugins");
+                    if (!response.ok)
+                        throw new Error("插件列表获取失败: " + response.status);
+
+                    renderPlugins(await response.json());
+                } catch (e) {
+                    pluginHost.replaceChildren();
+                    const error = document.createElement("div");
+                    error.className = "text-danger";
+                    error.textContent = e.message || "插件列表获取失败。";
+                    pluginHost.appendChild(error);
+                }
+            }
+
+            async function runAction(action, fallbackMessage) {
+                try {
+                    applyStatus(await action());
+                } catch (e) {
+                    showError(e.message || fallbackMessage);
+                }
+            }
+
+            async function navigate() {
+                await runAction(() => postJson("/Browser/Navigate", { url: urlInput.value.trim() }), "导航失败。");
+                isEditingUrl = false;
+                urlInput.blur();
+            }
+
+            function intervalToFps(intervalMs) {
+                const interval = Math.max(16, Number(intervalMs) || 100);
+                return Math.max(1, Math.min(60, Math.round(1000 / interval)));
+            }
+
+            function fpsToInterval(fps) {
+                const normalized = Math.max(1, Math.min(60, Number(fps) || 10));
+                return Math.max(16, Math.round(1000 / normalized));
+            }
+
+            function getCanvasViewportSize() {
+                const width = Math.max(320, Math.round(browserStage?.clientWidth || canvas.clientWidth || 1280));
+                const height = Math.max(240, Math.round(browserStage?.clientHeight || canvas.clientHeight || 800));
+                return { width, height };
+            }
+
+            function resizeCanvasBuffer(width, height) {
+                if (canvas.width !== width || canvas.height !== height) {
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+            }
+
+            async function syncScreencastSettings(force = false) {
+                const viewport = getCanvasViewportSize();
+                resizeCanvasBuffer(viewport.width, viewport.height);
+
+                if (applyingScreencastSettings) {
+                    pendingScreencastSync = true;
+                    return;
+                }
+
+                applyingScreencastSettings = true;
+                try {
+                    applyStatus(await postJson("/Browser/Screencast", {
+                        enabled: liveDisplayEnabled,
+                        maxWidth: viewport.width,
+                        maxHeight: viewport.height,
+                        frameIntervalMs: targetFrameIntervalMs
+                    }));
+                    hideTemporaryCanvasOverlay();
+                } catch (e) {
+                    if (force)
+                        showError(e.message || "画面设置更新失败。");
+                } finally {
+                    applyingScreencastSettings = false;
+                    const needsAnotherSync = pendingScreencastSync;
+                    pendingScreencastSync = false;
+                    if (needsAnotherSync)
+                        scheduleScreencastSync();
+                }
+            }
+
+            function scheduleScreencastSync(force = false) {
+                if (resizeSyncTimer)
+                    clearTimeout(resizeSyncTimer);
+
+                resizeSyncTimer = setTimeout(() => {
+                    syncScreencastSettings(force).catch(() => { });
+                }, force ? 0 : 150);
+            }
+
+            urlInput.addEventListener("focus", () => isEditingUrl = true);
+            urlInput.addEventListener("blur", () => isEditingUrl = false);
+            browserPaneDivider.addEventListener("pointerdown", e => {
+                if (!beginPanelResize())
+                    return;
+
+                e.preventDefault();
+                browserPaneDivider.setPointerCapture(e.pointerId);
+                updatePanelResize(e.clientX);
+            });
+            browserPaneDivider.addEventListener("pointermove", e => updatePanelResize(e.clientX));
+            browserPaneDivider.addEventListener("pointerup", () => endPanelResize(true));
+            browserPaneDivider.addEventListener("pointercancel", () => endPanelResize(false));
+            browserPaneDivider.addEventListener("keydown", e => {
+                const step = e.shiftKey ? 20 : 10;
+                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight")
+                    return;
+
+                e.preventDefault();
+                applyPluginPanelWidth(pluginPanelWidth + (e.key === "ArrowLeft" ? step : -step));
+                savePluginPanelWidth(pluginPanelWidth).catch(() => { });
+            });
+            liveToggleBtn.addEventListener("click", () => {
+                setLiveDisplayEnabled(!liveDisplayEnabled);
+                syncScreencastSettings(true).catch(() => { });
+            });
+            tabsBar.addEventListener("scroll", updateTabScrollButtons);
+            tabsScrollLeftBtn.addEventListener("click", () => tabsBar.scrollBy({ left: -240, behavior: "smooth" }));
+            tabsScrollRightBtn.addEventListener("click", () => tabsBar.scrollBy({ left: 240, behavior: "smooth" }));
+
+            if (window.ResizeObserver && browserStage) {
+                const resizeObserver = new ResizeObserver(() => {
+                    if (!liveDisplayEnabled)
+                        return;
+                    showCanvasOverlay("Resetting Canvas", true);
+                    scheduleScreencastSync();
+                });
+                resizeObserver.observe(browserStage);
+            } else {
+                window.addEventListener("resize", () => {
+                    if (!liveDisplayEnabled)
+                        return;
+                    showCanvasOverlay("Resetting Canvas", true);
+                    scheduleScreencastSync();
+                });
+            }
+
+            setLiveDisplayEnabled(true);
+            renderFpsDisplay();
+            applyPluginPanelWidth(pluginPanelWidth);
+            const initialViewport = getCanvasViewportSize();
+            resizeCanvasBuffer(initialViewport.width, initialViewport.height);
+
+            document.getElementById("newTabBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/NewTab"), "新建标签页失败。"));
+            document.getElementById("backBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/Back"), "后退失败。"));
+            document.getElementById("forwardBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/Forward"), "前进失败。"));
+            document.getElementById("reloadBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/Reload"), "刷新失败。"));
+            document.getElementById("goBtn").addEventListener("click", navigate);
+            urlInput.addEventListener("keydown", async e => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                await navigate();
+            });
+
+            document.getElementById("shotBtn").addEventListener("click", () => {
+                window.open("/Browser/Screenshot?ts=" + Date.now(), "_blank");
+            });
+
+            setInterval(() => {
+                refreshStatus().catch(() => {});
+            }, 2000);
+
+            // ── 输入转发工具函数 ──────────────────────────────────────
+
+            // CSS 坐标 → Chromium 逻辑坐标（补偿 width:100% 缩放）
+            function toChromium(e) {
+                const r = canvas.getBoundingClientRect();
+                return {
+                    x: (e.clientX - r.left) * (canvas.width  / r.width),
+                    y: (e.clientY - r.top)  * (canvas.height / r.height),
+                };
+            }
+
+            // 修饰键 bitmask（CDP 规范：Alt=1, Ctrl=2, Meta=4, Shift=8）
+            function mods(e) {
+                return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+            }
+
+            // 按钮序号 → CDP button 名称
+            const BTN = ["left", "middle", "right"];
+            function btnName(b) { return BTN[b] ?? "none"; }
+
+            function sendMouse(type, e, extra = {}) {
+                if (conn.state !== signalR.HubConnectionState.Connected) return;
+                const { x, y } = toChromium(e);
+                const isClick = type === "mousePressed" || type === "mouseReleased";
+                const isWheel = type === "mouseWheel";
+                conn.invoke("SendMouseEvent", {
+                    type, x, y,
+                    button: isClick ? btnName(e.button ?? -1) : "none",
+                    buttons: e.buttons ?? 0,
+                    clickCount: isClick ? 1 : 0,
+                    modifiers: mods(e),
+                    deltaX: isWheel ? (extra.deltaX ?? 0) : null,
+                    deltaY: isWheel ? (extra.deltaY ?? 0) : null,
+                }).catch(() => {});
+            }
+
+            // ── 鼠标事件 ─────────────────────────────────────────────
+
+            // mousemove 限速 ≈60fps，避免事件泛洪
+            let lastMove = 0;
+            canvas.addEventListener("mousemove", e => {
+                const now = Date.now();
+                if (now - lastMove < 16) return;
+                lastMove = now;
+                sendMouse("mouseMoved", e);
+            });
+
+            canvas.addEventListener("mousedown", e => {
+                e.preventDefault();
+                canvas.focus();
+                sendMouse("mouseMoved", e);
+                sendMouse("mousePressed",  e);
+            });
+
+            canvas.addEventListener("mouseup",   e => sendMouse("mouseReleased", e));
+
+            canvas.addEventListener("wheel", e => {
+                e.preventDefault();
+                sendMouse("mouseWheel", e, { deltaX: e.deltaX, deltaY: e.deltaY });
+            }, { passive: false });
+
+            // 屏蔽右键菜单，让右键可以正常转发
+            canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+            // ── 键盘事件 ─────────────────────────────────────────────
+
+            function sendKey(type, e, text = "") {
+                if (conn.state !== signalR.HubConnectionState.Connected) return;
+                conn.invoke("SendKeyEvent", {
+                    type, key: e.key, code: e.code, text, modifiers: mods(e),
+                }).catch(() => {});
+            }
+
+            canvas.addEventListener("keydown", e => {
+                e.preventDefault();
+                sendKey("rawKeyDown", e);
+                // 可打印字符额外补一个 char 事件，Chromium 才能正确输入文字
+                if (e.key.length === 1 && !e.ctrlKey && !e.metaKey)
+                    sendKey("char", e, e.key);
+            });
+
+            canvas.addEventListener("keyup", e => {
+                e.preventDefault();
+                sendKey("keyUp", e);
+            });
+
+        }());
+    </script>
+}
