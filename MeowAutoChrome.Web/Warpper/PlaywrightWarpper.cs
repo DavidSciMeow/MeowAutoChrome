@@ -375,34 +375,3 @@ public class PlayWrightWarpper
     }
 }
 
-public sealed class PlaywrightPluginContext(PlayWrightWarpper browser) : IBrowserPluginContext
-{
-    public string ApiVersion => BrowserPluginApi.CurrentVersion;
-
-    public Task<bool> HasCapabilityAsync(string capability, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var supported = capability switch
-        {
-            BrowserPluginCapabilities.PageTitle => true,
-            BrowserPluginCapabilities.CurrentUrl => true,
-            _ => false,
-        };
-
-        return Task.FromResult(supported);
-    }
-
-    public async Task<string?> GetPageTitleAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return await browser.GetTitleAsync();
-    }
-
-    public Task<string?> GetCurrentUrlAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(browser.CurrentUrl);
-    }
-}
-

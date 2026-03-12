@@ -1,6 +1,7 @@
 ﻿using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Warpper;
+using Microsoft.Playwright;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -55,15 +56,16 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             return null;
 
         var instance = GetOrCreatePluginInstance(plugin);
-        var context = new PlaywrightPluginContext(browser);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
+        var browserContext = browser.BrowserContext;
+        var activePage = browser.ActivePage;
 
         var result = command.ToLowerInvariant() switch
         {
-            "start" => await instance.StartAsync(normalizedArguments, context, cancellationToken),
-            "stop" => await instance.StopAsync(context, cancellationToken),
-            "pause" => await instance.PauseAsync(context, cancellationToken),
-            "resume" => await instance.ResumeAsync(context, cancellationToken),
+            "start" => await instance.StartAsync(normalizedArguments, browserContext, activePage, cancellationToken),
+            "stop" => await instance.StopAsync(browserContext, activePage, cancellationToken),
+            "pause" => await instance.PauseAsync(browserContext, activePage, cancellationToken),
+            "resume" => await instance.ResumeAsync(browserContext, activePage, cancellationToken),
             _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
         };
 
@@ -83,9 +85,8 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             return null;
 
         var instance = GetOrCreatePluginInstance(plugin);
-        var context = new PlaywrightPluginContext(browser);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var invocation = action.Method.Invoke(instance, BuildInvocationArguments(action.Method, context, normalizedArguments, cancellationToken));
+        var invocation = action.Method.Invoke(instance, BuildInvocationArguments(action.Method, browser.BrowserContext, browser.ActivePage, normalizedArguments, cancellationToken));
         if (invocation is not Task<BrowserPluginActionResult> task)
             throw new InvalidOperationException($"插件动作返回类型无效：{plugin.Type.FullName}.{action.Method.Name}");
 
@@ -182,18 +183,21 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             return false;
 
         var parameters = method.GetParameters();
-        return parameters.Length == 2
-            && parameters[0].ParameterType == typeof(IBrowserPluginContext)
-            && parameters[1].ParameterType == typeof(CancellationToken)
-            || parameters.Length == 3
-            && parameters[0].ParameterType == typeof(IBrowserPluginContext)
-            && parameters[1].ParameterType == typeof(IReadOnlyDictionary<string, string?>)
-            && parameters[2].ParameterType == typeof(CancellationToken);
+        return parameters.Length == 3
+            && parameters[0].ParameterType == typeof(IBrowserContext)
+            && parameters[1].ParameterType == typeof(IPage)
+            && parameters[2].ParameterType == typeof(CancellationToken)
+            || parameters.Length == 4
+            && parameters[0].ParameterType == typeof(IBrowserContext)
+            && parameters[1].ParameterType == typeof(IPage)
+            && parameters[2].ParameterType == typeof(IReadOnlyDictionary<string, string?>)
+            && parameters[3].ParameterType == typeof(CancellationToken);
     }
 
     private static object?[] BuildInvocationArguments(
         MethodInfo method,
-        IBrowserPluginContext context,
+        IBrowserContext browserContext,
+        IPage? activePage,
         IReadOnlyDictionary<string, string?> arguments,
         CancellationToken cancellationToken)
     {
@@ -201,8 +205,8 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         return parameters.Length switch
         {
-            2 => [context, cancellationToken],
-            3 => [context, arguments, cancellationToken],
+            3 => [browserContext, activePage, cancellationToken],
+            4 => [browserContext, activePage, arguments, cancellationToken],
             _ => throw new InvalidOperationException($"不支持的插件动作签名：{method.DeclaringType?.FullName}.{method.Name}")
         };
     }
