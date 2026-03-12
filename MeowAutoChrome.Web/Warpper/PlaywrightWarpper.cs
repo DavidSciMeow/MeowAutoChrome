@@ -107,12 +107,12 @@ public class PlayWrightWarpper
 
     public string? CurrentUrl => ActivePage?.Url;
 
-    public PlayWrightWarpper(ProgramSettingsService programSettingsService, string userDataDir = "user_data", Dictionary<string, string>? Header = null)
+    public PlayWrightWarpper(ProgramSettingsService programSettingsService, string? userDataDir = null, Dictionary<string, string>? Header = null)
     {
         _programSettingsService = programSettingsService;
 
         BrowserContext = Playwright.Chromium.LaunchPersistentContextAsync(
-            userDataDir,
+            userDataDir ?? Path.Combine(AppContext.BaseDirectory, "user_data"),
             new BrowserTypeLaunchPersistentContextOptions
             {
                 Headless = true,

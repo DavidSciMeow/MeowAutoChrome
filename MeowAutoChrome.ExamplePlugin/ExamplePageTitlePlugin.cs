@@ -15,17 +15,17 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         cancellationToken.ThrowIfCancellationRequested();
 
         if (State == BrowserPluginState.Running)
-            return Task.FromResult(new BrowserPluginActionResult("插件已处于运行中。", BuildStateData()));
+            return Ok("插件已处于运行中。");
 
         State = BrowserPluginState.Running;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已启动。", BuildStateData()));
+        return Ok("Example 插件已启动。");
     }
 
     public Task<BrowserPluginActionResult> StopAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         State = BrowserPluginState.Stopped;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已停止。", BuildStateData()));
+        return Ok("Example 插件已停止。");
     }
 
     public Task<BrowserPluginActionResult> PauseAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
@@ -33,10 +33,10 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         cancellationToken.ThrowIfCancellationRequested();
 
         if (State != BrowserPluginState.Running)
-            return Task.FromResult(new BrowserPluginActionResult("只有运行中的插件才能暂停。", BuildStateData()));
+            return Ok("只有运行中的插件才能暂停。");
 
         State = BrowserPluginState.Paused;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已暂停。", BuildStateData()));
+        return Ok("Example 插件已暂停。");
     }
 
     public Task<BrowserPluginActionResult> ResumeAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
@@ -44,10 +44,10 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         cancellationToken.ThrowIfCancellationRequested();
 
         if (State != BrowserPluginState.Paused)
-            return Task.FromResult(new BrowserPluginActionResult("只有暂停中的插件才能恢复。", BuildStateData()));
+            return Ok("只有暂停中的插件才能恢复。");
 
         State = BrowserPluginState.Running;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已恢复。", BuildStateData()));
+        return Ok("Example 插件已恢复。");
     }
 
     [BrowserPluginAction("read-title", "读取网页标题", Description = "直接通过 IPage 读取 document.title。")]
@@ -55,10 +55,10 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
     public async Task<BrowserPluginActionResult> ReadTitleAsync(IBrowserContext browserContext, IPage? activePage, IReadOnlyDictionary<string, string?> arguments, CancellationToken cancellationToken)
     {
         if (State != BrowserPluginState.Running)
-            return new BrowserPluginActionResult("请先启动插件，再执行导出函数。", BuildStateData());
+            return OkResult("请先启动插件，再执行导出函数。");
 
         if (activePage is null)
-            return new BrowserPluginActionResult("当前没有活动页面。", BuildStateData());
+            return OkResult("当前没有活动页面。");
 
         var prefix = arguments.TryGetValue("prefix", out var value) && !string.IsNullOrWhiteSpace(value)
             ? value.Trim()
@@ -82,7 +82,7 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
     public async Task<BrowserPluginActionResult> InspectPlaywrightAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken)
     {
         if (State != BrowserPluginState.Running)
-            return new BrowserPluginActionResult("请先启动插件，再执行导出函数。", BuildStateData());
+            return OkResult("请先启动插件，再执行导出函数。");
 
         string? title = null;
         if (activePage is not null)
@@ -106,6 +106,12 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
                 ["activePageTitle"] = title,
             });
     }
+
+    private Task<BrowserPluginActionResult> Ok(string message, IReadOnlyDictionary<string, string?>? data = null)
+        => Task.FromResult(OkResult(message, data));
+
+    private BrowserPluginActionResult OkResult(string message, IReadOnlyDictionary<string, string?>? data = null)
+        => new(message, data ?? BuildStateData());
 
     private IReadOnlyDictionary<string, string?> BuildStateData()
         => new Dictionary<string, string?>
