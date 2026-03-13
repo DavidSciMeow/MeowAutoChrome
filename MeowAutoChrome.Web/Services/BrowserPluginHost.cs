@@ -361,7 +361,7 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
     private static void AddControl(Type type, ICollection<RuntimeBrowserPluginControl> controls, string command, string name, string description, string methodName, params Type[] parameterTypes)
     {
         var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, parameterTypes, null);
-        if (method is null || method.DeclaringType == typeof(BrowserPluginBase))
+        if (method is null)
             return;
 
         controls.Add(new RuntimeBrowserPluginControl(
