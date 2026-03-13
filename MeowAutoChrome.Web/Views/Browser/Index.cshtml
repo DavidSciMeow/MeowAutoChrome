@@ -372,13 +372,6 @@
                     pluginResult.appendChild(summary);
                 }
 
-                if (result.state) {
-                    const state = document.createElement("div");
-                    state.className = "mb-2";
-                    state.textContent = "state: " + result.state;
-                    pluginResult.appendChild(state);
-                }
-
                 for (const [key, value] of Object.entries(result.data || {})) {
                     const row = document.createElement("div");
                     row.textContent = key + ": " + (value || "");
@@ -593,6 +586,21 @@
                 screenshotPreviewUrl = null;
             });
 
+            function getPluginStateDisplay(plugin) {
+                const hasControls = (plugin.controls || []).length > 0;
+                const state = hasControls ? (plugin.state || "Unknown") : "NoStartable";
+
+                return state === "Running"
+                    ? { text: state, className: "btn btn-sm btn-success" }
+                    : state === "Paused"
+                        ? { text: state, className: "btn btn-sm btn-warning" }
+                        : state === "Stopped"
+                            ? { text: state, className: "btn btn-sm btn-secondary" }
+                            : state === "NoStartable"
+                                ? { text: state, className: "btn btn-sm btn-info" }
+                                : { text: state, className: "btn btn-sm btn-outline-secondary" };
+            }
+
             function renderPlugins(plugins) {
                 pluginHost.replaceChildren();
 
@@ -607,10 +615,23 @@
                     const card = document.createElement("div");
                     card.className = "border rounded p-2";
 
+                    const header = document.createElement("div");
+                    header.className = "d-flex justify-content-between align-items-start gap-2 mb-2";
+
                     const title = document.createElement("div");
                     title.className = "fw-semibold";
                     title.textContent = plugin.name;
-                    card.appendChild(title);
+                    header.appendChild(title);
+
+                    const stateDisplay = getPluginStateDisplay(plugin);
+                    const state = document.createElement("button");
+                    state.type = "button";
+                    state.className = stateDisplay.className;
+                    state.textContent = stateDisplay.text;
+                    state.disabled = true;
+                    header.appendChild(state);
+
+                    card.appendChild(header);
 
                     if (plugin.description) {
                         const desc = document.createElement("div");
@@ -618,11 +639,6 @@
                         desc.textContent = plugin.description;
                         card.appendChild(desc);
                     }
-
-                    const state = document.createElement("div");
-                    state.className = "mb-2 small";
-                    state.textContent = "状态: " + (plugin.state || "Unknown");
-                    card.appendChild(state);
 
                     function createCommandButton(text, style, disabled, onClick) {
                         const button = document.createElement("button");
