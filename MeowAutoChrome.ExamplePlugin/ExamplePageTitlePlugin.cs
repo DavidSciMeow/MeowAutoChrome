@@ -3,83 +3,97 @@
 namespace MeowAutoChrome.ExamplePlugin;
 
 [BrowserPlugin("example.page-title", "Example 标题插件", Description = "示例插件：读取当前活动网页标题和地址。")]
-public sealed class ExamplePageTitlePlugin : IBrowserPlugin
+public sealed class ExamplePageTitlePlugin : BrowserPluginBase
 {
-    public BrowserPluginState State { get; private set; } = BrowserPluginState.Stopped;
+    public override bool SupportsPause => true;
 
-    public bool SupportsPause => true;
+    protected override string PluginName => "Example 插件";
 
-    public Task<BrowserPluginActionResult> StartAsync(IReadOnlyDictionary<string, string?> arguments, IBrowserPluginContext context, CancellationToken cancellationToken = default)
+    [BrowserPluginAction("读取网页标题", Description = "直接通过当前活动页面读取 document.title。")]
+    public async Task<BrowserPluginActionResult> ReadTitleAsync(
+        [BrowserPluginInput("结果前缀", Description = "可选，自定义返回消息前缀。")] string prefix = "当前页面标题"
+        )
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        CurrentCancellationToken.ThrowIfCancellationRequested();
 
-        if (State == BrowserPluginState.Running)
-            return Task.FromResult(new BrowserPluginActionResult("插件已处于运行中。", BuildStateData()));
+        if (CurrentActivePage is null)
+            return this.OkResult("当前没有活动页面。");
 
-        State = BrowserPluginState.Running;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已启动。", BuildStateData()));
-    }
+        var page = RequireActivePage();
+        var title = await page.EvaluateAsync<string?>("() => document?.title ?? null");
+        var url = page.Url;
 
-    public Task<BrowserPluginActionResult> StopAsync(IBrowserPluginContext context, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        State = BrowserPluginState.Stopped;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已停止。", BuildStateData()));
-    }
-
-    public Task<BrowserPluginActionResult> PauseAsync(IBrowserPluginContext context, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (State != BrowserPluginState.Running)
-            return Task.FromResult(new BrowserPluginActionResult("只有运行中的插件才能暂停。", BuildStateData()));
-
-        State = BrowserPluginState.Paused;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已暂停。", BuildStateData()));
-    }
-
-    public Task<BrowserPluginActionResult> ResumeAsync(IBrowserPluginContext context, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (State != BrowserPluginState.Paused)
-            return Task.FromResult(new BrowserPluginActionResult("只有暂停中的插件才能恢复。", BuildStateData()));
-
-        State = BrowserPluginState.Running;
-        return Task.FromResult(new BrowserPluginActionResult("Example 插件已恢复。", BuildStateData()));
-    }
-
-    [BrowserPluginAction("read-title", "读取网页标题", Description = "通过宿主开放的 Contract 能力读取当前活动页标题。")]
-    [BrowserPluginInput("prefix", "结果前缀", Description = "可选，自定义返回消息前缀。", DefaultValue = "当前页面标题")]
-    public async Task<BrowserPluginActionResult> ReadTitleAsync(IBrowserPluginContext context, IReadOnlyDictionary<string, string?> arguments, CancellationToken cancellationToken)
-    {
-        if (State != BrowserPluginState.Running)
-            return new BrowserPluginActionResult("请先启动插件，再执行导出函数。", BuildStateData());
-
-        if (!await context.HasCapabilityAsync(BrowserPluginCapabilities.PageTitle, cancellationToken))
-            return new BrowserPluginActionResult("宿主尚未开放页面标题读取能力。");
-
-        var title = await context.GetPageTitleAsync(cancellationToken);
-        var url = await context.GetCurrentUrlAsync(cancellationToken);
-        var prefix = arguments.TryGetValue("prefix", out var value) && !string.IsNullOrWhiteSpace(value)
-            ? value.Trim()
-            : "当前页面标题";
-
-        return new BrowserPluginActionResult(
+        return this.OkResult(
             string.IsNullOrWhiteSpace(title) ? "当前页面没有可用标题。" : $"{prefix}：{title}",
             new Dictionary<string, string?>
             {
                 ["title"] = title,
                 ["url"] = url,
-                ["apiVersion"] = context.ApiVersion,
-                ["state"] = State.ToString(),
+                ["mode"] = "playwright-page",
+                ["pageCount"] = CurrentBrowserContext.Pages.Count.ToString(),
             });
     }
 
-    private IReadOnlyDictionary<string, string?> BuildStateData()
-        => new Dictionary<string, string?>
+    [BrowserPluginAction("读取 Playwright 对象", Description = "直接读取宿主注入的 BrowserContext 和 ActivePage。")]
+    public async Task<BrowserPluginActionResult> InspectPlaywrightAsync()
+    {
+        CurrentCancellationToken.ThrowIfCancellationRequested();
+
+        string? title = null;
+        if (CurrentActivePage is not null)
         {
-            ["state"] = State.ToString(),
-        };
+            try
+            {
+                title = await CurrentActivePage.TitleAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        return this.OkResult(
+            CurrentActivePage is null ? "已拿到 BrowserContext，但当前没有活动页面。" : $"已直接拿到 Playwright ActivePage：{CurrentActivePage.Url}",
+            new Dictionary<string, string?>
+            {
+                ["pageCount"] = CurrentBrowserContext.Pages.Count.ToString(),
+                ["activePageUrl"] = CurrentActivePage?.Url,
+                ["activePageTitle"] = title,
+            });
+    }
+
+    [BrowserPluginAction("读取指定 ID 元素", Description = "输入 DOM 元素 ID，读取该元素的文本内容。")]
+    public async Task<BrowserPluginActionResult> ReadElementByIdAsync(
+        [BrowserPluginInput("元素 ID", Description = "要读取的 DOM id。")] string elementId
+        )
+    {
+        CurrentCancellationToken.ThrowIfCancellationRequested();
+
+        if (CurrentActivePage is null)
+            return this.OkResult("当前没有活动页面。");
+
+        if (string.IsNullOrWhiteSpace(elementId))
+            return this.OkResult("请提供 elementId。");
+
+        var page = RequireActivePage();
+        var normalizedElementId = elementId.Trim();
+        var text = await page.EvaluateAsync<string?>(
+            """
+            (id) => {
+                const element = document.getElementById(id);
+                return element ? element.textContent?.trim() ?? null : null;
+            }
+            """,
+            normalizedElementId);
+
+        return this.OkResult(
+            string.IsNullOrWhiteSpace(text) ? "未找到对应元素，或元素内容为空。" : $"元素内容：{text}",
+            new Dictionary<string, string?>
+            {
+                ["elementId"] = normalizedElementId,
+                ["text"] = text,
+                ["url"] = page.Url,
+                ["pageCount"] = CurrentBrowserContext.Pages.Count.ToString(),
+            });
+    }
 }
 

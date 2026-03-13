@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/MeowAutoChrome.Web/Plugins
+/MeowAutoChrome.Web/user_data

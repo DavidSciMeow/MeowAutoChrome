@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,9 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Plugins\**" />
     <Compile Remove="user_data\**" />
+    <Content Remove="Plugins\**" />
     <Content Remove="user_data\**" />
+    <EmbeddedResource Remove="Plugins\**" />
     <EmbeddedResource Remove="user_data\**" />
+    <None Remove="Plugins\**" />
     <None Remove="user_data\**" />
   </ItemGroup>
 

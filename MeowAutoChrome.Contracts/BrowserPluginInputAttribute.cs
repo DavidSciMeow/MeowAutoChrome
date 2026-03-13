@@ -2,14 +2,26 @@
 
 namespace MeowAutoChrome.Contracts;
 
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
-public sealed class BrowserPluginInputAttribute(string name, string label) : Attribute
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Parameter, AllowMultiple = true, Inherited = false)]
+public sealed class BrowserPluginInputAttribute : Attribute
 {
-    public string Name { get; } = name;
-    public string Label { get; } = label;
+    public BrowserPluginInputAttribute(string label)
+    {
+        Label = label;
+    }
+
+    public BrowserPluginInputAttribute(string label, string description)
+    {
+        Label = label;
+        Description = description;
+    }
+
+    public string Label { get; }
     public string? Description { get; init; }
-    public string? DefaultValue { get; init; }
-    public bool Required { get; init; }
+    public string? Name { get; set; }
+    public string? DefaultValue { get; set; }
+    public bool Required { get; set; }
+    public string InputType { get; set; } = "text";
 }
 
 

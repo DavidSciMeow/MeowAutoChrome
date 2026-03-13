@@ -107,12 +107,12 @@ public class PlayWrightWarpper
 
     public string? CurrentUrl => ActivePage?.Url;
 
-    public PlayWrightWarpper(ProgramSettingsService programSettingsService, string userDataDir = "user_data", Dictionary<string, string>? Header = null)
+    public PlayWrightWarpper(ProgramSettingsService programSettingsService, string? userDataDir = null, Dictionary<string, string>? Header = null)
     {
         _programSettingsService = programSettingsService;
 
         BrowserContext = Playwright.Chromium.LaunchPersistentContextAsync(
-            userDataDir,
+            userDataDir ?? Path.Combine(AppContext.BaseDirectory, "user_data"),
             new BrowserTypeLaunchPersistentContextOptions
             {
                 Headless = true,
@@ -372,37 +372,6 @@ public class PlayWrightWarpper
 
         foreach (var page in BrowserContext.Pages.ToList())
             await ApplyViewportSizeAsync(page);
-    }
-}
-
-public sealed class PlaywrightPluginContext(PlayWrightWarpper browser) : IBrowserPluginContext
-{
-    public string ApiVersion => BrowserPluginApi.CurrentVersion;
-
-    public Task<bool> HasCapabilityAsync(string capability, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var supported = capability switch
-        {
-            BrowserPluginCapabilities.PageTitle => true,
-            BrowserPluginCapabilities.CurrentUrl => true,
-            _ => false,
-        };
-
-        return Task.FromResult(supported);
-    }
-
-    public async Task<string?> GetPageTitleAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return await browser.GetTitleAsync();
-    }
-
-    public Task<string?> GetCurrentUrlAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(browser.CurrentUrl);
     }
 }
 
