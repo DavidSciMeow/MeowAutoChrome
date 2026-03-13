@@ -16,9 +16,6 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
-        if (State != BrowserPluginState.Running)
-            return this.OkResult("请先启动插件，再执行导出函数。");
-
         if (CurrentActivePage is null)
             return this.OkResult("当前没有活动页面。");
 
@@ -41,9 +38,6 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
     public async Task<BrowserPluginActionResult> InspectPlaywrightAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
-
-        if (State != BrowserPluginState.Running)
-            return this.OkResult("请先启动插件，再执行导出函数。");
 
         string? title = null;
         if (CurrentActivePage is not null)
@@ -73,9 +67,6 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
         )
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
-
-        if (State != BrowserPluginState.Running)
-            return this.OkResult("请先启动插件，再执行导出函数。");
 
         if (CurrentActivePage is null)
             return this.OkResult("当前没有活动页面。");

@@ -34,6 +34,25 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
                     plugin.Description,
                     instance.Instance.State.ToString(),
                     instance.Instance.SupportsPause,
+                    plugin.Controls
+                        .Where(control => instance.Instance.SupportsPause || (control.Command != "pause" && control.Command != "resume"))
+                        .Select(control => new BrowserPluginControlDescriptor(
+                            control.Command,
+                            control.Name,
+                            control.Description,
+                            control.Parameters
+                                .Select(parameter => new BrowserPluginActionParameterDescriptor(
+                                    parameter.Name,
+                                    parameter.Label,
+                                    parameter.Description,
+                                    parameter.DefaultValue,
+                                    parameter.Required,
+                                    parameter.InputType,
+                                    parameter.Options
+                                        .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
+                                        .ToArray()))
+                                .ToArray()))
+                        .ToArray(),
                     plugin.Actions
                         .Select(action => new BrowserPluginFunctionDescriptor(
                             action.Id,
@@ -124,7 +143,7 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             .Select(TryLoadPluginAssembly)
             .Where(assembly => assembly is not null)
             .SelectMany(assembly => DiscoverPlugins(assembly!))
-            .Where(plugin => plugin.Actions.Count > 0)
+            .Where(plugin => plugin.Actions.Count > 0 || plugin.Controls.Count > 0)
             .OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -180,10 +199,23 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             .Select(type =>
             {
                 var pluginAttribute = type.GetCustomAttribute<BrowserPluginAttribute>()!;
+                var controls = DiscoverControls(type);
                 var actions = DiscoverActions(type);
 
-                return new RuntimeBrowserPlugin(pluginAttribute.Id, pluginAttribute.Name, pluginAttribute.Description, type, actions);
+                return new RuntimeBrowserPlugin(pluginAttribute.Id, pluginAttribute.Name, pluginAttribute.Description, type, controls, actions);
             });
+
+    private static IReadOnlyList<RuntimeBrowserPluginControl> DiscoverControls(Type type)
+    {
+        var controls = new List<RuntimeBrowserPluginControl>();
+
+        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(IBrowserPlugin.StartAsync), typeof(IReadOnlyDictionary<string, string?>), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
+        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(IBrowserPlugin.StopAsync), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
+        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(IBrowserPlugin.PauseAsync), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
+        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(IBrowserPlugin.ResumeAsync), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
+
+        return controls;
+    }
 
     private static IReadOnlyList<RuntimeBrowserPluginAction> DiscoverActions(Type type)
     {
@@ -198,8 +230,8 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
             var legacyParameterMetadata = method
                 .GetCustomAttributes<BrowserPluginInputAttribute>()
-                .Where(item => !string.IsNullOrWhiteSpace(item.Label))
-                .GroupBy(item => item.Label, StringComparer.OrdinalIgnoreCase)
+                .Where(item => !string.IsNullOrWhiteSpace(item.Name) || !string.IsNullOrWhiteSpace(item.Label))
+                .GroupBy(item => item.Name ?? item.Label, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
 
             var parameters = method
@@ -271,7 +303,15 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         string Name,
         string? Description,
         Type Type,
+        IReadOnlyList<RuntimeBrowserPluginControl> Controls,
         IReadOnlyList<RuntimeBrowserPluginAction> Actions);
+
+    private sealed record RuntimeBrowserPluginControl(
+        string Command,
+        string Name,
+        string? Description,
+        MethodInfo Method,
+        IReadOnlyList<RuntimeBrowserPluginActionParameter> Parameters);
 
     private sealed record RuntimeBrowserPluginAction(
         string Id,
@@ -316,6 +356,49 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             IsRequiredParameter(parameter),
             GetInputType(parameter),
             GetOptions(parameter));
+    }
+
+    private static void AddControl(Type type, ICollection<RuntimeBrowserPluginControl> controls, string command, string name, string description, string methodName, params Type[] parameterTypes)
+    {
+        var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, parameterTypes, null);
+        if (method is null || method.DeclaringType == typeof(BrowserPluginBase))
+            return;
+
+        controls.Add(new RuntimeBrowserPluginControl(
+            command,
+            name,
+            description,
+            method,
+            CreateMethodInputParameters(method)));
+    }
+
+    private static IReadOnlyList<RuntimeBrowserPluginActionParameter> CreateMethodInputParameters(MethodInfo method)
+        => method
+            .GetCustomAttributes<BrowserPluginInputAttribute>()
+            .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Name) || !string.IsNullOrWhiteSpace(attribute.Label))
+            .Select(attribute => new RuntimeBrowserPluginActionParameter(
+                attribute.Name?.Trim() ?? attribute.Label.Trim(),
+                attribute.Label.Trim(),
+                attribute.Description,
+                attribute.DefaultValue,
+                attribute.Required,
+                NormalizeInputType(attribute.InputType),
+                Array.Empty<RuntimeBrowserPluginActionParameterOption>()))
+            .ToArray();
+
+    private static string NormalizeInputType(string? inputType)
+    {
+        if (string.IsNullOrWhiteSpace(inputType))
+            return "text";
+
+        return inputType.Trim().ToLowerInvariant() switch
+        {
+            "checkbox" => "checkbox",
+            "number" => "number",
+            "datetime-local" => "datetime-local",
+            "guid" => "guid",
+            _ => "text"
+        };
     }
 
     private static string EnsureUniqueActionId(string baseId, HashSet<string> usedIds)

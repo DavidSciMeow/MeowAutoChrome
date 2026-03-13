@@ -11,6 +11,12 @@ public sealed record BrowserPluginActionParameterDescriptor(
     string InputType,
     IReadOnlyList<BrowserPluginActionParameterOptionDescriptor> Options);
 
+public sealed record BrowserPluginControlDescriptor(
+    string Command,
+    string Name,
+    string? Description,
+    IReadOnlyList<BrowserPluginActionParameterDescriptor> Parameters);
+
 public sealed record BrowserPluginFunctionDescriptor(string Id, string Name, string? Description, IReadOnlyList<BrowserPluginActionParameterDescriptor> Parameters);
 
 public sealed record BrowserPluginDescriptor(
@@ -19,6 +25,7 @@ public sealed record BrowserPluginDescriptor(
     string? Description,
     string State,
     bool SupportsPause,
+    IReadOnlyList<BrowserPluginControlDescriptor> Controls,
     IReadOnlyList<BrowserPluginFunctionDescriptor> Functions);
 
 public sealed record BrowserPluginControlRequest(string PluginId, string Command, IReadOnlyDictionary<string, string?>? Arguments);

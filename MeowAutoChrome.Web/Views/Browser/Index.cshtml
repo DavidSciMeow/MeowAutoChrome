@@ -78,6 +78,25 @@
     </div>
 </div>
 
+<div class="modal fade" id="pluginArgumentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pluginArgumentModalTitle">插件参数</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pluginArgumentModalDescription" class="text-muted small mb-3 d-none"></div>
+                <div id="pluginArgumentForm" class="vstack gap-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="pluginArgumentSubmitBtn">执行</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/lib/signalr/dist/browser/signalr.min.js"></script>
     <script>
@@ -102,6 +121,12 @@
             const tabsStatusPanel = document.getElementById("tabsStatusPanel");
             const pluginHost = document.getElementById("pluginHost");
             const pluginResult = document.getElementById("pluginResult");
+            const pluginArgumentModalElement = document.getElementById("pluginArgumentModal");
+            const pluginArgumentModalTitle = document.getElementById("pluginArgumentModalTitle");
+            const pluginArgumentModalDescription = document.getElementById("pluginArgumentModalDescription");
+            const pluginArgumentForm = document.getElementById("pluginArgumentForm");
+            const pluginArgumentSubmitBtn = document.getElementById("pluginArgumentSubmitBtn");
+            const pluginArgumentModal = pluginArgumentModalElement ? new bootstrap.Modal(pluginArgumentModalElement) : null;
             let statusBusy = false;
             let isEditingUrl = false;
             let liveDisplayEnabled = true;
@@ -112,6 +137,7 @@
             let pendingScreencastSync = false;
             let pluginPanelWidth = @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth;
             let pointerResizeActive = false;
+            let pendingPluginInvocation = null;
 
             function clampPluginPanelWidth(width) {
                 const workspaceWidth = Math.max(0, browserWorkspace?.clientWidth || 0);
@@ -349,6 +375,202 @@
                 pluginResult.classList.remove("d-none");
             }
 
+            function createPluginParameterField(parameter, parameterInputs) {
+                const field = document.createElement("div");
+
+                const label = document.createElement("label");
+                label.className = "form-label mb-1";
+                label.textContent = parameter.label + (parameter.required ? " *" : "");
+                field.appendChild(label);
+
+                let input;
+                if (parameter.inputType === "checkbox") {
+                    input = document.createElement("input");
+                    input.type = "checkbox";
+                    input.className = "form-check-input";
+                    input.checked = String(parameter.defaultValue || "false").toLowerCase() === "true";
+
+                    const wrapper = document.createElement("div");
+                    wrapper.className = "form-check";
+                    wrapper.appendChild(input);
+                    field.appendChild(wrapper);
+                } else if (parameter.inputType === "select") {
+                    input = document.createElement("select");
+                    input.className = "form-select form-select-sm";
+
+                    if (!parameter.required) {
+                        const emptyOption = document.createElement("option");
+                        emptyOption.value = "";
+                        emptyOption.textContent = "请选择";
+                        input.appendChild(emptyOption);
+                    }
+
+                    for (const option of parameter.options || []) {
+                        const element = document.createElement("option");
+                        element.value = option.value;
+                        element.textContent = option.label;
+                        if ((parameter.defaultValue ?? "") === option.value)
+                            element.selected = true;
+                        input.appendChild(element);
+                    }
+
+                    field.appendChild(input);
+                } else {
+                    input = document.createElement("input");
+                    input.type = parameter.inputType === "number"
+                        ? "number"
+                        : parameter.inputType === "datetime-local"
+                            ? "datetime-local"
+                            : "text";
+                    input.className = "form-control form-control-sm";
+                    input.value = parameter.defaultValue ?? "";
+                    input.placeholder = parameter.description || parameter.label;
+                    if (parameter.inputType === "number")
+                        input.step = "any";
+                    if (parameter.inputType === "datetime-local")
+                        input.step = "1";
+                    if (parameter.inputType === "guid") {
+                        input.placeholder = parameter.description || "00000000-0000-0000-0000-000000000000";
+                        input.pattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
+                        input.spellcheck = false;
+                        input.autocomplete = "off";
+                    }
+                    field.appendChild(input);
+                }
+
+                if (parameter.description) {
+                    const help = document.createElement("div");
+                    help.className = "form-text mt-1";
+                    help.textContent = parameter.description;
+                    field.appendChild(help);
+                }
+
+                parameterInputs[parameter.name] = { input, parameter };
+                return field;
+            }
+
+            function collectPluginArguments(parameterInputs) {
+                const argumentsPayload = {};
+                for (const [name, entry] of Object.entries(parameterInputs || {})) {
+                    if (typeof entry.input.checkValidity === "function" && !entry.input.checkValidity()) {
+                        entry.input.reportValidity();
+                        entry.input.focus();
+                        return null;
+                    }
+
+                    if (entry.parameter.inputType === "checkbox") {
+                        argumentsPayload[name] = entry.input.checked ? "true" : "false";
+                        continue;
+                    }
+
+                    const value = (entry.input.value || "").trim();
+                    if (entry.parameter.required && !value) {
+                        showError("请填写参数：" + entry.parameter.label);
+                        entry.input.focus();
+                        return null;
+                    }
+
+                    if (value)
+                        argumentsPayload[name] = value;
+                }
+
+                return argumentsPayload;
+            }
+
+            function openPluginArgumentModal(title, description, parameters, submitText, onSubmit) {
+                if (!pluginArgumentModal)
+                    return;
+
+                const parameterInputs = {};
+                pluginArgumentModalTitle.textContent = title || "插件参数";
+                pluginArgumentModalDescription.textContent = description || "";
+                pluginArgumentModalDescription.classList.toggle("d-none", !description);
+                pluginArgumentForm.replaceChildren();
+
+                for (const parameter of parameters || [])
+                    pluginArgumentForm.appendChild(createPluginParameterField(parameter, parameterInputs));
+
+                pluginArgumentSubmitBtn.textContent = submitText || "执行";
+                pendingPluginInvocation = { parameterInputs, onSubmit };
+                clearError();
+                pluginArgumentModal.show();
+
+                window.setTimeout(() => {
+                    const firstInput = pluginArgumentForm.querySelector("input, select, textarea");
+                    if (firstInput)
+                        firstInput.focus();
+                }, 150);
+            }
+
+            async function invokePluginTarget(plugin, target, kind, triggerButton) {
+                const execute = async argumentsPayload => {
+                    const result = kind === "control"
+                        ? await postJson("/Browser/ControlPlugin", {
+                            pluginId: plugin.id,
+                            command: target.command,
+                            arguments: argumentsPayload
+                        })
+                        : await postJson("/Browser/RunPluginFunction", {
+                            pluginId: plugin.id,
+                            functionId: target.id,
+                            arguments: argumentsPayload
+                        });
+
+                    renderPluginResult(result);
+                    await loadPlugins();
+                    await refreshStatus();
+                };
+
+                if ((target.parameters || []).length) {
+                    openPluginArgumentModal(
+                        plugin.name + " - " + target.name,
+                        target.description,
+                        target.parameters,
+                        kind === "control" ? target.name : "执行",
+                        execute);
+                    return;
+                }
+
+                triggerButton.disabled = true;
+                clearError();
+                try {
+                    await execute({});
+                } catch (e) {
+                    showError(e.message || (kind === "control" ? "插件控制失败。" : "插件函数执行失败。"));
+                } finally {
+                    triggerButton.disabled = false;
+                }
+            }
+
+            pluginArgumentSubmitBtn.addEventListener("click", async () => {
+                if (!pendingPluginInvocation)
+                    return;
+
+                const argumentsPayload = collectPluginArguments(pendingPluginInvocation.parameterInputs);
+                if (argumentsPayload === null)
+                    return;
+
+                pluginArgumentSubmitBtn.disabled = true;
+                clearError();
+                try {
+                    await pendingPluginInvocation.onSubmit(argumentsPayload);
+                    pluginArgumentModal.hide();
+                } catch (e) {
+                    showError(e.message || "插件执行失败。");
+                } finally {
+                    pluginArgumentSubmitBtn.disabled = false;
+                }
+            });
+
+            pluginArgumentModalElement.addEventListener("hidden.bs.modal", () => {
+                pendingPluginInvocation = null;
+                pluginArgumentForm.replaceChildren();
+                pluginArgumentModalDescription.textContent = "";
+                pluginArgumentModalDescription.classList.add("d-none");
+                pluginArgumentSubmitBtn.textContent = "执行";
+                pluginArgumentSubmitBtn.disabled = false;
+            });
+
             function renderPlugins(plugins) {
                 pluginHost.replaceChildren();
 
@@ -380,215 +602,78 @@
                     state.textContent = "状态: " + (plugin.state || "Unknown");
                     card.appendChild(state);
 
-                    const controls = document.createElement("div");
-                    controls.className = "d-flex flex-wrap gap-2 mb-3";
-
-                    function createControlButton(text, command, disabled) {
+                    function createCommandButton(text, style, disabled, onClick) {
                         const button = document.createElement("button");
                         button.type = "button";
-                        button.className = "btn btn-sm btn-outline-secondary";
+                        button.className = style;
                         button.textContent = text;
                         button.disabled = disabled;
-                        button.addEventListener("click", async () => {
-                            button.disabled = true;
-                            try {
-                                const result = await postJson("/Browser/ControlPlugin", {
-                                    pluginId: plugin.id,
-                                    command
-                                });
-                                renderPluginResult(result);
-                                await loadPlugins();
-                            } catch (e) {
-                                showError(e.message || "插件控制失败。");
-                            } finally {
-                                button.disabled = false;
-                            }
-                        });
+                        button.addEventListener("click", () => onClick(button));
 
                         return button;
                     }
 
-                    controls.appendChild(createControlButton("启动", "start", plugin.state === "Running"));
-                    controls.appendChild(createControlButton("停止", "stop", plugin.state === "Stopped"));
-                    controls.appendChild(createControlButton("暂停", "pause", !plugin.supportsPause || plugin.state !== "Running"));
-                    controls.appendChild(createControlButton("恢复", "resume", !plugin.supportsPause || plugin.state !== "Paused"));
-                    card.appendChild(controls);
+                    const visibleControls = plugin.controls || [];
+                    if (visibleControls.length) {
+                        const controlsCard = document.createElement("div");
+                        controlsCard.className = "border rounded p-2 bg-light-subtle mb-3";
+
+                        const controlsLabel = document.createElement("div");
+                        controlsLabel.className = "fw-semibold mb-2";
+                        controlsLabel.textContent = "控制";
+                        controlsCard.appendChild(controlsLabel);
+
+                        const controls = document.createElement("div");
+                        controls.className = "d-flex flex-wrap gap-2";
+
+                        for (const control of visibleControls) {
+                            const disabled = control.command === "start"
+                                ? plugin.state === "Running"
+                                : control.command === "stop"
+                                    ? plugin.state === "Stopped"
+                                    : control.command === "pause"
+                                        ? plugin.state !== "Running"
+                                        : plugin.state !== "Paused";
+
+                            const button = createCommandButton(control.name, "btn btn-sm btn-outline-secondary", disabled, async triggerButton => {
+                                await invokePluginTarget(plugin, control, "control", triggerButton);
+                            });
+                            button.title = control.description || control.name;
+                            controls.appendChild(button);
+                        }
+
+                        controlsCard.appendChild(controls);
+                        card.appendChild(controlsCard);
+                    }
 
                     const functionCard = document.createElement("div");
                     functionCard.className = "border rounded p-2 bg-light-subtle";
 
-                    const functionLabel = document.createElement("label");
-                    functionLabel.className = "form-label mb-1";
+                    const functionLabel = document.createElement("div");
+                    functionLabel.className = "fw-semibold mb-2";
                     functionLabel.textContent = "导出函数";
                     functionCard.appendChild(functionLabel);
 
-                    const functionSelect = document.createElement("select");
-                    functionSelect.className = "form-select form-select-sm mb-2";
+                    if (plugin.functions?.length) {
+                        const functionButtons = document.createElement("div");
+                        functionButtons.className = "d-flex flex-wrap gap-2";
 
-                    const emptyOption = document.createElement("option");
-                    emptyOption.value = "";
-                    emptyOption.textContent = plugin.functions?.length ? "请选择函数" : "无可用函数";
-                    functionSelect.appendChild(emptyOption);
-
-                    for (const fn of plugin.functions || []) {
-                        const option = document.createElement("option");
-                        option.value = fn.id;
-                        option.textContent = fn.name;
-                        functionSelect.appendChild(option);
-                    }
-
-                    functionCard.appendChild(functionSelect);
-
-                    const functionDescription = document.createElement("div");
-                    functionDescription.className = "text-muted mb-2 small";
-                    functionCard.appendChild(functionDescription);
-
-                    const parameterHost = document.createElement("div");
-                    parameterHost.className = "vstack gap-2";
-                    functionCard.appendChild(parameterHost);
-
-                    const parameterInputs = {};
-
-                    function renderFunctionInputs(fn) {
-                        parameterHost.replaceChildren();
-                        Object.keys(parameterInputs).forEach(key => delete parameterInputs[key]);
-
-                        functionDescription.textContent = fn?.description || "";
-
-                        for (const parameter of fn?.parameters || []) {
-                            const field = document.createElement("div");
-
-                            const label = document.createElement("label");
-                            label.className = "form-label mb-1";
-                            label.textContent = parameter.label + (parameter.required ? " *" : "");
-                            field.appendChild(label);
-
-                            let input;
-                            if (parameter.inputType === "checkbox") {
-                                input = document.createElement("input");
-                                input.type = "checkbox";
-                                input.className = "form-check-input";
-                                input.checked = String(parameter.defaultValue || "false").toLowerCase() === "true";
-
-                                const wrapper = document.createElement("div");
-                                wrapper.className = "form-check";
-                                wrapper.appendChild(input);
-                                field.appendChild(wrapper);
-                            } else if (parameter.inputType === "select") {
-                                input = document.createElement("select");
-                                input.className = "form-select form-select-sm";
-
-                                if (!parameter.required) {
-                                    const emptyOption = document.createElement("option");
-                                    emptyOption.value = "";
-                                    emptyOption.textContent = "请选择";
-                                    input.appendChild(emptyOption);
-                                }
-
-                                for (const option of parameter.options || []) {
-                                    const element = document.createElement("option");
-                                    element.value = option.value;
-                                    element.textContent = option.label;
-                                    if ((parameter.defaultValue ?? "") === option.value)
-                                        element.selected = true;
-                                    input.appendChild(element);
-                                }
-
-                                field.appendChild(input);
-                            } else {
-                                input = document.createElement("input");
-                                input.type = parameter.inputType === "number"
-                                    ? "number"
-                                    : parameter.inputType === "datetime-local"
-                                        ? "datetime-local"
-                                        : "text";
-                                input.className = "form-control form-control-sm";
-                                input.value = parameter.defaultValue ?? "";
-                                input.placeholder = parameter.description || parameter.label;
-                                if (parameter.inputType === "number")
-                                    input.step = "any";
-                                if (parameter.inputType === "datetime-local")
-                                    input.step = "1";
-                                if (parameter.inputType === "guid") {
-                                    input.placeholder = parameter.description || "00000000-0000-0000-0000-000000000000";
-                                    input.pattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
-                                    input.spellcheck = false;
-                                    input.autocomplete = "off";
-                                }
-                                field.appendChild(input);
-                            }
-
-                            if (parameter.description) {
-                                const help = document.createElement("div");
-                                help.className = "form-text mt-1";
-                                help.textContent = parameter.description;
-                                field.appendChild(help);
-                            }
-
-                            parameterInputs[parameter.name] = { input, parameter };
-                            parameterHost.appendChild(field);
-                        }
-                    }
-
-                    functionSelect.addEventListener("change", () => {
-                        const selected = (plugin.functions || []).find(item => item.id === functionSelect.value);
-                        renderFunctionInputs(selected);
-                    });
-
-                    const executeButton = document.createElement("button");
-                    executeButton.type = "button";
-                    executeButton.className = "btn btn-sm btn-outline-primary mt-2";
-                    executeButton.textContent = "执行函数";
-                    executeButton.addEventListener("click", async () => {
-                        const selected = (plugin.functions || []).find(item => item.id === functionSelect.value);
-                        if (!selected) {
-                            showError("请先选择要执行的导出函数。");
-                            functionSelect.focus();
-                            return;
-                        }
-
-                        const argumentsPayload = {};
-                        for (const [name, entry] of Object.entries(parameterInputs)) {
-                            if (typeof entry.input.checkValidity === "function" && !entry.input.checkValidity()) {
-                                entry.input.reportValidity();
-                                entry.input.focus();
-                                return;
-                            }
-
-                            if (entry.parameter.inputType === "checkbox") {
-                                argumentsPayload[name] = entry.input.checked ? "true" : "false";
-                                continue;
-                            }
-
-                            const value = (entry.input.value || "").trim();
-                            if (entry.parameter.required && !value) {
-                                showError("请填写参数：" + entry.parameter.label);
-                                entry.input.focus();
-                                return;
-                            }
-
-                            if (value)
-                                argumentsPayload[name] = value;
-                        }
-
-                        executeButton.disabled = true;
-                        try {
-                            const result = await postJson("/Browser/RunPluginFunction", {
-                                pluginId: plugin.id,
-                                functionId: selected.id,
-                                arguments: argumentsPayload
+                        for (const fn of plugin.functions) {
+                            const button = createCommandButton(fn.name, "btn btn-sm btn-outline-primary", false, async triggerButton => {
+                                await invokePluginTarget(plugin, fn, "function", triggerButton);
                             });
-                            renderPluginResult(result);
-                            await loadPlugins();
-                            await refreshStatus();
-                        } catch (e) {
-                            showError(e.message || "插件函数执行失败。");
-                        } finally {
-                            executeButton.disabled = false;
+                            button.title = fn.description || fn.name;
+                            functionButtons.appendChild(button);
                         }
-                    });
 
-                    functionCard.appendChild(executeButton);
+                        functionCard.appendChild(functionButtons);
+                    } else {
+                        const empty = document.createElement("div");
+                        empty.className = "text-muted";
+                        empty.textContent = "无可用函数";
+                        functionCard.appendChild(empty);
+                    }
+
                     card.appendChild(functionCard);
                     pluginHost.appendChild(card);
                 }

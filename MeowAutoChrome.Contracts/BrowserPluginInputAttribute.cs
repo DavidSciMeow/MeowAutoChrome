@@ -18,6 +18,10 @@ public sealed class BrowserPluginInputAttribute : Attribute
 
     public string Label { get; }
     public string? Description { get; init; }
+    public string? Name { get; set; }
+    public string? DefaultValue { get; set; }
+    public bool Required { get; set; }
+    public string InputType { get; set; } = "text";
 }
 
 
