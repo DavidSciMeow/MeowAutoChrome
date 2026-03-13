@@ -1,6 +1,15 @@
 ﻿namespace MeowAutoChrome.Web.Models;
 
-public sealed record BrowserPluginActionParameterDescriptor(string Name, string Label, string? Description, string? DefaultValue, bool Required);
+public sealed record BrowserPluginActionParameterOptionDescriptor(string Value, string Label);
+
+public sealed record BrowserPluginActionParameterDescriptor(
+    string Name,
+    string Label,
+    string? Description,
+    string? DefaultValue,
+    bool Required,
+    string InputType,
+    IReadOnlyList<BrowserPluginActionParameterOptionDescriptor> Options);
 
 public sealed record BrowserPluginFunctionDescriptor(string Id, string Name, string? Description, IReadOnlyList<BrowserPluginActionParameterDescriptor> Parameters);
 

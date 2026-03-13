@@ -2,6 +2,9 @@
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Warpper;
 using Microsoft.Playwright;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -12,6 +15,7 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
     private readonly string _pluginRootPath = Path.Combine(environment.ContentRootPath, "Plugins");
     private readonly Lock _syncRoot = new();
     private readonly Dictionary<string, RuntimeBrowserPluginInstance> _instances = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly NullabilityInfoContext NullabilityContext = new();
 
     public string PluginRootPath => _pluginRootPath;
 
@@ -28,8 +32,8 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
                     plugin.Id,
                     plugin.Name,
                     plugin.Description,
-                    instance.State.ToString(),
-                    instance.SupportsPause,
+                    instance.Instance.State.ToString(),
+                    instance.Instance.SupportsPause,
                     plugin.Actions
                         .Select(action => new BrowserPluginFunctionDescriptor(
                             action.Id,
@@ -41,7 +45,11 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
                                     parameter.Label,
                                     parameter.Description,
                                     parameter.DefaultValue,
-                                    parameter.Required))
+                                    parameter.Required,
+                                    parameter.InputType,
+                                    parameter.Options
+                                        .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
+                                        .ToArray()))
                                 .ToArray()))
                         .ToArray());
             })
@@ -57,19 +65,22 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var browserContext = browser.BrowserContext;
-        var activePage = browser.ActivePage;
+        var hostContext = new BrowserPluginHostContext(browser.BrowserContext, browser.ActivePage, normalizedArguments, cancellationToken);
 
-        var result = command.ToLowerInvariant() switch
-        {
-            "start" => await instance.StartAsync(normalizedArguments, browserContext, activePage, cancellationToken),
-            "stop" => await instance.StopAsync(browserContext, activePage, cancellationToken),
-            "pause" => await instance.PauseAsync(browserContext, activePage, cancellationToken),
-            "resume" => await instance.ResumeAsync(browserContext, activePage, cancellationToken),
-            _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
-        };
+        var result = await ExecuteWithHostContextAsync(
+            instance,
+            hostContext,
+            pluginInstance => command.ToLowerInvariant() switch
+            {
+                "start" => pluginInstance.StartAsync(normalizedArguments, hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
+                "stop" => pluginInstance.StopAsync(hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
+                "pause" => pluginInstance.PauseAsync(hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
+                "resume" => pluginInstance.ResumeAsync(hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
+                _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
+            },
+            cancellationToken);
 
-        return new BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
+        return new BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
 
     public async Task<BrowserPluginExecutionResponse?> ExecuteAsync(string pluginId, string functionId, IReadOnlyDictionary<string, string?>? arguments, CancellationToken cancellationToken = default)
@@ -86,12 +97,22 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var invocation = action.Method.Invoke(instance, BuildInvocationArguments(action.Method, browser.BrowserContext, browser.ActivePage, normalizedArguments, cancellationToken));
-        if (invocation is not Task<BrowserPluginActionResult> task)
-            throw new InvalidOperationException($"插件动作返回类型无效：{plugin.Type.FullName}.{action.Method.Name}");
+        var hostContext = new BrowserPluginHostContext(browser.BrowserContext, browser.ActivePage, normalizedArguments, cancellationToken);
 
-        var result = await task;
-        return new BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
+        var result = await ExecuteWithHostContextAsync(
+            instance,
+            hostContext,
+            pluginInstance =>
+            {
+                var invocation = action.Method.Invoke(pluginInstance, BuildInvocationArguments(action.Method, hostContext));
+                if (invocation is not Task<BrowserPluginActionResult> task)
+                    throw new InvalidOperationException($"插件动作返回类型无效：{plugin.Type.FullName}.{action.Method.Name}");
+
+                return task;
+            },
+            cancellationToken);
+
+        return new BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
 
     private IReadOnlyList<RuntimeBrowserPlugin> DiscoverPlugins()
@@ -108,19 +129,45 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             .ToArray();
     }
 
-    private IBrowserPlugin GetOrCreatePluginInstance(RuntimeBrowserPlugin plugin)
+    private RuntimeBrowserPluginInstance GetOrCreatePluginInstance(RuntimeBrowserPlugin plugin)
     {
         lock (_syncRoot)
         {
             if (_instances.TryGetValue(plugin.Id, out var current) && current.Type == plugin.Type)
-                return current.Instance;
+                return current;
 
             var instance = Activator.CreateInstance(plugin.Type) as IBrowserPlugin;
             if (instance is null)
                 throw new InvalidOperationException($"无法创建插件实例：{plugin.Type.FullName}");
 
-            _instances[plugin.Id] = new RuntimeBrowserPluginInstance(plugin.Type, instance);
-            return instance;
+            current = new RuntimeBrowserPluginInstance(plugin.Type, instance);
+            _instances[plugin.Id] = current;
+            return current;
+        }
+    }
+
+    private static async Task<BrowserPluginActionResult> ExecuteWithHostContextAsync(RuntimeBrowserPluginInstance instance, IHostContext hostContext, Func<IBrowserPlugin, Task<BrowserPluginActionResult>> execute, CancellationToken cancellationToken)
+    {
+        await instance.ExecutionLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (instance.Instance is IHostContextAware aware)
+                aware.HostContext = hostContext;
+
+            try
+            {
+                return await execute(instance.Instance);
+            }
+            finally
+            {
+                if (instance.Instance is IHostContextAware resettable)
+                    resettable.HostContext = null;
+            }
+        }
+        finally
+        {
+            instance.ExecutionLock.Release();
         }
     }
 
@@ -133,32 +180,51 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             .Select(type =>
             {
                 var pluginAttribute = type.GetCustomAttribute<BrowserPluginAttribute>()!;
-                var actions = type
-                    .GetMethods(BindingFlags.Instance | BindingFlags.Public)
-                    .Select(method => new
-                    {
-                        Method = method,
-                        Attribute = method.GetCustomAttribute<BrowserPluginActionAttribute>(),
-                        Parameters = method.GetCustomAttributes<BrowserPluginInputAttribute>().ToArray()
-                    })
-                    .Where(item => item.Attribute is not null && HasSupportedSignature(item.Method))
-                    .Select(item => new RuntimeBrowserPluginAction(
-                        item.Attribute!.Id,
-                        item.Attribute.Name,
-                        item.Attribute.Description,
-                        item.Method,
-                        item.Parameters
-                            .Select(parameter => new RuntimeBrowserPluginActionParameter(
-                                parameter.Name,
-                                parameter.Label,
-                                parameter.Description,
-                                parameter.DefaultValue,
-                                parameter.Required))
-                            .ToArray()))
-                    .ToArray();
+                var actions = DiscoverActions(type);
 
                 return new RuntimeBrowserPlugin(pluginAttribute.Id, pluginAttribute.Name, pluginAttribute.Description, type, actions);
             });
+
+    private static IReadOnlyList<RuntimeBrowserPluginAction> DiscoverActions(Type type)
+    {
+        var actions = new List<RuntimeBrowserPluginAction>();
+        var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public))
+        {
+            var attribute = method.GetCustomAttribute<BrowserPluginActionAttribute>();
+            if (attribute is null || !HasSupportedSignature(method))
+                continue;
+
+            var legacyParameterMetadata = method
+                .GetCustomAttributes<BrowserPluginInputAttribute>()
+                .Where(item => !string.IsNullOrWhiteSpace(item.Label))
+                .GroupBy(item => item.Label, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
+            var parameters = method
+                .GetParameters()
+                .Where(parameter => !IsHostParameter(parameter))
+                .Select(parameter => CreateActionParameter(
+                    parameter,
+                    parameter.GetCustomAttributes<BrowserPluginInputAttribute>().LastOrDefault(),
+                    legacyParameterMetadata.GetValueOrDefault(parameter.Name ?? string.Empty)))
+                .ToArray();
+
+            var baseId = string.IsNullOrWhiteSpace(attribute.Id) ? method.Name : attribute.Id.Trim();
+            var actionId = EnsureUniqueActionId(baseId, usedIds);
+            var actionName = string.IsNullOrWhiteSpace(attribute.Name) ? method.Name : attribute.Name.Trim();
+
+            actions.Add(new RuntimeBrowserPluginAction(
+                actionId,
+                actionName,
+                attribute.Description,
+                method,
+                parameters));
+        }
+
+        return actions;
+    }
 
     private static Assembly? TryLoadPluginAssembly(string pluginPath)
     {
@@ -182,33 +248,22 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         if (method.ReturnType != typeof(Task<BrowserPluginActionResult>))
             return false;
 
-        var parameters = method.GetParameters();
-        return parameters.Length == 3
-            && parameters[0].ParameterType == typeof(IBrowserContext)
-            && parameters[1].ParameterType == typeof(IPage)
-            && parameters[2].ParameterType == typeof(CancellationToken)
-            || parameters.Length == 4
-            && parameters[0].ParameterType == typeof(IBrowserContext)
-            && parameters[1].ParameterType == typeof(IPage)
-            && parameters[2].ParameterType == typeof(IReadOnlyDictionary<string, string?>)
-            && parameters[3].ParameterType == typeof(CancellationToken);
+        return method.GetParameters().All(parameter => IsHostParameter(parameter) || IsBindableParameter(parameter));
     }
 
     private static object?[] BuildInvocationArguments(
         MethodInfo method,
-        IBrowserContext browserContext,
-        IPage? activePage,
-        IReadOnlyDictionary<string, string?> arguments,
-        CancellationToken cancellationToken)
+        IHostContext hostContext)
     {
         var parameters = method.GetParameters();
+        var invocationArguments = new object?[parameters.Length];
 
-        return parameters.Length switch
+        for (var index = 0; index < parameters.Length; index++)
         {
-            3 => [browserContext, activePage, cancellationToken],
-            4 => [browserContext, activePage, arguments, cancellationToken],
-            _ => throw new InvalidOperationException($"不支持的插件动作签名：{method.DeclaringType?.FullName}.{method.Name}")
-        };
+            invocationArguments[index] = ResolveInvocationArgument(parameters[index], hostContext);
+        }
+
+        return invocationArguments;
     }
 
     private sealed record RuntimeBrowserPlugin(
@@ -230,7 +285,247 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         string Label,
         string? Description,
         string? DefaultValue,
-        bool Required);
+        bool Required,
+        string InputType,
+        IReadOnlyList<RuntimeBrowserPluginActionParameterOption> Options);
 
-    private sealed record RuntimeBrowserPluginInstance(Type Type, IBrowserPlugin Instance);
+    private sealed record RuntimeBrowserPluginActionParameterOption(string Value, string Label);
+
+    private sealed class RuntimeBrowserPluginInstance(Type type, IBrowserPlugin instance)
+    {
+        public Type Type { get; } = type;
+        public IBrowserPlugin Instance { get; } = instance;
+        public SemaphoreSlim ExecutionLock { get; } = new(1, 1);
+    }
+
+    private static RuntimeBrowserPluginActionParameter CreateActionParameter(ParameterInfo parameter, BrowserPluginInputAttribute? parameterMetadata, BrowserPluginInputAttribute? legacyMetadata)
+    {
+        var defaultValue = GetDefaultValue(parameter);
+        var label = !string.IsNullOrWhiteSpace(parameterMetadata?.Label)
+            ? parameterMetadata.Label
+            : !string.IsNullOrWhiteSpace(legacyMetadata?.Label)
+                ? legacyMetadata.Label
+                : parameter.Name ?? string.Empty;
+        var description = parameterMetadata?.Description ?? legacyMetadata?.Description;
+
+        return new RuntimeBrowserPluginActionParameter(
+            parameter.Name ?? string.Empty,
+            label,
+            description,
+            defaultValue,
+            IsRequiredParameter(parameter),
+            GetInputType(parameter),
+            GetOptions(parameter));
+    }
+
+    private static string EnsureUniqueActionId(string baseId, HashSet<string> usedIds)
+    {
+        var candidate = baseId;
+        var suffix = 1;
+        while (!usedIds.Add(candidate))
+        {
+            candidate = $"{baseId}_{suffix}";
+            suffix++;
+        }
+
+        return candidate;
+    }
+
+    private static bool IsHostParameter(ParameterInfo parameter)
+        => parameter.ParameterType == typeof(IBrowserContext)
+            || parameter.ParameterType == typeof(IPage)
+            || parameter.ParameterType == typeof(CancellationToken)
+            || parameter.ParameterType == typeof(IHostContext)
+            || parameter.ParameterType == typeof(IReadOnlyDictionary<string, string?>);
+
+    private static bool IsBindableParameter(ParameterInfo parameter)
+    {
+        var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+        return parameterType == typeof(string)
+            || parameterType == typeof(bool)
+            || parameterType == typeof(byte)
+            || parameterType == typeof(short)
+            || parameterType == typeof(int)
+            || parameterType == typeof(long)
+            || parameterType == typeof(float)
+            || parameterType == typeof(double)
+            || parameterType == typeof(decimal)
+            || parameterType == typeof(Guid)
+            || parameterType == typeof(DateTime)
+            || parameterType == typeof(DateTimeOffset)
+            || parameterType == typeof(TimeSpan)
+            || parameterType.IsEnum;
+    }
+
+    private static object? ResolveInvocationArgument(ParameterInfo parameter, IHostContext hostContext)
+    {
+        if (parameter.ParameterType == typeof(IBrowserContext))
+            return hostContext.BrowserContext;
+
+        if (parameter.ParameterType == typeof(IPage))
+            return hostContext.ActivePage;
+
+        if (parameter.ParameterType == typeof(CancellationToken))
+            return hostContext.CancellationToken;
+
+        if (parameter.ParameterType == typeof(IHostContext))
+            return hostContext;
+
+        if (parameter.ParameterType == typeof(IReadOnlyDictionary<string, string?>))
+            return hostContext.Arguments;
+
+        return BindUserArgument(parameter, hostContext.Arguments);
+    }
+
+    private static object? BindUserArgument(ParameterInfo parameter, IReadOnlyDictionary<string, string?> arguments)
+    {
+        var parameterName = parameter.Name ?? throw new InvalidOperationException("插件动作参数缺少名称。");
+
+        if (!arguments.TryGetValue(parameterName, out var rawValue) || string.IsNullOrWhiteSpace(rawValue))
+        {
+            if (parameter.HasDefaultValue)
+                return parameter.DefaultValue;
+
+            if (IsNullableParameter(parameter))
+                return null;
+
+            throw new InvalidOperationException($"缺少参数：{parameterName}");
+        }
+
+        try
+        {
+            return ConvertArgumentValue(parameter.ParameterType, rawValue.Trim());
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"参数 {parameterName} 的值无效：{ex.Message}", ex);
+        }
+    }
+
+    private static object? ConvertArgumentValue(Type parameterType, string rawValue)
+    {
+        var targetType = Nullable.GetUnderlyingType(parameterType) ?? parameterType;
+
+        if (targetType == typeof(string))
+            return rawValue;
+
+        if (targetType == typeof(bool))
+        {
+            if (bool.TryParse(rawValue, out var booleanValue))
+                return booleanValue;
+
+            if (string.Equals(rawValue, "1", StringComparison.OrdinalIgnoreCase) || string.Equals(rawValue, "on", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (string.Equals(rawValue, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(rawValue, "off", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            throw new FormatException("布尔值必须是 true/false。");
+        }
+
+        if (targetType.IsEnum)
+            return Enum.Parse(targetType, rawValue, ignoreCase: true);
+
+        if (targetType == typeof(Guid))
+            return Guid.Parse(rawValue);
+
+        if (targetType == typeof(DateTime))
+            return DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal);
+
+        if (targetType == typeof(DateTimeOffset))
+            return DateTimeOffset.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal);
+
+        if (targetType == typeof(TimeSpan))
+            return TimeSpan.Parse(rawValue, CultureInfo.InvariantCulture);
+
+        var converter = TypeDescriptor.GetConverter(targetType);
+        if (converter.CanConvertFrom(typeof(string)))
+            return converter.ConvertFromInvariantString(rawValue);
+
+        throw new InvalidOperationException($"不支持的参数类型：{targetType.Name}");
+    }
+
+    private static bool IsRequiredParameter(ParameterInfo parameter)
+        => !parameter.HasDefaultValue && !IsNullableParameter(parameter);
+
+    private static bool IsNullableParameter(ParameterInfo parameter)
+    {
+        if (Nullable.GetUnderlyingType(parameter.ParameterType) is not null)
+            return true;
+
+        if (parameter.ParameterType.IsValueType)
+            return false;
+
+        return NullabilityContext.Create(parameter).ReadState != NullabilityState.NotNull;
+    }
+
+    private static string? GetDefaultValue(ParameterInfo parameter)
+    {
+        if (!parameter.HasDefaultValue)
+            return null;
+
+        return parameter.DefaultValue switch
+        {
+            null => null,
+            bool value => value ? "true" : "false",
+            DateTime value => value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture),
+            DateTimeOffset value => value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture),
+            Guid value => value.ToString("D", CultureInfo.InvariantCulture),
+            IFormattable value => value.ToString(null, CultureInfo.InvariantCulture),
+            _ => parameter.DefaultValue.ToString()
+        };
+    }
+
+    private static string GetInputType(ParameterInfo parameter)
+    {
+        var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+        if (parameterType == typeof(bool))
+            return "checkbox";
+
+        if (parameterType == typeof(DateTime) || parameterType == typeof(DateTimeOffset))
+            return "datetime-local";
+
+        if (parameterType == typeof(Guid))
+            return "guid";
+
+        if (parameterType.IsEnum)
+            return "select";
+
+        if (parameterType == typeof(byte)
+            || parameterType == typeof(short)
+            || parameterType == typeof(int)
+            || parameterType == typeof(long)
+            || parameterType == typeof(float)
+            || parameterType == typeof(double)
+            || parameterType == typeof(decimal))
+            return "number";
+
+        return "text";
+    }
+
+    private static IReadOnlyList<RuntimeBrowserPluginActionParameterOption> GetOptions(ParameterInfo parameter)
+    {
+        var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+        if (!parameterType.IsEnum)
+            return Array.Empty<RuntimeBrowserPluginActionParameterOption>();
+
+        return Enum
+            .GetNames(parameterType)
+            .Select(name => new RuntimeBrowserPluginActionParameterOption(name, GetEnumOptionLabel(parameterType, name)))
+            .ToArray();
+    }
+
+    private static string GetEnumOptionLabel(Type enumType, string memberName)
+    {
+        var field = enumType.GetField(memberName, BindingFlags.Public | BindingFlags.Static);
+        if (field is null)
+            return memberName;
+
+        var displayName = field.GetCustomAttribute<DisplayAttribute>()?.GetName();
+        if (!string.IsNullOrWhiteSpace(displayName))
+            return displayName!;
+
+        var description = field.GetCustomAttribute<DescriptionAttribute>()?.Description;
+        return string.IsNullOrWhiteSpace(description) ? memberName : description;
+    }
 }
