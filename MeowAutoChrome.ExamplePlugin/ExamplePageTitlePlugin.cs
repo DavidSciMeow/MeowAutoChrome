@@ -15,17 +15,17 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         cancellationToken.ThrowIfCancellationRequested();
 
         if (State == BrowserPluginState.Running)
-            return Ok("插件已处于运行中。");
+            return this.Ok("插件已处于运行中。");
 
         State = BrowserPluginState.Running;
-        return Ok("Example 插件已启动。");
+        return this.Ok("Example 插件已启动。");
     }
 
     public Task<BrowserPluginActionResult> StopAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         State = BrowserPluginState.Stopped;
-        return Ok("Example 插件已停止。");
+        return this.Ok("Example 插件已停止。");
     }
 
     public Task<BrowserPluginActionResult> PauseAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
@@ -33,10 +33,11 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         cancellationToken.ThrowIfCancellationRequested();
 
         if (State != BrowserPluginState.Running)
-            return Ok("只有运行中的插件才能暂停。");
+            return this.Ok("只有运行中的插件才能暂停。");
+
 
         State = BrowserPluginState.Paused;
-        return Ok("Example 插件已暂停。");
+        return this.Ok("Example 插件已暂停。");
     }
 
     public Task<BrowserPluginActionResult> ResumeAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
@@ -44,10 +45,10 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         cancellationToken.ThrowIfCancellationRequested();
 
         if (State != BrowserPluginState.Paused)
-            return Ok("只有暂停中的插件才能恢复。");
+            return this.Ok("只有暂停中的插件才能恢复。");
 
         State = BrowserPluginState.Running;
-        return Ok("Example 插件已恢复。");
+        return this.Ok("Example 插件已恢复。");
     }
 
     [BrowserPluginAction("read-title", "读取网页标题", Description = "直接通过 IPage 读取 document.title。")]
@@ -55,10 +56,10 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
     public async Task<BrowserPluginActionResult> ReadTitleAsync(IBrowserContext browserContext, IPage? activePage, IReadOnlyDictionary<string, string?> arguments, CancellationToken cancellationToken)
     {
         if (State != BrowserPluginState.Running)
-            return OkResult("请先启动插件，再执行导出函数。");
+            return this.OkResult("请先启动插件，再执行导出函数。");
 
         if (activePage is null)
-            return OkResult("当前没有活动页面。");
+            return this.OkResult("当前没有活动页面。");
 
         var prefix = arguments.TryGetValue("prefix", out var value) && !string.IsNullOrWhiteSpace(value)
             ? value.Trim()
@@ -66,7 +67,7 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
         var title = await activePage.EvaluateAsync<string?>("() => document?.title ?? null");
         var url = activePage.Url;
 
-        return new BrowserPluginActionResult(
+        return this.OkResult(
             string.IsNullOrWhiteSpace(title) ? "当前页面没有可用标题。" : $"{prefix}：{title}",
             new Dictionary<string, string?>
             {
@@ -74,7 +75,6 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
                 ["url"] = url,
                 ["mode"] = "playwright-page",
                 ["pageCount"] = browserContext.Pages.Count.ToString(),
-                ["state"] = State.ToString(),
             });
     }
 
@@ -82,7 +82,7 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
     public async Task<BrowserPluginActionResult> InspectPlaywrightAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken)
     {
         if (State != BrowserPluginState.Running)
-            return OkResult("请先启动插件，再执行导出函数。");
+            return this.OkResult("请先启动插件，再执行导出函数。");
 
         string? title = null;
         if (activePage is not null)
@@ -96,27 +96,14 @@ public sealed class ExamplePageTitlePlugin : IBrowserPlugin
             }
         }
 
-        return new BrowserPluginActionResult(
+        return this.OkResult(
             activePage is null ? "已拿到 BrowserContext，但当前没有活动页面。" : $"已直接拿到 Playwright ActivePage：{activePage.Url}",
             new Dictionary<string, string?>
             {
-                ["state"] = State.ToString(),
                 ["pageCount"] = browserContext.Pages.Count.ToString(),
                 ["activePageUrl"] = activePage?.Url,
                 ["activePageTitle"] = title,
             });
     }
-
-    private Task<BrowserPluginActionResult> Ok(string message, IReadOnlyDictionary<string, string?>? data = null)
-        => Task.FromResult(OkResult(message, data));
-
-    private BrowserPluginActionResult OkResult(string message, IReadOnlyDictionary<string, string?>? data = null)
-        => new(message, data ?? BuildStateData());
-
-    private IReadOnlyDictionary<string, string?> BuildStateData()
-        => new Dictionary<string, string?>
-        {
-            ["state"] = State.ToString(),
-        };
 }
 
