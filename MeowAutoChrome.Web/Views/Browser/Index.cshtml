@@ -717,6 +717,10 @@
                 }
             }
 
+            async function selectTab(tabId) {
+                applyStatus(await postJson("/Browser/SelectTab", { tabId }));
+            }
+
             function renderTabs(tabs) {
                 tabsBar.innerHTML = "";
 
@@ -740,7 +744,7 @@
                     btn.textContent = tab.title || tab.url || "about:blank";
                     btn.addEventListener("click", async () => {
                         try {
-                            applyStatus(await postJson("/Browser/SelectTab", { tabId: tab.id }));
+                            await selectTab(tab.id);
                         } catch (e) {
                             showError(e.message || "切换标签页失败。");
                         }
@@ -788,6 +792,27 @@
                 for (const tab of tabs) {
                     const card = document.createElement("div");
                     card.className = "tabs-status-card" + (tab.isSelected ? " tabs-status-card-active" : "");
+                    card.tabIndex = 0;
+                    card.setAttribute("role", "button");
+                    card.setAttribute("aria-label", "切换到 TAB: " + (tab.title || tab.url || "about:blank"));
+                    card.addEventListener("click", async () => {
+                        try {
+                            await selectTab(tab.id);
+                        } catch (e) {
+                            showError(e.message || "切换标签页失败。");
+                        }
+                    });
+                    card.addEventListener("keydown", async e => {
+                        if (e.key !== "Enter" && e.key !== " ")
+                            return;
+
+                        e.preventDefault();
+                        try {
+                            await selectTab(tab.id);
+                        } catch (e) {
+                            showError(e.message || "切换标签页失败。");
+                        }
+                    });
 
                     const row = document.createElement("div");
                     row.className = "tabs-status-row";
