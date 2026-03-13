@@ -124,7 +124,7 @@ namespace MeowAutoChrome.Web.Controllers
             if (screenshot == null)
                 return NotFound();
 
-            return File(screenshot, "image/png", $"browser-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+            return File(screenshot, "image/png");
         }
 
         private async Task<BrowserStatusResponse> BuildStatusAsync()

@@ -46,10 +46,6 @@
                     </div>
                 </div>
 
-                <div class="browser-toolbar-footer">
-                    <div class="browser-page-url" id="pageUrl">--</div>
-                </div>
-
                 <div id="browserError" class="alert alert-warning d-none mt-3 mb-0" role="alert"></div>
             </div>
         </div>
@@ -97,6 +93,20 @@
     </div>
 </div>
 
+<div class="modal fade" id="screenshotPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">截图预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center bg-dark-subtle">
+                <img id="screenshotPreviewImage" class="img-fluid rounded" alt="截图预览" />
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/lib/signalr/dist/browser/signalr.min.js"></script>
     <script>
@@ -111,7 +121,6 @@
             const cpuTxt = document.getElementById("cpuDisplay");
             const memoryTxt = document.getElementById("memoryDisplay");
             const fpsTxt = document.getElementById("fpsDisplay");
-            const pageUrl = document.getElementById("pageUrl");
             const browserError = document.getElementById("browserError");
             const urlInput = document.getElementById("urlInput");
             const tabsBar = document.getElementById("tabsBar");
@@ -122,11 +131,15 @@
             const pluginHost = document.getElementById("pluginHost");
             const pluginResult = document.getElementById("pluginResult");
             const pluginArgumentModalElement = document.getElementById("pluginArgumentModal");
+            const screenshotPreviewModalElement = document.getElementById("screenshotPreviewModal");
+            const screenshotPreviewImage = document.getElementById("screenshotPreviewImage");
             const pluginArgumentModalTitle = document.getElementById("pluginArgumentModalTitle");
             const pluginArgumentModalDescription = document.getElementById("pluginArgumentModalDescription");
             const pluginArgumentForm = document.getElementById("pluginArgumentForm");
             const pluginArgumentSubmitBtn = document.getElementById("pluginArgumentSubmitBtn");
+            const shotBtn = document.getElementById("shotBtn");
             const pluginArgumentModal = pluginArgumentModalElement ? new bootstrap.Modal(pluginArgumentModalElement) : null;
+            const screenshotPreviewModal = screenshotPreviewModalElement ? new bootstrap.Modal(screenshotPreviewModalElement) : null;
             let statusBusy = false;
             let isEditingUrl = false;
             let liveDisplayEnabled = true;
@@ -138,6 +151,7 @@
             let pluginPanelWidth = @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth;
             let pointerResizeActive = false;
             let pendingPluginInvocation = null;
+            let screenshotPreviewUrl = null;
 
             function clampPluginPanelWidth(width) {
                 const workspaceWidth = Math.max(0, browserWorkspace?.clientWidth || 0);
@@ -324,7 +338,6 @@
 
             function applyStatus(data) {
                 document.title = (data.title || "浏览器控制台") + " - MeowAutoChrome";
-                pageUrl.textContent = data.url || "(空地址)";
                 if (!isEditingUrl)
                     urlInput.value = data.url || "";
                 if (data.errorMessage)
@@ -569,6 +582,15 @@
                 pluginArgumentModalDescription.classList.add("d-none");
                 pluginArgumentSubmitBtn.textContent = "执行";
                 pluginArgumentSubmitBtn.disabled = false;
+            });
+
+            screenshotPreviewModalElement.addEventListener("hidden.bs.modal", () => {
+                screenshotPreviewImage.removeAttribute("src");
+                if (!screenshotPreviewUrl)
+                    return;
+
+                URL.revokeObjectURL(screenshotPreviewUrl);
+                screenshotPreviewUrl = null;
             });
 
             function renderPlugins(plugins) {
@@ -827,6 +849,29 @@
                 urlInput.blur();
             }
 
+            async function previewScreenshot() {
+                shotBtn.disabled = true;
+                clearError();
+
+                try {
+                    const response = await fetch("/Browser/Screenshot?ts=" + Date.now(), { cache: "no-store" });
+                    if (!response.ok)
+                        throw new Error("截图失败: " + response.status);
+
+                    const blob = await response.blob();
+                    if (screenshotPreviewUrl)
+                        URL.revokeObjectURL(screenshotPreviewUrl);
+
+                    screenshotPreviewUrl = URL.createObjectURL(blob);
+                    screenshotPreviewImage.src = screenshotPreviewUrl;
+                    screenshotPreviewModal.show();
+                } catch (e) {
+                    showError(e.message || "截图失败。");
+                } finally {
+                    shotBtn.disabled = false;
+                }
+            }
+
             function intervalToFps(intervalMs) {
                 const interval = Math.max(16, Number(intervalMs) || 100);
                 return Math.max(1, Math.min(60, Math.round(1000 / interval)));
@@ -953,9 +998,7 @@
                 await navigate();
             });
 
-            document.getElementById("shotBtn").addEventListener("click", () => {
-                window.open("/Browser/Screenshot?ts=" + Date.now(), "_blank");
-            });
+            shotBtn.addEventListener("click", previewScreenshot);
 
             setInterval(() => {
                 refreshStatus().catch(() => {});
