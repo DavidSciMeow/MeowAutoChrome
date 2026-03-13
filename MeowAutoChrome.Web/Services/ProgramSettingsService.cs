@@ -6,7 +6,7 @@ namespace MeowAutoChrome.Web.Services;
 public sealed class ProgramSettingsService(IWebHostEnvironment environment)
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-    private readonly string _settingsFilePath = Path.Combine(environment.ContentRootPath, "program-settings.json");
+    private readonly string _settingsFilePath = Path.Combine(AppContext.BaseDirectory, "program-settings.json");
     private ProgramSettings? _cachedSettings;
 
     public async Task<ProgramSettings> GetAsync()

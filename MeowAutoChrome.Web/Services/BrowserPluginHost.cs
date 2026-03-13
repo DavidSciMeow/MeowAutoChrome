@@ -12,7 +12,7 @@ namespace MeowAutoChrome.Web.Services;
 
 public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnvironment environment)
 {
-    private readonly string _pluginRootPath = Path.Combine(environment.ContentRootPath, "Plugins");
+    private readonly string _pluginRootPath = Path.Combine(AppContext.BaseDirectory, "Plugins");
     private readonly Lock _syncRoot = new();
     private readonly Dictionary<string, RuntimeBrowserPluginInstance> _instances = new(StringComparer.OrdinalIgnoreCase);
     private static readonly NullabilityInfoContext NullabilityContext = new();
