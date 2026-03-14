@@ -12,7 +12,7 @@ public static class BrowserPluginResultExtensions
     public static BrowserPluginActionResult OkResult(this IBrowserPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null)
         => new(message, MergeDefaultData(plugin, data));
 
-    private static IReadOnlyDictionary<string, string?> MergeDefaultData(IBrowserPlugin plugin, IReadOnlyDictionary<string, string?>? data)
+    private static Dictionary<string, string?> MergeDefaultData(IBrowserPlugin plugin, IReadOnlyDictionary<string, string?>? data)
     {
         ArgumentNullException.ThrowIfNull(plugin);
 

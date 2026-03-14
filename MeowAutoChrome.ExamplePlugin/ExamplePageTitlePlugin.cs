@@ -10,9 +10,7 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
     protected override string PluginName => "Example 插件";
 
     [BrowserPluginAction("读取网页标题", Description = "直接通过当前活动页面读取 document.title。")]
-    public async Task<BrowserPluginActionResult> ReadTitleAsync(
-        [BrowserPluginInput("结果前缀", Description = "可选，自定义返回消息前缀。")] string prefix = "当前页面标题"
-        )
+    public async Task<BrowserPluginActionResult> ReadTitleAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -24,7 +22,7 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
         var url = page.Url;
 
         return this.OkResult(
-            string.IsNullOrWhiteSpace(title) ? "当前页面没有可用标题。" : $"{prefix}：{title}",
+            string.IsNullOrWhiteSpace(title) ? "当前页面没有可用标题。" : title,
             new Dictionary<string, string?>
             {
                 ["title"] = title,

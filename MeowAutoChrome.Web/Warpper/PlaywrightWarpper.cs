@@ -107,7 +107,7 @@ public class PlayWrightWarpper
 
     public string? CurrentUrl => ActivePage?.Url;
 
-    public PlayWrightWarpper(ProgramSettingsService programSettingsService, string? userDataDir = null, Dictionary<string, string>? Header = null)
+    public PlayWrightWarpper(ProgramSettingsService programSettingsService, string? userDataDir = null)
     {
         _programSettingsService = programSettingsService;
 
@@ -123,38 +123,6 @@ public class PlayWrightWarpper
                 ViewportSize = null
             }
         ).GetAwaiter().GetResult();
-
-        if (Header is not null) BrowserContext.SetExtraHTTPHeadersAsync(Header).GetAwaiter().GetResult();
-            
-        //BrowserContext.SetExtraHTTPHeadersAsync(new Dictionary<string, string>
-        //{
-        //    ["sec-ch-ua"] = "\"Not;A=Brand\";v=\"99\", \"Google Chrome\";v=\"139\", \"Chromium\";v=\"139\"",
-        //    ["accept-language"] = "en-GB,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,ja;q=0.6",
-        //    ["dnt"] = "1",
-        //    ["accept"] = "*/*",
-        //    ["accept-encoding"] = "gzip, deflate, br, zstd",
-        //    ["referer"] = "https://buyin.jinritemai.com/",
-        //    ["sec-ch-ua-mobile"] = "?0",
-        //    ["sec-ch-ua-platform"] = "\"Windows\"",
-        //    ["sec-fetch-dest"] = "script",
-        //    ["sec-fetch-mode"] = "no-cors",
-        //    ["sec-fetch-site"] = "cross-site",
-        //    ["sec-fetch-storage-access"] = "active",
-        //    ["origin"] = "https://buyin.jinritemai.com",
-        //}).GetAwaiter().GetResult();
-
-        BrowserContext.AddInitScriptAsync(@"Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'zh-CN', 'ja'] });").GetAwaiter().GetResult();
-
-        //await BrowserContext.RouteAsync("**/vc/setting**", async route =>
-        //{
-        //    var headers = new Dictionary<string, string>(route.Request.Headers)
-        //    {
-
-        //    };
-        //    await route.ContinueAsync(new RouteContinueOptions { Headers = headers });
-        //});
-
-        //BrowserContext.Pages[0].GotoAsync(loginurl).GetAwaiter().GetResult();
     }
 
 

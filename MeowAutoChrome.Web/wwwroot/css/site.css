@@ -302,6 +302,37 @@ body {
     background: #fee2e2;
 }
 
+.logs-page {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.logs-page > .vstack {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.logs-card {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.logs-card-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+
+.log-viewer {
+    flex: 1 1 auto;
+    min-height: 18rem;
+    overflow: auto;
+}
+
 @media (max-width: 991.98px) {
     .settings-page {
         flex-direction: column;
@@ -585,4 +616,79 @@ body {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
+}
+
+.log-entry {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    transition: background-color 0.18s ease;
+}
+
+.log-entry:hover {
+    background: rgba(148, 163, 184, 0.08);
+}
+
+.log-entry-empty {
+    padding: 1rem;
+    color: #64748b;
+}
+
+.log-entry-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.45rem;
+    font-size: 0.8125rem;
+}
+
+.log-entry-timestamp {
+    color: #64748b;
+}
+
+.log-entry-category {
+    color: #334155;
+}
+
+.log-entry-message {
+    color: #0f172a;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-entry-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.log-entry-info {
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.02) 100%);
+}
+
+.log-entry-warn {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.10) 0%, rgba(245, 158, 11, 0.03) 100%);
+}
+
+.log-entry-error {
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.10) 0%, rgba(239, 68, 68, 0.03) 100%);
+}
+
+.log-entry-badge-info {
+    color: #1d4ed8;
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.log-entry-badge-warn {
+    color: #b45309;
+    background: rgba(245, 158, 11, 0.16);
+}
+
+.log-entry-badge-error {
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.14);
 }

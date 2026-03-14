@@ -866,7 +866,14 @@
                     if (!response.ok)
                         throw new Error("插件列表获取失败: " + response.status);
 
-                    renderPlugins(await response.json());
+                    const payload = await response.json();
+                    const plugins = Array.isArray(payload) ? payload : (payload.plugins || []);
+                    const errors = Array.isArray(payload?.errors) ? payload.errors.filter(Boolean) : [];
+
+                    renderPlugins(plugins);
+
+                    if (errors.length)
+                        showError(errors.join("； "));
                 } catch (e) {
                     pluginHost.replaceChildren();
                     const error = document.createElement("div");

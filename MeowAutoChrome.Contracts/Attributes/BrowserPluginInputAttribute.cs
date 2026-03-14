@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MeowAutoChrome.Contracts;
+namespace MeowAutoChrome.Contracts.Attributes;
 
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Parameter, AllowMultiple = true, Inherited = false)]
 public sealed class BrowserPluginInputAttribute : Attribute

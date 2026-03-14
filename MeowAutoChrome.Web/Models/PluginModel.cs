@@ -34,3 +34,5 @@ public sealed record BrowserPluginFunctionExecutionRequest(string PluginId, stri
 
 public sealed record BrowserPluginExecutionResponse(string PluginId, string TargetId, string? Message, string State, IReadOnlyDictionary<string, string?> Data);
 
+public sealed record BrowserPluginCatalogResponse(IReadOnlyList<BrowserPluginDescriptor> Plugins, IReadOnlyList<string> Errors);
+

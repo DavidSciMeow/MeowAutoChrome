@@ -13,7 +13,7 @@ namespace MeowAutoChrome.Web.Controllers
 
         [HttpGet]
         public IActionResult Plugins()
-            => Ok(pluginHost.GetPlugins());
+            => Ok(pluginHost.GetPluginCatalog());
 
         [HttpPost]
         public async Task<IActionResult> ControlPlugin([FromBody] BrowserPluginControlRequest request, CancellationToken cancellationToken)

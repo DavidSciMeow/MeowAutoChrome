@@ -1,20 +1,27 @@
 ﻿using MeowAutoChrome.Contracts;
+using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Warpper;
+using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Runtime.Loader;
 
 namespace MeowAutoChrome.Web.Services;
 
-public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnvironment environment)
+public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnvironment environment, ILogger<BrowserPluginHost> logger)
 {
+    private static readonly string BrowserPluginAttributeFullName = typeof(BrowserPluginAttribute).FullName ?? nameof(BrowserPluginAttribute);
     private readonly string _pluginRootPath = Path.Combine(AppContext.BaseDirectory, "Plugins");
     private readonly Lock _syncRoot = new();
     private readonly Dictionary<string, RuntimeBrowserPluginInstance> _instances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Assembly> _pluginAssemblies = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PluginLoadContext> _pluginLoadContexts = new(StringComparer.OrdinalIgnoreCase);
     private static readonly NullabilityInfoContext NullabilityContext = new();
 
     public string PluginRootPath => _pluginRootPath;
@@ -22,57 +29,20 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
     public void EnsurePluginDirectoryExists()
         => Directory.CreateDirectory(_pluginRootPath);
 
-    public IReadOnlyList<BrowserPluginDescriptor> GetPlugins()
-        => DiscoverPlugins()
-            .Select(plugin =>
-            {
-                var instance = GetOrCreatePluginInstance(plugin);
+    public BrowserPluginCatalogResponse GetPluginCatalog()
+    {
+        var discovery = DiscoverPluginsCore();
+        var errors = new List<string>(discovery.Errors);
+        var plugins = discovery.Plugins
+            .Select(plugin => CreatePluginDescriptor(plugin, errors))
+            .Where(plugin => plugin is not null)
+            .ToArray()!;
 
-                return new BrowserPluginDescriptor(
-                    plugin.Id,
-                    plugin.Name,
-                    plugin.Description,
-                    instance.Instance.State.ToString(),
-                    instance.Instance.SupportsPause,
-                    plugin.Controls
-                        .Where(control => instance.Instance.SupportsPause || (control.Command != "pause" && control.Command != "resume"))
-                        .Select(control => new BrowserPluginControlDescriptor(
-                            control.Command,
-                            control.Name,
-                            control.Description,
-                            control.Parameters
-                                .Select(parameter => new BrowserPluginActionParameterDescriptor(
-                                    parameter.Name,
-                                    parameter.Label,
-                                    parameter.Description,
-                                    parameter.DefaultValue,
-                                    parameter.Required,
-                                    parameter.InputType,
-                                    parameter.Options
-                                        .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
-                                        .ToArray()))
-                                .ToArray()))
-                        .ToArray(),
-                    plugin.Actions
-                        .Select(action => new BrowserPluginFunctionDescriptor(
-                            action.Id,
-                            action.Name,
-                            action.Description,
-                            action.Parameters
-                                .Select(parameter => new BrowserPluginActionParameterDescriptor(
-                                    parameter.Name,
-                                    parameter.Label,
-                                    parameter.Description,
-                                    parameter.DefaultValue,
-                                    parameter.Required,
-                                    parameter.InputType,
-                                    parameter.Options
-                                        .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
-                                        .ToArray()))
-                                .ToArray()))
-                        .ToArray());
-            })
-            .ToArray();
+        return new BrowserPluginCatalogResponse(plugins, errors);
+    }
+
+    public IReadOnlyList<BrowserPluginDescriptor> GetPlugins()
+        => GetPluginCatalog().Plugins;
 
     public async Task<BrowserPluginExecutionResponse?> ControlAsync(string pluginId, string command, IReadOnlyDictionary<string, string?>? arguments, CancellationToken cancellationToken = default)
     {
@@ -91,10 +61,10 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             hostContext,
             pluginInstance => command.ToLowerInvariant() switch
             {
-                "start" => pluginInstance.StartAsync(normalizedArguments, hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
-                "stop" => pluginInstance.StopAsync(hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
-                "pause" => pluginInstance.PauseAsync(hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
-                "resume" => pluginInstance.ResumeAsync(hostContext.BrowserContext, hostContext.ActivePage, cancellationToken),
+                "start" => pluginInstance.StartAsync(),
+                "stop" => pluginInstance.StopAsync(),
+                "pause" => pluginInstance.PauseAsync(),
+                "resume" => pluginInstance.ResumeAsync(),
                 _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
             },
             cancellationToken);
@@ -135,17 +105,89 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
     }
 
     private IReadOnlyList<RuntimeBrowserPlugin> DiscoverPlugins()
+        => DiscoverPluginsCore().Plugins;
+
+    private PluginDiscoverySnapshot DiscoverPluginsCore()
     {
         EnsurePluginDirectoryExists();
 
-        return Directory
-            .EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories)
-            .Select(TryLoadPluginAssembly)
-            .Where(assembly => assembly is not null)
-            .SelectMany(assembly => DiscoverPlugins(assembly!))
+        var plugins = new List<RuntimeBrowserPlugin>();
+        var errors = new List<string>();
+
+        foreach (var pluginPath in Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories))
+        {
+            var assembly = TryLoadPluginAssembly(pluginPath, errors);
+            if (assembly is null)
+                continue;
+
+            plugins.AddRange(DiscoverPlugins(assembly, pluginPath, errors));
+        }
+
+        return new PluginDiscoverySnapshot(
+            plugins
             .Where(plugin => plugin.Actions.Count > 0 || plugin.Controls.Count > 0)
             .OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+            .ToArray(),
+            errors.ToArray());
+    }
+
+    private BrowserPluginDescriptor? CreatePluginDescriptor(RuntimeBrowserPlugin plugin, ICollection<string> errors)
+    {
+        try
+        {
+            var instance = GetOrCreatePluginInstance(plugin);
+
+            return new BrowserPluginDescriptor(
+                plugin.Id,
+                plugin.Name,
+                plugin.Description,
+                instance.Instance.State.ToString(),
+                instance.Instance.SupportsPause,
+                plugin.Controls
+                    .Where(control => instance.Instance.SupportsPause || (control.Command != "pause" && control.Command != "resume"))
+                    .Select(control => new BrowserPluginControlDescriptor(
+                        control.Command,
+                        control.Name,
+                        control.Description,
+                        control.Parameters
+                            .Select(parameter => new BrowserPluginActionParameterDescriptor(
+                                parameter.Name,
+                                parameter.Label,
+                                parameter.Description,
+                                parameter.DefaultValue,
+                                parameter.Required,
+                                parameter.InputType,
+                                parameter.Options
+                                    .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
+                                    .ToArray()))
+                            .ToArray()))
+                    .ToArray(),
+                plugin.Actions
+                    .Select(action => new BrowserPluginFunctionDescriptor(
+                        action.Id,
+                        action.Name,
+                        action.Description,
+                        action.Parameters
+                            .Select(parameter => new BrowserPluginActionParameterDescriptor(
+                                parameter.Name,
+                                parameter.Label,
+                                parameter.Description,
+                                parameter.DefaultValue,
+                                parameter.Required,
+                                parameter.InputType,
+                                parameter.Options
+                                    .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
+                                    .ToArray()))
+                            .ToArray()))
+                    .ToArray());
+        }
+        catch (Exception ex)
+        {
+            var message = $"插件 {plugin.Type.FullName} 初始化失败：{ex.Message}";
+            logger.LogError(ex, "插件 {PluginType} 初始化失败。", plugin.Type.FullName);
+            errors.Add(message);
+            return null;
+        }
     }
 
     private RuntimeBrowserPluginInstance GetOrCreatePluginInstance(RuntimeBrowserPlugin plugin)
@@ -171,8 +213,7 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         try
         {
-            if (instance.Instance is IHostContextAware aware)
-                aware.HostContext = hostContext;
+            instance.Instance.HostContext = hostContext;
 
             try
             {
@@ -180,8 +221,7 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
             }
             finally
             {
-                if (instance.Instance is IHostContextAware resettable)
-                    resettable.HostContext = null;
+                instance.Instance.HostContext = null;
             }
         }
         finally
@@ -190,29 +230,126 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         }
     }
 
-    private static IEnumerable<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly)
-        => assembly
-            .GetTypes()
-            .Where(type => type is { IsAbstract: false, IsInterface: false }
-                && typeof(IBrowserPlugin).IsAssignableFrom(type)
-                && type.GetCustomAttribute<BrowserPluginAttribute>() is not null)
-            .Select(type =>
-            {
-                var pluginAttribute = type.GetCustomAttribute<BrowserPluginAttribute>()!;
-                var controls = DiscoverControls(type);
-                var actions = DiscoverActions(type);
+    private IEnumerable<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, ICollection<string> errors)
+    {
+        IReadOnlyList<string> candidateTypeNames;
 
-                return new RuntimeBrowserPlugin(pluginAttribute.Id, pluginAttribute.Name, pluginAttribute.Description, type, controls, actions);
-            });
+        try
+        {
+            candidateTypeNames = DiscoverPluginTypeNames(pluginPath);
+        }
+        catch (Exception ex)
+        {
+            var detail = DescribeException(ex);
+            var message = $"插件程序集 {Path.GetFileName(pluginPath)} 元数据扫描失败：{detail}";
+            logger.LogError(ex, "插件程序集 {PluginAssembly} 元数据扫描失败。", pluginPath);
+            errors.Add(message);
+            return [];
+        }
+
+        var plugins = new List<RuntimeBrowserPlugin>();
+
+        foreach (var candidateTypeName in candidateTypeNames)
+        {
+            try
+            {
+                var type = assembly.GetType(candidateTypeName, throwOnError: false, ignoreCase: false);
+                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(IBrowserPlugin).IsAssignableFrom(type))
+                    continue;
+
+                var pluginAttribute = type.GetCustomAttribute<BrowserPluginAttribute>();
+                if (pluginAttribute is null)
+                    continue;
+
+                plugins.Add(new RuntimeBrowserPlugin(
+                    pluginAttribute.Id,
+                    pluginAttribute.Name,
+                    pluginAttribute.Description,
+                    type,
+                    DiscoverControls(type),
+                    DiscoverActions(type)));
+            }
+            catch (Exception ex)
+            {
+                var detail = DescribeException(ex);
+                var message = $"插件类型 {candidateTypeName} 发现失败：{detail}";
+                logger.LogError(ex, "插件类型 {PluginType} 发现失败。插件程序集：{PluginAssembly}", candidateTypeName, pluginPath);
+                errors.Add(message);
+            }
+        }
+
+        return plugins;
+    }
+
+    private static IReadOnlyList<string> DiscoverPluginTypeNames(string pluginPath)
+    {
+        using var stream = new FileStream(pluginPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var peReader = new PEReader(stream);
+
+        if (!peReader.HasMetadata)
+            return [];
+
+        var metadataReader = peReader.GetMetadataReader();
+        var typeNames = new List<string>();
+
+        foreach (var typeHandle in metadataReader.TypeDefinitions)
+        {
+            var typeDefinition = metadataReader.GetTypeDefinition(typeHandle);
+            var typeName = GetTypeFullName(metadataReader, typeDefinition);
+            if (string.IsNullOrWhiteSpace(typeName) || string.Equals(typeName, "<Module>", StringComparison.Ordinal))
+                continue;
+
+            if (!HasCustomAttribute(metadataReader, typeDefinition.GetCustomAttributes(), BrowserPluginAttributeFullName))
+                continue;
+
+            typeNames.Add(typeName);
+        }
+
+        return typeNames
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static bool HasCustomAttribute(MetadataReader metadataReader, CustomAttributeHandleCollection attributes, string attributeFullName)
+        => attributes.Any(attributeHandle => string.Equals(GetAttributeTypeFullName(metadataReader, attributeHandle), attributeFullName, StringComparison.Ordinal));
+
+    private static string? GetAttributeTypeFullName(MetadataReader metadataReader, CustomAttributeHandle attributeHandle)
+    {
+        var attribute = metadataReader.GetCustomAttribute(attributeHandle);
+        if (attribute.Constructor.Kind != HandleKind.MemberReference)
+            return null;
+
+        var constructor = metadataReader.GetMemberReference((MemberReferenceHandle)attribute.Constructor);
+        return constructor.Parent.Kind switch
+        {
+            HandleKind.TypeReference => GetTypeFullName(metadataReader, metadataReader.GetTypeReference((TypeReferenceHandle)constructor.Parent)),
+            HandleKind.TypeDefinition => GetTypeFullName(metadataReader, metadataReader.GetTypeDefinition((TypeDefinitionHandle)constructor.Parent)),
+            _ => null
+        };
+    }
+
+    private static string GetTypeFullName(MetadataReader metadataReader, TypeDefinition typeDefinition)
+    {
+        var typeName = metadataReader.GetString(typeDefinition.Name);
+        var typeNamespace = metadataReader.GetString(typeDefinition.Namespace);
+        return string.IsNullOrWhiteSpace(typeNamespace) ? typeName : $"{typeNamespace}.{typeName}";
+    }
+
+    private static string GetTypeFullName(MetadataReader metadataReader, TypeReference typeReference)
+    {
+        var typeName = metadataReader.GetString(typeReference.Name);
+        var typeNamespace = metadataReader.GetString(typeReference.Namespace);
+        return string.IsNullOrWhiteSpace(typeNamespace) ? typeName : $"{typeNamespace}.{typeName}";
+    }
 
     private static IReadOnlyList<RuntimeBrowserPluginControl> DiscoverControls(Type type)
     {
         var controls = new List<RuntimeBrowserPluginControl>();
 
-        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(IBrowserPlugin.StartAsync), typeof(IReadOnlyDictionary<string, string?>), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
-        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(IBrowserPlugin.StopAsync), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
-        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(IBrowserPlugin.PauseAsync), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
-        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(IBrowserPlugin.ResumeAsync), typeof(IBrowserContext), typeof(IPage), typeof(CancellationToken));
+        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(IBrowserPlugin.StartAsync));
+        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(IBrowserPlugin.StopAsync));
+        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(IBrowserPlugin.PauseAsync));
+        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(IBrowserPlugin.ResumeAsync));
 
         return controls;
     }
@@ -258,21 +395,113 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         return actions;
     }
 
-    private static Assembly? TryLoadPluginAssembly(string pluginPath)
+    private Assembly? TryLoadPluginAssembly(string pluginPath, ICollection<string> errors)
     {
         try
         {
             var fullPath = Path.GetFullPath(pluginPath);
-            var loaded = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(assembly =>
-                !string.IsNullOrWhiteSpace(assembly.Location)
-                && string.Equals(Path.GetFullPath(assembly.Location), fullPath, StringComparison.OrdinalIgnoreCase));
 
-            return loaded ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
+            lock (_syncRoot)
+            {
+                if (_pluginAssemblies.TryGetValue(fullPath, out var loaded))
+                    return loaded;
+            }
+
+            var loadContext = new PluginLoadContext(fullPath);
+            var assembly = loadContext.LoadFromAssemblyPath(fullPath);
+
+            lock (_syncRoot)
+            {
+                if (_pluginAssemblies.TryGetValue(fullPath, out var loaded))
+                    return loaded;
+
+                _pluginLoadContexts[fullPath] = loadContext;
+                _pluginAssemblies[fullPath] = assembly;
+                return assembly;
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            var detail = DescribeException(ex);
+            var message = $"插件程序集 {Path.GetFileName(pluginPath)} 加载失败：{detail}";
+            logger.LogError(ex, "插件程序集 {PluginAssembly} 加载失败：{LoaderExceptionDetails}", pluginPath, detail);
+            errors.Add(message);
             return null;
         }
+    }
+
+    private static string SummarizeLoaderExceptions(ReflectionTypeLoadException exception)
+    {
+        var messages = GetLoaderExceptionDescriptions(exception)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (messages is not { Length: > 0 })
+            return exception.Message;
+
+        return string.Join("； ", messages.Take(3));
+    }
+
+    private static IEnumerable<string> GetLoaderExceptionDescriptions(ReflectionTypeLoadException exception)
+        => exception.LoaderExceptions
+            ?.Where(loaderException => loaderException is not null)
+            .Select(loaderException => DescribeException(loaderException!))
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+        ?? [];
+
+    private static string DescribeException(Exception exception)
+        => exception switch
+        {
+            FileNotFoundException fileNotFoundException => DescribeFileNotFoundException(fileNotFoundException),
+            FileLoadException fileLoadException => DescribeFileLoadException(fileLoadException),
+            BadImageFormatException badImageFormatException => DescribeBadImageFormatException(badImageFormatException),
+            TypeLoadException typeLoadException => DescribeTypeLoadException(typeLoadException),
+            _ => exception.Message.Trim()
+        };
+
+    private static string DescribeFileNotFoundException(FileNotFoundException exception)
+    {
+        var assemblyName = GetAssemblyDisplayName(exception.FileName);
+        return string.IsNullOrWhiteSpace(assemblyName)
+            ? $"缺少依赖 DLL：{exception.Message.Trim()}"
+            : $"缺少依赖 DLL：{assemblyName}";
+    }
+
+    private static string DescribeFileLoadException(FileLoadException exception)
+    {
+        var assemblyName = GetAssemblyDisplayName(exception.FileName);
+        return string.IsNullOrWhiteSpace(assemblyName)
+            ? $"程序集加载失败：{exception.Message.Trim()}"
+            : $"程序集加载失败：{assemblyName}（可能是版本不匹配或文件被占用）";
+    }
+
+    private static string DescribeBadImageFormatException(BadImageFormatException exception)
+    {
+        var assemblyName = GetAssemblyDisplayName(exception.FileName);
+        return string.IsNullOrWhiteSpace(assemblyName)
+            ? $"程序集格式无效：{exception.Message.Trim()}"
+            : $"程序集格式无效：{assemblyName}（可能是目标框架或位数不兼容）";
+    }
+
+    private static string DescribeTypeLoadException(TypeLoadException exception)
+        => string.IsNullOrWhiteSpace(exception.TypeName)
+            ? $"类型加载失败：{exception.Message.Trim()}"
+            : $"类型加载失败：{exception.TypeName}";
+
+    private static string? GetAssemblyDisplayName(string? assemblyNameOrPath)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyNameOrPath))
+            return null;
+
+        var candidate = assemblyNameOrPath.Trim();
+        if (candidate.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0)
+            candidate = Path.GetFileName(candidate);
+
+        if (candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return candidate;
+
+        var commaIndex = candidate.IndexOf(',');
+        return commaIndex > 0 ? candidate[..commaIndex].Trim() : candidate;
     }
 
     private static bool HasSupportedSignature(MethodInfo method)
@@ -306,6 +535,8 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         IReadOnlyList<RuntimeBrowserPluginControl> Controls,
         IReadOnlyList<RuntimeBrowserPluginAction> Actions);
 
+    private sealed record PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> Plugins, IReadOnlyList<string> Errors);
+
     private sealed record RuntimeBrowserPluginControl(
         string Command,
         string Name,
@@ -336,6 +567,85 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         public Type Type { get; } = type;
         public IBrowserPlugin Instance { get; } = instance;
         public SemaphoreSlim ExecutionLock { get; } = new(1, 1);
+    }
+
+    private sealed class PluginLoadContext : AssemblyLoadContext
+    {
+        private readonly AssemblyDependencyResolver _resolver;
+        private readonly string _pluginDirectoryPath;
+
+        public PluginLoadContext(string pluginAssemblyPath)
+            : base($"BrowserPlugin:{Path.GetFileNameWithoutExtension(pluginAssemblyPath)}", isCollectible: false)
+        {
+            _resolver = new AssemblyDependencyResolver(pluginAssemblyPath);
+            _pluginDirectoryPath = Path.GetDirectoryName(pluginAssemblyPath) ?? AppContext.BaseDirectory;
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            var sharedAssembly = Default.Assemblies.FirstOrDefault(current => AssemblyName.ReferenceMatchesDefinition(current.GetName(), assemblyName));
+            if (sharedAssembly is not null)
+                return sharedAssembly;
+
+            var resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                return LoadFromAssemblyPath(resolvedPath);
+
+            var directPath = Path.Combine(_pluginDirectoryPath, $"{assemblyName.Name}.dll");
+            return File.Exists(directPath)
+                ? LoadFromAssemblyPath(directPath)
+                : null;
+        }
+
+        protected override nint LoadUnmanagedDll(string unmanagedDllName)
+        {
+            var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                return LoadUnmanagedDllFromPath(resolvedPath);
+
+            foreach (var candidatePath in EnumerateNativeLibraryCandidates(unmanagedDllName))
+            {
+                if (File.Exists(candidatePath))
+                    return LoadUnmanagedDllFromPath(candidatePath);
+            }
+
+            return nint.Zero;
+        }
+
+        private IEnumerable<string> EnumerateNativeLibraryCandidates(string unmanagedDllName)
+        {
+            var libraryFileName = GetNativeLibraryFileName(unmanagedDllName);
+            yield return Path.Combine(_pluginDirectoryPath, libraryFileName);
+            yield return Path.Combine(_pluginDirectoryPath, unmanagedDllName);
+
+            var runtimesDirectoryPath = Path.Combine(_pluginDirectoryPath, "runtimes");
+            if (!Directory.Exists(runtimesDirectoryPath))
+                yield break;
+
+            foreach (var runtimeDirectoryPath in Directory.EnumerateDirectories(runtimesDirectoryPath))
+            {
+                var nativeDirectoryPath = Path.Combine(runtimeDirectoryPath, "native");
+                if (!Directory.Exists(nativeDirectoryPath))
+                    continue;
+
+                yield return Path.Combine(nativeDirectoryPath, libraryFileName);
+                yield return Path.Combine(nativeDirectoryPath, unmanagedDllName);
+            }
+        }
+
+        private static string GetNativeLibraryFileName(string unmanagedDllName)
+        {
+            if (Path.HasExtension(unmanagedDllName))
+                return unmanagedDllName;
+
+            if (OperatingSystem.IsWindows())
+                return $"{unmanagedDllName}.dll";
+
+            if (OperatingSystem.IsMacOS())
+                return $"lib{unmanagedDllName}.dylib";
+
+            return $"lib{unmanagedDllName}.so";
+        }
     }
 
     private static RuntimeBrowserPluginActionParameter CreateActionParameter(ParameterInfo parameter, BrowserPluginInputAttribute? parameterMetadata, BrowserPluginInputAttribute? legacyMetadata)
