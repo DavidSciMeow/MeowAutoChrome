@@ -1,4 +1,5 @@
 ﻿using MeowAutoChrome.Contracts;
+using MeowAutoChrome.Contracts.Attributes;
 
 namespace MeowAutoChrome.ExamplePlugin;
 

@@ -1,7 +1,6 @@
 ﻿using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Services;
 using MeowAutoChrome.Web.Warpper;
-using Microsoft.Extensions.Logging;
 
 var appLogService = new AppLogService();
 var originalConsoleOut = Console.Out;
@@ -28,6 +27,7 @@ builder.Services.AddSingleton<ScreencastService>();
 builder.Services.AddSingleton<BrowserPluginHost>();
 builder.Services.AddSingleton<ResourceMetricsService>();
 builder.Services.AddSingleton<ProgramSettingsService>();
+builder.Services.AddHostedService<ChromeShellService>(); //auto pull up chrome
 
 var app = builder.Build();
 
