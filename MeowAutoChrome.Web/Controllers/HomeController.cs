@@ -1,14 +1,30 @@
 ﻿using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace MeowAutoChrome.Web.Controllers
 {
-    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService) : Controller
+    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService, AppLogService appLogService) : Controller
     {
         private static int FpsToInterval(int fps)
             => Math.Max(16, (int)Math.Round(1000d / Math.Clamp(fps, 1, 60)));
+
+        private static LogEntryViewModel ToLogEntryViewModel(AppLogEntry entry)
+            => new()
+            {
+                TimestampText = entry.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                LevelText = entry.Level.ToString(),
+                FilterLevel = entry.Level switch
+                {
+                    LogLevel.Warning => "warn",
+                    LogLevel.Error or LogLevel.Critical => "error",
+                    _ => "info"
+                },
+                Category = entry.Category,
+                Message = entry.Message
+            };
 
         private void ValidateProgramSettings(ProgramSettingsViewModel model)
         {
@@ -60,6 +76,38 @@ namespace MeowAutoChrome.Web.Controllers
 
             TempData["StatusMessage"] = "设置已保存。";
             return RedirectToAction(nameof(Settings));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Logs()
+        {
+            return View(new LogPageViewModel
+            {
+                LogDisplayPath = appLogService.LogDisplayPath,
+                Entries = (await appLogService.ReadRecentEntriesAsync()).Select(ToLogEntryViewModel).ToArray(),
+                LastUpdatedUtc = appLogService.GetLastWriteTime()
+            });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> LogsContent()
+        {
+            var entries = (await appLogService.ReadRecentEntriesAsync()).Select(ToLogEntryViewModel).ToArray();
+
+            return Json(new
+            {
+                entries,
+                lastUpdatedLocal = appLogService.GetLastWriteTime()?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ClearLogs()
+        {
+            await appLogService.ClearAsync();
+            TempData["StatusMessage"] = "日志已清空。";
+            return RedirectToAction(nameof(Logs));
         }
 
         [HttpPost]

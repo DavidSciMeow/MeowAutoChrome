@@ -46,10 +46,6 @@
                     </div>
                 </div>
 
-                <div class="browser-toolbar-footer">
-                    <div class="browser-page-url" id="pageUrl">--</div>
-                </div>
-
                 <div id="browserError" class="alert alert-warning d-none mt-3 mb-0" role="alert"></div>
             </div>
         </div>
@@ -97,6 +93,20 @@
     </div>
 </div>
 
+<div class="modal fade" id="screenshotPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">截图预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center bg-dark-subtle">
+                <img id="screenshotPreviewImage" class="img-fluid rounded" alt="截图预览" />
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/lib/signalr/dist/browser/signalr.min.js"></script>
     <script>
@@ -111,7 +121,6 @@
             const cpuTxt = document.getElementById("cpuDisplay");
             const memoryTxt = document.getElementById("memoryDisplay");
             const fpsTxt = document.getElementById("fpsDisplay");
-            const pageUrl = document.getElementById("pageUrl");
             const browserError = document.getElementById("browserError");
             const urlInput = document.getElementById("urlInput");
             const tabsBar = document.getElementById("tabsBar");
@@ -122,11 +131,15 @@
             const pluginHost = document.getElementById("pluginHost");
             const pluginResult = document.getElementById("pluginResult");
             const pluginArgumentModalElement = document.getElementById("pluginArgumentModal");
+            const screenshotPreviewModalElement = document.getElementById("screenshotPreviewModal");
+            const screenshotPreviewImage = document.getElementById("screenshotPreviewImage");
             const pluginArgumentModalTitle = document.getElementById("pluginArgumentModalTitle");
             const pluginArgumentModalDescription = document.getElementById("pluginArgumentModalDescription");
             const pluginArgumentForm = document.getElementById("pluginArgumentForm");
             const pluginArgumentSubmitBtn = document.getElementById("pluginArgumentSubmitBtn");
+            const shotBtn = document.getElementById("shotBtn");
             const pluginArgumentModal = pluginArgumentModalElement ? new bootstrap.Modal(pluginArgumentModalElement) : null;
+            const screenshotPreviewModal = screenshotPreviewModalElement ? new bootstrap.Modal(screenshotPreviewModalElement) : null;
             let statusBusy = false;
             let isEditingUrl = false;
             let liveDisplayEnabled = true;
@@ -138,6 +151,7 @@
             let pluginPanelWidth = @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth;
             let pointerResizeActive = false;
             let pendingPluginInvocation = null;
+            let screenshotPreviewUrl = null;
 
             function clampPluginPanelWidth(width) {
                 const workspaceWidth = Math.max(0, browserWorkspace?.clientWidth || 0);
@@ -324,7 +338,6 @@
 
             function applyStatus(data) {
                 document.title = (data.title || "浏览器控制台") + " - MeowAutoChrome";
-                pageUrl.textContent = data.url || "(空地址)";
                 if (!isEditingUrl)
                     urlInput.value = data.url || "";
                 if (data.errorMessage)
@@ -357,13 +370,6 @@
                     summary.className = "fw-semibold mb-2";
                     summary.textContent = result.message;
                     pluginResult.appendChild(summary);
-                }
-
-                if (result.state) {
-                    const state = document.createElement("div");
-                    state.className = "mb-2";
-                    state.textContent = "state: " + result.state;
-                    pluginResult.appendChild(state);
                 }
 
                 for (const [key, value] of Object.entries(result.data || {})) {
@@ -571,6 +577,30 @@
                 pluginArgumentSubmitBtn.disabled = false;
             });
 
+            screenshotPreviewModalElement.addEventListener("hidden.bs.modal", () => {
+                screenshotPreviewImage.removeAttribute("src");
+                if (!screenshotPreviewUrl)
+                    return;
+
+                URL.revokeObjectURL(screenshotPreviewUrl);
+                screenshotPreviewUrl = null;
+            });
+
+            function getPluginStateDisplay(plugin) {
+                const hasControls = (plugin.controls || []).length > 0;
+                const state = hasControls ? (plugin.state || "Unknown") : "NoStartable";
+
+                return state === "Running"
+                    ? { text: state, className: "btn btn-sm btn-success" }
+                    : state === "Paused"
+                        ? { text: state, className: "btn btn-sm btn-warning" }
+                        : state === "Stopped"
+                            ? { text: state, className: "btn btn-sm btn-secondary" }
+                            : state === "NoStartable"
+                                ? { text: state, className: "btn btn-sm btn-info" }
+                                : { text: state, className: "btn btn-sm btn-outline-secondary" };
+            }
+
             function renderPlugins(plugins) {
                 pluginHost.replaceChildren();
 
@@ -585,10 +615,23 @@
                     const card = document.createElement("div");
                     card.className = "border rounded p-2";
 
+                    const header = document.createElement("div");
+                    header.className = "d-flex justify-content-between align-items-start gap-2 mb-2";
+
                     const title = document.createElement("div");
                     title.className = "fw-semibold";
                     title.textContent = plugin.name;
-                    card.appendChild(title);
+                    header.appendChild(title);
+
+                    const stateDisplay = getPluginStateDisplay(plugin);
+                    const state = document.createElement("button");
+                    state.type = "button";
+                    state.className = stateDisplay.className;
+                    state.textContent = stateDisplay.text;
+                    state.disabled = true;
+                    header.appendChild(state);
+
+                    card.appendChild(header);
 
                     if (plugin.description) {
                         const desc = document.createElement("div");
@@ -596,11 +639,6 @@
                         desc.textContent = plugin.description;
                         card.appendChild(desc);
                     }
-
-                    const state = document.createElement("div");
-                    state.className = "mb-2 small";
-                    state.textContent = "状态: " + (plugin.state || "Unknown");
-                    card.appendChild(state);
 
                     function createCommandButton(text, style, disabled, onClick) {
                         const button = document.createElement("button");
@@ -679,6 +717,10 @@
                 }
             }
 
+            async function selectTab(tabId) {
+                applyStatus(await postJson("/Browser/SelectTab", { tabId }));
+            }
+
             function renderTabs(tabs) {
                 tabsBar.innerHTML = "";
 
@@ -702,7 +744,7 @@
                     btn.textContent = tab.title || tab.url || "about:blank";
                     btn.addEventListener("click", async () => {
                         try {
-                            applyStatus(await postJson("/Browser/SelectTab", { tabId: tab.id }));
+                            await selectTab(tab.id);
                         } catch (e) {
                             showError(e.message || "切换标签页失败。");
                         }
@@ -750,6 +792,27 @@
                 for (const tab of tabs) {
                     const card = document.createElement("div");
                     card.className = "tabs-status-card" + (tab.isSelected ? " tabs-status-card-active" : "");
+                    card.tabIndex = 0;
+                    card.setAttribute("role", "button");
+                    card.setAttribute("aria-label", "切换到 TAB: " + (tab.title || tab.url || "about:blank"));
+                    card.addEventListener("click", async () => {
+                        try {
+                            await selectTab(tab.id);
+                        } catch (e) {
+                            showError(e.message || "切换标签页失败。");
+                        }
+                    });
+                    card.addEventListener("keydown", async e => {
+                        if (e.key !== "Enter" && e.key !== " ")
+                            return;
+
+                        e.preventDefault();
+                        try {
+                            await selectTab(tab.id);
+                        } catch (e) {
+                            showError(e.message || "切换标签页失败。");
+                        }
+                    });
 
                     const row = document.createElement("div");
                     row.className = "tabs-status-row";
@@ -803,7 +866,14 @@
                     if (!response.ok)
                         throw new Error("插件列表获取失败: " + response.status);
 
-                    renderPlugins(await response.json());
+                    const payload = await response.json();
+                    const plugins = Array.isArray(payload) ? payload : (payload.plugins || []);
+                    const errors = Array.isArray(payload?.errors) ? payload.errors.filter(Boolean) : [];
+
+                    renderPlugins(plugins);
+
+                    if (errors.length)
+                        showError(errors.join("； "));
                 } catch (e) {
                     pluginHost.replaceChildren();
                     const error = document.createElement("div");
@@ -825,6 +895,29 @@
                 await runAction(() => postJson("/Browser/Navigate", { url: urlInput.value.trim() }), "导航失败。");
                 isEditingUrl = false;
                 urlInput.blur();
+            }
+
+            async function previewScreenshot() {
+                shotBtn.disabled = true;
+                clearError();
+
+                try {
+                    const response = await fetch("/Browser/Screenshot?ts=" + Date.now(), { cache: "no-store" });
+                    if (!response.ok)
+                        throw new Error("截图失败: " + response.status);
+
+                    const blob = await response.blob();
+                    if (screenshotPreviewUrl)
+                        URL.revokeObjectURL(screenshotPreviewUrl);
+
+                    screenshotPreviewUrl = URL.createObjectURL(blob);
+                    screenshotPreviewImage.src = screenshotPreviewUrl;
+                    screenshotPreviewModal.show();
+                } catch (e) {
+                    showError(e.message || "截图失败。");
+                } finally {
+                    shotBtn.disabled = false;
+                }
             }
 
             function intervalToFps(intervalMs) {
@@ -953,9 +1046,7 @@
                 await navigate();
             });
 
-            document.getElementById("shotBtn").addEventListener("click", () => {
-                window.open("/Browser/Screenshot?ts=" + Date.now(), "_blank");
-            });
+            shotBtn.addEventListener("click", previewScreenshot);
 
             setInterval(() => {
                 refreshStatus().catch(() => {});

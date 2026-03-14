@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MeowAutoChrome.Contracts;
+namespace MeowAutoChrome.Contracts.Attributes;
 
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class BrowserPluginAttribute(string id, string name) : Attribute

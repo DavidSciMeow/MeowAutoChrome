@@ -6,7 +6,7 @@ using Microsoft.Playwright;
 
 namespace MeowAutoChrome.Contracts;
 
-public abstract class BrowserPluginBase : IBrowserPlugin, IHostContextAware
+public abstract class BrowserPluginBase : IBrowserPlugin
 {
     public BrowserPluginState State { get; protected set; } = BrowserPluginState.Stopped;
     public IHostContext? HostContext { get; set; }
@@ -30,12 +30,11 @@ public abstract class BrowserPluginBase : IBrowserPlugin, IHostContextAware
 
     private static readonly IReadOnlyDictionary<string, string?> EmptyArguments = new Dictionary<string, string?>();
 
-    protected IPage RequireActivePage()
-        => CurrentActivePage ?? throw new InvalidOperationException("宿主尚未提供活动页面。");
+    protected IPage RequireActivePage() => CurrentActivePage ?? throw new InvalidOperationException("宿主尚未提供活动页面。");
 
-    public virtual Task<BrowserPluginActionResult> StartAsync(IReadOnlyDictionary<string, string?> arguments, IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
+    public virtual Task<BrowserPluginActionResult> StartAsync()
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        CurrentCancellationToken.ThrowIfCancellationRequested();
 
         if (State == BrowserPluginState.Running)
             return this.Ok(AlreadyRunningMessage);
@@ -44,16 +43,16 @@ public abstract class BrowserPluginBase : IBrowserPlugin, IHostContextAware
         return this.Ok(StartedMessage);
     }
 
-    public virtual Task<BrowserPluginActionResult> StopAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
+    public virtual Task<BrowserPluginActionResult> StopAsync()
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        CurrentCancellationToken.ThrowIfCancellationRequested();
         State = BrowserPluginState.Stopped;
         return this.Ok(StoppedMessage);
     }
 
-    public virtual Task<BrowserPluginActionResult> PauseAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
+    public virtual Task<BrowserPluginActionResult> PauseAsync()
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        CurrentCancellationToken.ThrowIfCancellationRequested();
 
         if (!SupportsPause)
             return this.Ok(PauseNotSupportedMessage);
@@ -65,9 +64,9 @@ public abstract class BrowserPluginBase : IBrowserPlugin, IHostContextAware
         return this.Ok(PausedMessage);
     }
 
-    public virtual Task<BrowserPluginActionResult> ResumeAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default)
+    public virtual Task<BrowserPluginActionResult> ResumeAsync()
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        CurrentCancellationToken.ThrowIfCancellationRequested();
 
         if (!SupportsPause)
             return this.Ok(PauseNotSupportedMessage);

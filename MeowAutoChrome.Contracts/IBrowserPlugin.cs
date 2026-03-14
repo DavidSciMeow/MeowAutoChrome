@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Playwright;
+﻿using System.Threading.Tasks;
 
 namespace MeowAutoChrome.Contracts;
 
@@ -9,10 +6,11 @@ public interface IBrowserPlugin
 {
     BrowserPluginState State { get; }
     bool SupportsPause { get; }
-    Task<BrowserPluginActionResult> StartAsync(IReadOnlyDictionary<string, string?> arguments, IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default);
-    Task<BrowserPluginActionResult> StopAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default);
-    Task<BrowserPluginActionResult> PauseAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default);
-    Task<BrowserPluginActionResult> ResumeAsync(IBrowserContext browserContext, IPage? activePage, CancellationToken cancellationToken = default);
+    IHostContext? HostContext { get; set; }
+    Task<BrowserPluginActionResult> StartAsync();
+    Task<BrowserPluginActionResult> StopAsync();
+    Task<BrowserPluginActionResult> PauseAsync();
+    Task<BrowserPluginActionResult> ResumeAsync();
 }
 
 
