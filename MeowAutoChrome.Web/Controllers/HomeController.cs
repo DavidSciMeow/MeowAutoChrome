@@ -1,12 +1,13 @@
 ﻿using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
+using MeowAutoChrome.Web.Warpper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace MeowAutoChrome.Web.Controllers
 {
-    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService, AppLogService appLogService) : Controller
+    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService, AppLogService appLogService, PlayWrightWarpper browser) : Controller
     {
         private static int FpsToInterval(int fps)
             => Math.Max(16, (int)Math.Round(1000d / Math.Clamp(fps, 1, 60)));
@@ -30,22 +31,66 @@ namespace MeowAutoChrome.Web.Controllers
         {
             if (!model.SearchUrlTemplate.Contains("{query}", StringComparison.OrdinalIgnoreCase))
                 ModelState.AddModelError(nameof(model.SearchUrlTemplate), "搜索地址模板必须包含 {query} 占位符。");
+
+            try
+            {
+                var currentUserDataDirectory = Path.GetFullPath(browser.UserDataDirectoryPath);
+                var targetUserDataDirectory = Path.GetFullPath(model.UserDataDirectory);
+
+                if (IsNestedDirectory(currentUserDataDirectory, targetUserDataDirectory) || IsNestedDirectory(targetUserDataDirectory, currentUserDataDirectory))
+                    ModelState.AddModelError(nameof(model.UserDataDirectory), "浏览器用户数据目录不能设置为当前目录的子目录或父目录。");
+            }
+            catch (Exception)
+            {
+                ModelState.AddModelError(nameof(model.UserDataDirectory), "浏览器用户数据目录无效。");
+            }
         }
 
-        private async Task SaveProgramSettingsAsync(ProgramSettingsViewModel model)
+        private static bool IsNestedDirectory(string parentPath, string childPath)
         {
-            await programSettingsService.SaveAsync(new ProgramSettings
+            var normalizedParentPath = Path.TrimEndingDirectorySeparator(parentPath);
+            var normalizedChildPath = Path.TrimEndingDirectorySeparator(childPath);
+            return normalizedChildPath.StartsWith(normalizedParentPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || normalizedChildPath.StartsWith(normalizedParentPath + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<string> SaveProgramSettingsAsync(ProgramSettingsViewModel model)
+        {
+            var settings = new ProgramSettings
             {
                 SearchUrlTemplate = model.SearchUrlTemplate,
                 ScreencastFps = model.ScreencastFps,
-                PluginPanelWidth = model.PluginPanelWidth
-            });
+                PluginPanelWidth = model.PluginPanelWidth,
+                UserDataDirectory = model.UserDataDirectory,
+                Headless = model.Headless
+            };
+
+            await programSettingsService.SaveAsync(settings);
+
+            var userDataDirectoryChanged = !string.Equals(browser.UserDataDirectoryPath, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
+            var headlessChanged = browser.IsHeadless != settings.Headless;
+            if (userDataDirectoryChanged || headlessChanged)
+                await browser.UpdateLaunchSettingsAsync(settings.UserDataDirectory, settings.Headless);
 
             await screencastService.UpdateSettingsAsync(
-                screencastService.Enabled,
+                screencastService.RequestedEnabled,
                 screencastService.MaxWidth,
                 screencastService.MaxHeight,
                 FpsToInterval(model.ScreencastFps));
+
+            if (userDataDirectoryChanged || headlessChanged)
+                await screencastService.OnBrowserModeChangedAsync();
+
+            if (userDataDirectoryChanged && headlessChanged)
+                return "设置已自动保存，浏览器用户数据目录和 Headless 模式已切换。";
+
+            if (userDataDirectoryChanged)
+                return "设置已自动保存，浏览器用户数据目录已切换。";
+
+            if (headlessChanged)
+                return "设置已自动保存，Headless 模式已切换。";
+
+            return "设置已自动保存。";
         }
 
         public IActionResult Index()
@@ -59,7 +104,9 @@ namespace MeowAutoChrome.Web.Controllers
             {
                 SearchUrlTemplate = settings.SearchUrlTemplate,
                 ScreencastFps = settings.ScreencastFps,
-                PluginPanelWidth = settings.PluginPanelWidth
+                PluginPanelWidth = settings.PluginPanelWidth,
+                UserDataDirectory = settings.UserDataDirectory,
+                Headless = settings.Headless
             });
         }
 
@@ -72,9 +119,18 @@ namespace MeowAutoChrome.Web.Controllers
             if (!ModelState.IsValid)
                 return View(model);
 
-            await SaveProgramSettingsAsync(model);
+            string message;
+            try
+            {
+                message = await SaveProgramSettingsAsync(model);
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError(string.Empty, ex.Message);
+                return View(model);
+            }
 
-            TempData["StatusMessage"] = "设置已保存。";
+            TempData["StatusMessage"] = message;
             return RedirectToAction(nameof(Settings));
         }
 
@@ -126,8 +182,15 @@ namespace MeowAutoChrome.Web.Controllers
                 return BadRequest(new { message = errorMessage });
             }
 
-            await SaveProgramSettingsAsync(model);
-            return Ok(new { message = "设置已自动保存。" });
+            try
+            {
+                var message = await SaveProgramSettingsAsync(model);
+                return Ok(new { message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         public IActionResult Privacy()

@@ -9,7 +9,7 @@
         <div class="browser-control-panel mb-3">
             <div class="browser-chrome">
                 <div class="browser-tabstrip-meta">
-                    <div class="browser-tabs-shell">
+                    <div class="browser-tabs-shell" id="tabsShell">
                         <button type="button" class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn" id="tabsScrollLeftBtn" title="向左滚动" aria-label="向左滚动">
                             <i class="fa-solid fa-chevron-left"></i>
                         </button>
@@ -124,6 +124,7 @@
             const browserError = document.getElementById("browserError");
             const urlInput = document.getElementById("urlInput");
             const tabsBar = document.getElementById("tabsBar");
+            const tabsShell = document.getElementById("tabsShell");
             const tabsScrollLeftBtn = document.getElementById("tabsScrollLeftBtn");
             const tabsScrollRightBtn = document.getElementById("tabsScrollRightBtn");
             const liveToggleBtn = document.getElementById("liveToggleBtn");
@@ -148,6 +149,7 @@
             let resizeSyncTimer = null;
             let applyingScreencastSettings = false;
             let pendingScreencastSync = false;
+            let screencastAvailable = true;
             let pluginPanelWidth = @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth;
             let pointerResizeActive = false;
             let pendingPluginInvocation = null;
@@ -325,6 +327,10 @@
                     noSig.style.display = "none";
             }
 
+            function updateTabsShellVisibility() {
+                tabsShell?.classList.toggle("d-none", !liveDisplayEnabled);
+            }
+
             function setLiveDisplayEnabled(enabled) {
                 liveDisplayEnabled = enabled;
                 liveToggleBtn.textContent = enabled ? "实时画面" : "TAB 状态";
@@ -332,8 +338,26 @@
                 liveToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
                 canvas.classList.toggle("d-none", !enabled);
                 tabsStatusPanel.classList.toggle("d-none", enabled);
+                updateTabsShellVisibility();
                 if (!enabled)
                     noSig.style.display = "none";
+            }
+
+            function setScreencastAvailability(available) {
+                screencastAvailable = available;
+                liveToggleBtn.disabled = !available;
+
+                if (!available) {
+                    liveDisplayEnabled = false;
+                    liveToggleBtn.textContent = "已显示窗口";
+                    liveToggleBtn.className = "btn btn-sm browser-live-toggle btn-secondary";
+                    liveToggleBtn.setAttribute("aria-pressed", "false");
+                    canvas.classList.add("d-none");
+                    tabsStatusPanel.classList.remove("d-none");
+                    noSig.style.display = "none";
+                }
+
+                updateTabsShellVisibility();
             }
 
             function applyStatus(data) {
@@ -344,7 +368,9 @@
                     showError(data.errorMessage);
                 else
                     clearError();
-                setLiveDisplayEnabled(data.screencastEnabled);
+                setScreencastAvailability(data.supportsScreencast !== false);
+                if (screencastAvailable)
+                    setLiveDisplayEnabled(data.screencastEnabled);
                 targetFrameIntervalMs = data.screencastFrameIntervalMs;
                 resizeCanvasBuffer(data.screencastMaxWidth, data.screencastMaxHeight);
                 renderFpsDisplay();
@@ -776,10 +802,28 @@
             function renderTabsStatus(tabs) {
                 tabsStatusPanel.replaceChildren();
 
+                const header = document.createElement("div");
+                header.className = "tabs-status-header";
+
                 const title = document.createElement("div");
                 title.className = "tabs-status-title";
                 title.textContent = "TAB 状态";
-                tabsStatusPanel.appendChild(title);
+                header.appendChild(title);
+
+                const newTabButton = document.createElement("button");
+                newTabButton.type = "button";
+                newTabButton.className = "btn btn-sm btn-primary";
+                newTabButton.innerHTML = '<i class="fa-solid fa-plus me-1"></i>新建 TAB';
+                newTabButton.addEventListener("click", async () => {
+                    try {
+                        applyStatus(await postJson("/Browser/NewTab", {}));
+                    } catch (e) {
+                        showError(e.message || "新建标签页失败。");
+                    }
+                });
+                header.appendChild(newTabButton);
+
+                tabsStatusPanel.appendChild(header);
 
                 if (!tabs.length) {
                     const empty = document.createElement("div");
@@ -822,10 +866,31 @@
                     heading.textContent = tab.title || "(无标题)";
                     row.appendChild(heading);
 
+                    const actions = document.createElement("div");
+                    actions.className = "tabs-status-actions";
+
                     const badge = document.createElement("span");
                     badge.className = "badge rounded-pill " + (tab.isSelected ? "text-bg-primary" : "text-bg-secondary");
                     badge.textContent = tab.isSelected ? "当前" : "后台";
-                    row.appendChild(badge);
+                    actions.appendChild(badge);
+
+                    const closeBtn = document.createElement("button");
+                    closeBtn.type = "button";
+                    closeBtn.className = "btn btn-sm btn-outline-secondary tabs-status-close";
+                    closeBtn.title = "关闭 TAB";
+                    closeBtn.setAttribute("aria-label", "关闭 TAB");
+                    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    closeBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        try {
+                            applyStatus(await postJson("/Browser/CloseTab", { tabId: tab.id }));
+                        } catch (e) {
+                            showError(e.message || "关闭标签页失败。");
+                        }
+                    });
+                    actions.appendChild(closeBtn);
+
+                    row.appendChild(actions);
 
                     card.appendChild(row);
 
@@ -1005,6 +1070,9 @@
                 savePluginPanelWidth(pluginPanelWidth).catch(() => { });
             });
             liveToggleBtn.addEventListener("click", () => {
+                if (!screencastAvailable)
+                    return;
+
                 setLiveDisplayEnabled(!liveDisplayEnabled);
                 syncScreencastSettings(true).catch(() => { });
             });

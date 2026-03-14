@@ -136,6 +136,7 @@ namespace MeowAutoChrome.Web.Controllers
                 client.CurrentUrl,
                 await client.GetTitleAsync(),
                 client.LastErrorMessage,
+                client.IsHeadless,
                 screencastService.Enabled,
                 screencastService.MaxWidth,
                 screencastService.MaxHeight,

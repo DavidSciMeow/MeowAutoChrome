@@ -221,6 +221,13 @@ body {
     align-items: flex-start;
 }
 
+.settings-page-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 0.25rem;
+}
+
 .settings-sidebar {
     flex: 0 0 220px;
     max-width: 220px;
@@ -538,10 +545,18 @@ body {
     line-height: 1.4;
 }
 
+.tabs-status-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
 .tabs-status-title {
     font-size: 1rem;
     font-weight: 700;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0;
 }
 
 .tabs-status-empty {
@@ -583,6 +598,13 @@ body {
     margin-bottom: 0.4rem;
 }
 
+.tabs-status-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+}
+
 .tabs-status-name,
 .tabs-status-url {
     min-width: 0;
@@ -598,6 +620,10 @@ body {
 .tabs-status-url {
     color: #64748b;
     font-size: 0.9rem;
+}
+
+.tabs-status-close {
+    border-radius: 999px;
 }
 
 .plugin-panel,

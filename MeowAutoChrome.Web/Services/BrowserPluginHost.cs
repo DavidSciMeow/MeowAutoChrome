@@ -116,11 +116,29 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         foreach (var pluginPath in Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories))
         {
+            IReadOnlyList<string> candidateTypeNames;
+
+            try
+            {
+                candidateTypeNames = DiscoverPluginTypeNames(pluginPath);
+            }
+            catch (Exception ex)
+            {
+                var detail = DescribeException(ex);
+                var message = $"插件程序集 {Path.GetFileName(pluginPath)} 元数据扫描失败：{detail}";
+                logger.LogError(ex, "插件程序集 {PluginAssembly} 元数据扫描失败。", pluginPath);
+                errors.Add(message);
+                continue;
+            }
+
+            if (candidateTypeNames.Count == 0)
+                continue;
+
             var assembly = TryLoadPluginAssembly(pluginPath, errors);
             if (assembly is null)
                 continue;
 
-            plugins.AddRange(DiscoverPlugins(assembly, pluginPath, errors));
+            plugins.AddRange(DiscoverPlugins(assembly, pluginPath, candidateTypeNames, errors));
         }
 
         return new PluginDiscoverySnapshot(
@@ -230,23 +248,8 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
         }
     }
 
-    private IEnumerable<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, ICollection<string> errors)
+    private IEnumerable<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, ICollection<string> errors)
     {
-        IReadOnlyList<string> candidateTypeNames;
-
-        try
-        {
-            candidateTypeNames = DiscoverPluginTypeNames(pluginPath);
-        }
-        catch (Exception ex)
-        {
-            var detail = DescribeException(ex);
-            var message = $"插件程序集 {Path.GetFileName(pluginPath)} 元数据扫描失败：{detail}";
-            logger.LogError(ex, "插件程序集 {PluginAssembly} 元数据扫描失败。", pluginPath);
-            errors.Add(message);
-            return [];
-        }
-
         var plugins = new List<RuntimeBrowserPlugin>();
 
         foreach (var candidateTypeName in candidateTypeNames)

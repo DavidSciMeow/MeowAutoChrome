@@ -15,6 +15,7 @@ public record BrowserStatusResponse(
     string? Url,
     string? Title,
     string? ErrorMessage,
+    bool SupportsScreencast,
     bool ScreencastEnabled,
     int ScreencastMaxWidth,
     int ScreencastMaxHeight,

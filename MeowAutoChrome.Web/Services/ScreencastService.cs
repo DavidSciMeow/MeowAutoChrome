@@ -25,7 +25,8 @@ public class ScreencastService
     private long _lastFrameSentAtMs;
     private string? _targetPageId;
 
-    public bool Enabled => _enabled;
+    public bool RequestedEnabled => _enabled;
+    public bool Enabled => _enabled && client.IsHeadless;
     public int MaxWidth => _maxWidth;
     public int MaxHeight => _maxHeight;
     public int FrameIntervalMs => _frameIntervalMs;
@@ -68,7 +69,7 @@ public class ScreencastService
 
     private async Task StartAsync()
     {
-        if (!_enabled) return;
+        if (!Enabled) return;
 
         var page = client.ActivePage;
         if (page == null) return;
@@ -187,12 +188,16 @@ public class ScreencastService
             maxHeight = Math.Max(240, maxHeight);
             frameIntervalMs = Math.Clamp(frameIntervalMs, 16, 2000);
 
-            var restartNeeded = _enabled != enabled || _maxWidth != maxWidth || _maxHeight != maxHeight;
+            var wasEnabled = Enabled;
+            var widthChanged = _maxWidth != maxWidth;
+            var heightChanged = _maxHeight != maxHeight;
 
             _enabled = enabled;
             _maxWidth = maxWidth;
             _maxHeight = maxHeight;
             _frameIntervalMs = frameIntervalMs;
+
+            var restartNeeded = wasEnabled != Enabled || widthChanged || heightChanged;
 
             await client.SetViewportSizeAsync(_maxWidth, _maxHeight);
 
@@ -201,7 +206,7 @@ public class ScreencastService
 
             await StopAsync();
 
-            if (_enabled)
+            if (Enabled)
                 await StartAsync();
             else
                 await hub.Clients.All.SendAsync("ScreencastDisabled");
@@ -238,7 +243,7 @@ public class ScreencastService
 
             await StopAsync();
 
-            if (_enabled)
+            if (Enabled)
                 await StartAsync();
             else
                 await hub.Clients.All.SendAsync("ScreencastDisabled");
@@ -251,7 +256,7 @@ public class ScreencastService
         await _semaphore.WaitAsync();
         try
         {
-            if (_clientCount <= 0 || !_enabled)
+            if (_clientCount <= 0 || !Enabled)
                 return;
 
             _ = client.ActivePage;
@@ -268,6 +273,24 @@ public class ScreencastService
                 await StopAsync();
                 await StartAsync();
             }
+        }
+        finally { _semaphore.Release(); }
+    }
+
+    public async Task OnBrowserModeChangedAsync()
+    {
+        await _semaphore.WaitAsync();
+        try
+        {
+            await StopAsync();
+
+            if (_clientCount <= 0)
+                return;
+
+            if (Enabled)
+                await StartAsync();
+            else
+                await hub.Clients.All.SendAsync("ScreencastDisabled");
         }
         finally { _semaphore.Release(); }
     }

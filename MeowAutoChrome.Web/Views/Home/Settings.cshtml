@@ -3,7 +3,7 @@
     ViewData["Title"] = "程序设置";
 }
 
-<div class="container-fluid px-0">
+<div class="container-fluid px-0 settings-page-shell">
     <div class="settings-page">
         <aside class="settings-sidebar">
             <div class="card shadow-sm settings-sidebar-card">
@@ -20,6 +20,7 @@
                 <div>
                     <h1 class="h4 mb-1">程序设置</h1>
                     <div class="text-muted small">修改后会自动保存并立即应用。</div>
+                    <div class="text-muted small">设置文件位置：<code>@MeowAutoChrome.Web.Models.ProgramSettings.GetSettingsFilePath()</code></div>
                 </div>
                 <div id="settingsAutoSaveStatus" class="settings-autosave-status settings-autosave-status-success">已加载设置</div>
             </div>
@@ -50,6 +51,27 @@
                         <input asp-for="ScreencastFps" type="number" min="1" max="60" class="form-control" />
                         <div class="form-text">设置浏览器实时画面的目标推流 FPS。</div>
                         <span asp-validation-for="ScreencastFps" class="text-danger"></span>
+                    </div>
+                </section>
+
+                <section id="profileSettingsCard" class="card shadow-sm settings-card">
+                    <div class="card-header fw-semibold">浏览器用户数据</div>
+                    <div class="card-body">
+                        <label asp-for="UserDataDirectory" class="form-label"></label>
+                        <input asp-for="UserDataDirectory" class="form-control" placeholder="@MeowAutoChrome.Web.Models.ProgramSettings.GetDefaultUserDataDirectoryPath()" />
+                        <div class="form-text">
+                            默认目录：<code>@MeowAutoChrome.Web.Models.ProgramSettings.GetDefaultUserDataDirectoryPath()</code>。<br />
+                            修改后会尝试把当前目录中已有的浏览器用户数据迁移到新目录。
+                        </div>
+                        <span asp-validation-for="UserDataDirectory" class="text-danger"></span>
+                    </div>
+                    <div class="card-body border-top">
+                        <div class="form-check form-switch">
+                            <input asp-for="Headless" class="form-check-input" />
+                            <label asp-for="Headless" class="form-check-label"></label>
+                        </div>
+                        <div class="form-text">关闭后会显示真实 Chrome 窗口，并自动禁用实时查看功能。</div>
+                        <span asp-validation-for="Headless" class="text-danger"></span>
                     </div>
                 </section>
 

@@ -6,7 +6,8 @@ namespace MeowAutoChrome.Web.Services;
 public sealed class ProgramSettingsService(IWebHostEnvironment environment)
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-    private readonly string _settingsFilePath = Path.Combine(AppContext.BaseDirectory, "program-settings.json");
+    private readonly string _settingsFilePath = ProgramSettings.GetSettingsFilePath();
+    private readonly string _legacySettingsFilePath = ProgramSettings.GetLegacySettingsFilePath();
     private ProgramSettings? _cachedSettings;
 
     public async Task<ProgramSettings> GetAsync()
@@ -14,6 +15,8 @@ public sealed class ProgramSettingsService(IWebHostEnvironment environment)
         await _semaphore.WaitAsync();
         try
         {
+            EnsureSettingsFileMigrated();
+
             if (_cachedSettings != null)
                 return Clone(_cachedSettings);
 
@@ -41,6 +44,7 @@ public sealed class ProgramSettingsService(IWebHostEnvironment environment)
         await _semaphore.WaitAsync();
         try
         {
+            EnsureSettingsFileMigrated();
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
             await using var stream = File.Create(_settingsFilePath);
             await JsonSerializer.SerializeAsync(stream, settings, new JsonSerializerOptions { WriteIndented = true });
@@ -58,11 +62,31 @@ public sealed class ProgramSettingsService(IWebHostEnvironment environment)
             ? ProgramSettings.DefaultSearchUrlTemplate
             : settings.SearchUrlTemplate.Trim();
 
+        settings.UserDataDirectory = NormalizeUserDataDirectory(settings.UserDataDirectory);
+
         settings.ScreencastFps = Math.Clamp(settings.ScreencastFps <= 0 ? ProgramSettings.DefaultScreencastFps : settings.ScreencastFps, 1, 60);
         settings.PluginPanelWidth = Math.Clamp(
             settings.PluginPanelWidth <= 0 ? ProgramSettings.DefaultPluginPanelWidth : settings.PluginPanelWidth,
             ProgramSettings.MinPluginPanelWidth,
             ProgramSettings.MaxPluginPanelWidth);
+    }
+
+    private static string NormalizeUserDataDirectory(string? path)
+    {
+        var candidate = string.IsNullOrWhiteSpace(path)
+            ? ProgramSettings.GetDefaultUserDataDirectoryPath()
+            : path.Trim();
+
+        return Path.GetFullPath(candidate);
+    }
+
+    private void EnsureSettingsFileMigrated()
+    {
+        if (File.Exists(_settingsFilePath) || !File.Exists(_legacySettingsFilePath))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
+        File.Move(_legacySettingsFilePath, _settingsFilePath);
     }
 
     private static ProgramSettings Clone(ProgramSettings settings)
