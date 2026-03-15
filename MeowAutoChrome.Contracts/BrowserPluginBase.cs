@@ -15,6 +15,8 @@ public abstract class BrowserPluginBase : IBrowserPlugin
 
     protected IBrowserContext CurrentBrowserContext => HostContext?.BrowserContext ?? throw new InvalidOperationException("宿主尚未注入 BrowserContext。");
     protected IPage? CurrentActivePage => HostContext?.ActivePage;
+    protected string CurrentBrowserInstanceId => HostContext?.BrowserInstanceId ?? throw new InvalidOperationException("宿主尚未提供 BrowserInstanceId。");
+    protected IBrowserInstanceManager CurrentBrowserInstanceManager => HostContext?.BrowserInstanceManager ?? throw new InvalidOperationException("宿主尚未提供 BrowserInstanceManager。");
     protected IReadOnlyDictionary<string, string?> CurrentArguments => HostContext?.Arguments ?? EmptyArguments;
     protected CancellationToken CurrentCancellationToken => HostContext?.CancellationToken ?? CancellationToken.None;
 

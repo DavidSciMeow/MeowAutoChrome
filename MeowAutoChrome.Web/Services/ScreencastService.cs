@@ -13,7 +13,7 @@ namespace MeowAutoChrome.Web.Services;
 /// </summary>
 public class ScreencastService
 {
-    private readonly PlayWrightWarpper client;
+    private readonly BrowserInstanceManager browserInstances;
     private readonly IHubContext<BrowserHub> hub;
     private ICDPSession? _session;
     private int _clientCount;
@@ -26,14 +26,14 @@ public class ScreencastService
     private string? _targetPageId;
 
     public bool RequestedEnabled => _enabled;
-    public bool Enabled => _enabled && client.IsHeadless;
+    public bool Enabled => _enabled && browserInstances.IsHeadless;
     public int MaxWidth => _maxWidth;
     public int MaxHeight => _maxHeight;
     public int FrameIntervalMs => _frameIntervalMs;
 
-    public ScreencastService(PlayWrightWarpper client, IHubContext<BrowserHub> hub, ProgramSettingsService programSettingsService)
+    public ScreencastService(BrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ProgramSettingsService programSettingsService)
     {
-        this.client = client;
+        this.browserInstances = browserInstances;
         this.hub = hub;
 
         var settings = programSettingsService.GetAsync().GetAwaiter().GetResult();
@@ -71,13 +71,13 @@ public class ScreencastService
     {
         if (!Enabled) return;
 
-        var page = client.ActivePage;
+        var page = browserInstances.ActivePage;
         if (page == null) return;
 
-        _targetPageId = client.SelectedPageId;
+        _targetPageId = browserInstances.SelectedPageId;
         Interlocked.Exchange(ref _lastFrameSentAtMs, 0);
 
-        _session = await client.BrowserContext.NewCDPSessionAsync(page);
+        _session = await browserInstances.BrowserContext.NewCDPSessionAsync(page);
         _session.Event("Page.screencastFrame").OnEvent += OnFrame;
 
         await _session.SendAsync("Page.startScreencast", new Dictionary<string, object>
@@ -199,7 +199,7 @@ public class ScreencastService
 
             var restartNeeded = wasEnabled != Enabled || widthChanged || heightChanged;
 
-            await client.SetViewportSizeAsync(_maxWidth, _maxHeight);
+            await browserInstances.SetViewportSizeAsync(_maxWidth, _maxHeight);
 
             if (!restartNeeded || _clientCount <= 0)
                 return;
@@ -259,8 +259,8 @@ public class ScreencastService
             if (_clientCount <= 0 || !Enabled)
                 return;
 
-            _ = client.ActivePage;
-            var selectedPageId = client.SelectedPageId;
+            _ = browserInstances.ActivePage;
+            var selectedPageId = browserInstances.SelectedPageId;
 
             if (_session == null)
             {

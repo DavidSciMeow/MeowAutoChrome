@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace MeowAutoChrome.Web.Controllers
 {
-    public class BrowserController(PlayWrightWarpper client, IHubContext<BrowserHub> hub, ScreencastService screencastService, BrowserPluginHost pluginHost, ResourceMetricsService resourceMetricsService, ProgramSettingsService programSettingsService) : Controller
+    public class BrowserController(BrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, BrowserPluginHost pluginHost, ResourceMetricsService resourceMetricsService, ProgramSettingsService programSettingsService) : Controller
     {
-        public IActionResult Index() => View(client);
+        public IActionResult Index() => View();
 
         [HttpGet]
         public IActionResult Plugins()
@@ -45,7 +45,7 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpPost]
         public async Task<IActionResult> Navigate([FromBody] BrowserNavigateRequest request)
         {
-            await client.NavigateAsync(request.Url);
+            await browserInstances.NavigateAsync(request.Url);
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
         }
@@ -53,7 +53,7 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpPost]
         public async Task<IActionResult> CloseTab([FromBody] BrowserCloseTabRequest request)
         {
-            var closed = await client.CloseTabAsync(request.TabId);
+            var closed = await browserInstances.CloseTabAsync(request.TabId);
             if (!closed)
                 return NotFound();
 
@@ -64,28 +64,28 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpPost]
         public async Task<IActionResult> Back()
         {
-            await client.GoBackAsync();
+            await browserInstances.GoBackAsync();
             return Ok(await BuildStatusAsync());
         }
 
         [HttpPost]
         public async Task<IActionResult> Forward()
         {
-            await client.GoForwardAsync();
+            await browserInstances.GoForwardAsync();
             return Ok(await BuildStatusAsync());
         }
 
         [HttpPost]
         public async Task<IActionResult> Reload()
         {
-            await client.ReloadAsync();
+            await browserInstances.ReloadAsync();
             return Ok(await BuildStatusAsync());
         }
 
         [HttpPost]
         public async Task<IActionResult> NewTab()
         {
-            await client.CreateTabAsync();
+            await browserInstances.CreateTabAsync();
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
         }
@@ -93,7 +93,7 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpPost]
         public async Task<IActionResult> SelectTab([FromBody] BrowserSelectTabRequest request)
         {
-            var selected = await client.SelectPageAsync(request.TabId);
+            var selected = await browserInstances.SelectPageAsync(request.TabId);
             if (!selected)
                 return NotFound();
 
@@ -120,7 +120,7 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpGet]
         public async Task<IActionResult> Screenshot()
         {
-            var screenshot = await client.CaptureScreenshotAsync();
+            var screenshot = await browserInstances.CaptureScreenshotAsync();
             if (screenshot == null)
                 return NotFound();
 
@@ -133,19 +133,19 @@ namespace MeowAutoChrome.Web.Controllers
             var settings = await programSettingsService.GetAsync();
 
             return new(
-                client.CurrentUrl,
-                await client.GetTitleAsync(),
-                client.LastErrorMessage,
-                client.IsHeadless,
+                browserInstances.CurrentUrl,
+                await browserInstances.GetTitleAsync(),
+                browserInstances.CurrentInstance.LastErrorMessage,
+                browserInstances.IsHeadless,
                 screencastService.Enabled,
                 screencastService.MaxWidth,
                 screencastService.MaxHeight,
                 screencastService.FrameIntervalMs,
                 metrics.CpuUsagePercent,
                 metrics.MemoryUsageMb,
-                client.Pages.Count,
+                browserInstances.TotalPageCount,
                 settings.PluginPanelWidth,
-                await client.GetTabsAsync());
+                await browserInstances.GetTabsAsync());
         }
     }
 }

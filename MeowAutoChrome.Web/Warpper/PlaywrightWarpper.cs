@@ -5,7 +5,16 @@ using System.Net;
 
 namespace MeowAutoChrome.Web.Warpper;
 
-public record BrowserTabInfo(string Id, string? Title, string? Url, bool IsSelected);
+public record BrowserTabInfo(
+    string Id,
+    string? Title,
+    string? Url,
+    bool IsSelected,
+    string InstanceId,
+    string InstanceName,
+    string InstanceColor,
+    string? InstanceOwnerId,
+    bool IsInSelectedInstance);
 
 public class PlayWrightWarpper
 {
@@ -19,6 +28,10 @@ public class PlayWrightWarpper
     private int _viewportHeight = 800;
 
     public static IPlaywright Playwright { get; } = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
+    public string InstanceId { get; }
+    public string DisplayName { get; }
+    public string Color { get; }
+    public string? OwnerPluginId { get; }
     public string? LastErrorMessage { get; private set; }
     public string? SelectedPageId { get; private set; }
     public string UserDataDirectoryPath { get; private set; } = string.Empty;
@@ -46,10 +59,21 @@ public class PlayWrightWarpper
     }
 
 
-    public PlayWrightWarpper(ProgramSettingsService programSettingsService, ILogger<PlayWrightWarpper> logger, string? userDataDir = null)
+    public PlayWrightWarpper(
+        ProgramSettingsService programSettingsService,
+        ILogger<PlayWrightWarpper> logger,
+        string instanceId,
+        string displayName,
+        string color,
+        string? ownerPluginId = null,
+        string? userDataDir = null)
     {
         _programSettingsService = programSettingsService;
         _logger = logger;
+        InstanceId = instanceId;
+        DisplayName = displayName;
+        Color = color;
+        OwnerPluginId = ownerPluginId;
 
         var settings = _programSettingsService.GetAsync().GetAwaiter().GetResult();
         var configuredUserDataDir = string.IsNullOrWhiteSpace(userDataDir)
@@ -145,6 +169,12 @@ public class PlayWrightWarpper
         foreach (var page in closedDiagnostics) _pageDiagnostics.Remove(page);
 
         if (SelectedPageId != null && !_pageIds.ContainsValue(SelectedPageId)) SelectedPageId = null;
+    }
+
+    public bool ContainsTab(string pageId)
+    {
+        CleanupTrackedPages();
+        return Pages.Any(page => EnsurePageId(page) == pageId);
     }
 
     private void RegisterPage(IPage page)
@@ -280,6 +310,20 @@ public class PlayWrightWarpper
         }
 
         RegisterBrowserContext(browserContext);
+    }
+
+    public async Task CloseAsync()
+    {
+        if (BrowserContext is null)
+            return;
+
+        try
+        {
+            await BrowserContext.CloseAsync();
+        }
+        catch
+        {
+        }
     }
 
     public async Task UpdateUserDataDirectoryAsync(string userDataDir)
@@ -445,7 +489,16 @@ public class PlayWrightWarpper
             {
             }
 
-            tabs.Add(new BrowserTabInfo(id, title, page.Url, activePage == page));
+            tabs.Add(new BrowserTabInfo(
+                id,
+                title,
+                page.Url,
+                activePage == page,
+                InstanceId,
+                DisplayName,
+                Color,
+                OwnerPluginId,
+                false));
         }
 
         return tabs;

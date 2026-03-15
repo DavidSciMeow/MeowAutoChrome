@@ -14,7 +14,7 @@ using System.Runtime.Loader;
 
 namespace MeowAutoChrome.Web.Services;
 
-public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnvironment environment, ILogger<BrowserPluginHost> logger)
+public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, IWebHostEnvironment environment, ILogger<BrowserPluginHost> logger)
 {
     private static readonly string BrowserPluginAttributeFullName = typeof(BrowserPluginAttribute).FullName ?? nameof(BrowserPluginAttribute);
     private readonly string _pluginRootPath = Path.Combine(AppContext.BaseDirectory, "Plugins");
@@ -54,7 +54,13 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var hostContext = new BrowserPluginHostContext(browser.BrowserContext, browser.ActivePage, normalizedArguments, cancellationToken);
+        var hostContext = new BrowserPluginHostContext(
+            browserInstances.BrowserContext,
+            browserInstances.ActivePage,
+            browserInstances.CurrentInstanceId,
+            browserInstances,
+            normalizedArguments,
+            cancellationToken);
 
         var result = await ExecuteWithHostContextAsync(
             instance,
@@ -86,7 +92,13 @@ public sealed class BrowserPluginHost(PlayWrightWarpper browser, IWebHostEnviron
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var hostContext = new BrowserPluginHostContext(browser.BrowserContext, browser.ActivePage, normalizedArguments, cancellationToken);
+        var hostContext = new BrowserPluginHostContext(
+            browserInstances.BrowserContext,
+            browserInstances.ActivePage,
+            browserInstances.CurrentInstanceId,
+            browserInstances,
+            normalizedArguments,
+            cancellationToken);
 
         var result = await ExecuteWithHostContextAsync(
             instance,

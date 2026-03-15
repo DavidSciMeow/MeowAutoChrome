@@ -1,5 +1,4 @@
-﻿@model MeowAutoChrome.Web.Warpper.PlayWrightWarpper
-@{
+﻿@{
     ViewData["Title"] = "浏览器控制台";
     Layout = "_Layout";
 }
@@ -747,6 +746,30 @@
                 applyStatus(await postJson("/Browser/SelectTab", { tabId }));
             }
 
+            function groupTabsByInstance(tabs) {
+                const groups = [];
+                const groupMap = new Map();
+
+                for (const tab of tabs) {
+                    if (!groupMap.has(tab.instanceId)) {
+                        const group = {
+                            instanceId: tab.instanceId,
+                            instanceName: tab.instanceName || tab.instanceId,
+                            instanceColor: tab.instanceColor || "#2563eb",
+                            isSelected: !!tab.isInSelectedInstance,
+                            tabs: []
+                        };
+
+                        groupMap.set(tab.instanceId, group);
+                        groups.push(group);
+                    }
+
+                    groupMap.get(tab.instanceId).tabs.push(tab);
+                }
+
+                return groups;
+            }
+
             function renderTabs(tabs) {
                 tabsBar.innerHTML = "";
 
@@ -759,41 +782,50 @@
                     return;
                 }
 
-                for (const tab of tabs) {
-                    const tabItem = document.createElement("div");
-                    tabItem.className = "browser-tab-item" + (tab.isSelected ? " browser-tab-item-active" : "");
+                for (const group of groupTabsByInstance(tabs)) {
+                    const groupLabel = document.createElement("div");
+                    groupLabel.className = "browser-tab-instance-label" + (group.isSelected ? " browser-tab-instance-label-active" : "");
+                    groupLabel.style.setProperty("--instance-color", group.instanceColor);
+                    groupLabel.textContent = group.instanceName;
+                    tabsBar.appendChild(groupLabel);
 
-                    const btn = document.createElement("button");
-                    btn.type = "button";
-                    btn.className = "browser-tab btn btn-sm" + (tab.isSelected ? " browser-tab-active" : "");
-                    btn.title = tab.url || tab.title || "about:blank";
-                    btn.textContent = tab.title || tab.url || "about:blank";
-                    btn.addEventListener("click", async () => {
-                        try {
-                            await selectTab(tab.id);
-                        } catch (e) {
-                            showError(e.message || "切换标签页失败。");
-                        }
-                    });
+                    for (const tab of group.tabs) {
+                        const tabItem = document.createElement("div");
+                        tabItem.className = "browser-tab-item" + (tab.isSelected ? " browser-tab-item-active" : "");
+                        tabItem.style.setProperty("--instance-color", tab.instanceColor || "#2563eb");
 
-                    const closeBtn = document.createElement("button");
-                    closeBtn.type = "button";
-                    closeBtn.className = "browser-tab-close btn btn-sm btn-light border-0";
-                    closeBtn.title = "关闭 TAB";
-                    closeBtn.setAttribute("aria-label", "关闭 TAB");
-                    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-                    closeBtn.addEventListener("click", async e => {
-                        e.stopPropagation();
-                        try {
-                            applyStatus(await postJson("/Browser/CloseTab", { tabId: tab.id }));
-                        } catch (e) {
-                            showError(e.message || "关闭标签页失败。");
-                        }
-                    });
+                        const btn = document.createElement("button");
+                        btn.type = "button";
+                        btn.className = "browser-tab btn btn-sm" + (tab.isSelected ? " browser-tab-active" : "");
+                        btn.title = `[${tab.instanceName || tab.instanceId}] ` + (tab.url || tab.title || "about:blank");
+                        btn.textContent = tab.title || tab.url || "about:blank";
+                        btn.addEventListener("click", async () => {
+                            try {
+                                await selectTab(tab.id);
+                            } catch (e) {
+                                showError(e.message || "切换标签页失败。");
+                            }
+                        });
 
-                    tabItem.appendChild(btn);
-                    tabItem.appendChild(closeBtn);
-                    tabsBar.appendChild(tabItem);
+                        const closeBtn = document.createElement("button");
+                        closeBtn.type = "button";
+                        closeBtn.className = "browser-tab-close btn btn-sm btn-light border-0";
+                        closeBtn.title = "关闭 TAB";
+                        closeBtn.setAttribute("aria-label", "关闭 TAB");
+                        closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                        closeBtn.addEventListener("click", async e => {
+                            e.stopPropagation();
+                            try {
+                                applyStatus(await postJson("/Browser/CloseTab", { tabId: tab.id }));
+                            } catch (e) {
+                                showError(e.message || "关闭标签页失败。");
+                            }
+                        });
+
+                        tabItem.appendChild(btn);
+                        tabItem.appendChild(closeBtn);
+                        tabsBar.appendChild(tabItem);
+                    }
                 }
 
                 updateTabScrollButtons();
@@ -833,73 +865,96 @@
                     return;
                 }
 
-                for (const tab of tabs) {
-                    const card = document.createElement("div");
-                    card.className = "tabs-status-card" + (tab.isSelected ? " tabs-status-card-active" : "");
-                    card.tabIndex = 0;
-                    card.setAttribute("role", "button");
-                    card.setAttribute("aria-label", "切换到 TAB: " + (tab.title || tab.url || "about:blank"));
-                    card.addEventListener("click", async () => {
-                        try {
-                            await selectTab(tab.id);
-                        } catch (e) {
-                            showError(e.message || "切换标签页失败。");
-                        }
-                    });
-                    card.addEventListener("keydown", async e => {
-                        if (e.key !== "Enter" && e.key !== " ")
-                            return;
+                for (const group of groupTabsByInstance(tabs)) {
+                    const groupCard = document.createElement("div");
+                    groupCard.className = "tabs-instance-group";
+                    groupCard.style.setProperty("--instance-color", group.instanceColor);
 
-                        e.preventDefault();
-                        try {
-                            await selectTab(tab.id);
-                        } catch (e) {
-                            showError(e.message || "切换标签页失败。");
-                        }
-                    });
+                    const groupHeader = document.createElement("div");
+                    groupHeader.className = "tabs-instance-group-header";
 
-                    const row = document.createElement("div");
-                    row.className = "tabs-status-row";
+                    const groupTitle = document.createElement("div");
+                    groupTitle.className = "tabs-instance-group-title";
+                    groupTitle.textContent = group.instanceName;
+                    groupHeader.appendChild(groupTitle);
 
-                    const heading = document.createElement("div");
-                    heading.className = "tabs-status-name";
-                    heading.textContent = tab.title || "(无标题)";
-                    row.appendChild(heading);
+                    const groupBadge = document.createElement("span");
+                    groupBadge.className = "badge rounded-pill " + (group.isSelected ? "text-bg-primary" : "text-bg-secondary");
+                    groupBadge.textContent = group.isSelected ? "当前实例" : "独立实例";
+                    groupHeader.appendChild(groupBadge);
 
-                    const actions = document.createElement("div");
-                    actions.className = "tabs-status-actions";
+                    groupCard.appendChild(groupHeader);
 
-                    const badge = document.createElement("span");
-                    badge.className = "badge rounded-pill " + (tab.isSelected ? "text-bg-primary" : "text-bg-secondary");
-                    badge.textContent = tab.isSelected ? "当前" : "后台";
-                    actions.appendChild(badge);
+                    for (const tab of group.tabs) {
+                        const card = document.createElement("div");
+                        card.className = "tabs-status-card" + (tab.isSelected ? " tabs-status-card-active" : "");
+                        card.tabIndex = 0;
+                        card.setAttribute("role", "button");
+                        card.setAttribute("aria-label", "切换到 TAB: " + (tab.title || tab.url || "about:blank"));
+                        card.addEventListener("click", async () => {
+                            try {
+                                await selectTab(tab.id);
+                            } catch (e) {
+                                showError(e.message || "切换标签页失败。");
+                            }
+                        });
+                        card.addEventListener("keydown", async e => {
+                            if (e.key !== "Enter" && e.key !== " ")
+                                return;
 
-                    const closeBtn = document.createElement("button");
-                    closeBtn.type = "button";
-                    closeBtn.className = "btn btn-sm btn-outline-secondary tabs-status-close";
-                    closeBtn.title = "关闭 TAB";
-                    closeBtn.setAttribute("aria-label", "关闭 TAB");
-                    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-                    closeBtn.addEventListener("click", async e => {
-                        e.stopPropagation();
-                        try {
-                            applyStatus(await postJson("/Browser/CloseTab", { tabId: tab.id }));
-                        } catch (e) {
-                            showError(e.message || "关闭标签页失败。");
-                        }
-                    });
-                    actions.appendChild(closeBtn);
+                            e.preventDefault();
+                            try {
+                                await selectTab(tab.id);
+                            } catch (e) {
+                                showError(e.message || "切换标签页失败。");
+                            }
+                        });
 
-                    row.appendChild(actions);
+                        const row = document.createElement("div");
+                        row.className = "tabs-status-row";
 
-                    card.appendChild(row);
+                        const heading = document.createElement("div");
+                        heading.className = "tabs-status-name";
+                        heading.textContent = tab.title || "(无标题)";
+                        row.appendChild(heading);
 
-                    const url = document.createElement("div");
-                    url.className = "tabs-status-url";
-                    url.textContent = tab.url || "about:blank";
-                    card.appendChild(url);
+                        const actions = document.createElement("div");
+                        actions.className = "tabs-status-actions";
 
-                    tabsStatusPanel.appendChild(card);
+                        const badge = document.createElement("span");
+                        badge.className = "badge rounded-pill " + (tab.isSelected ? "text-bg-primary" : "text-bg-secondary");
+                        badge.textContent = tab.isSelected ? "当前" : "后台";
+                        actions.appendChild(badge);
+
+                        const closeBtn = document.createElement("button");
+                        closeBtn.type = "button";
+                        closeBtn.className = "btn btn-sm btn-outline-secondary tabs-status-close";
+                        closeBtn.title = "关闭 TAB";
+                        closeBtn.setAttribute("aria-label", "关闭 TAB");
+                        closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                        closeBtn.addEventListener("click", async e => {
+                            e.stopPropagation();
+                            try {
+                                applyStatus(await postJson("/Browser/CloseTab", { tabId: tab.id }));
+                            } catch (e) {
+                                showError(e.message || "关闭标签页失败。");
+                            }
+                        });
+                        actions.appendChild(closeBtn);
+
+                        row.appendChild(actions);
+
+                        card.appendChild(row);
+
+                        const url = document.createElement("div");
+                        url.className = "tabs-status-url";
+                        url.textContent = tab.url || "about:blank";
+                        card.appendChild(url);
+
+                        groupCard.appendChild(card);
+                    }
+
+                    tabsStatusPanel.appendChild(groupCard);
                 }
             }
 

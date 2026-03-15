@@ -433,6 +433,24 @@ body {
     border-radius: 1rem 1rem 0 0;
     background: rgba(255, 255, 255, 0.55);
     border: 1px solid transparent;
+    border-top: 3px solid var(--instance-color, transparent);
+}
+
+.browser-tab-instance-label {
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--instance-color, #2563eb) 12%, #fff);
+    border: 1px solid color-mix(in srgb, var(--instance-color, #2563eb) 35%, #cfd6e1);
+    color: #1f2937;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.browser-tab-instance-label-active {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--instance-color, #2563eb) 30%, transparent);
 }
 
 .browser-tab-item-active {
@@ -588,6 +606,27 @@ body {
 .tabs-status-card-active {
     border-color: #1a73e8;
     box-shadow: 0 0 0 1px rgba(26, 115, 232, 0.15), 0 10px 24px rgba(26, 115, 232, 0.12);
+}
+
+.tabs-instance-group {
+    margin-bottom: 1rem;
+    padding: 0.85rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--instance-color, #2563eb) 28%, #dbe3ef);
+    background: color-mix(in srgb, var(--instance-color, #2563eb) 6%, #fff);
+}
+
+.tabs-instance-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.tabs-instance-group-title {
+    font-weight: 700;
+    color: #111827;
 }
 
 .tabs-status-row {
