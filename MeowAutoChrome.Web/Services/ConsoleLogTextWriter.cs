@@ -3,6 +3,10 @@ using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 
+/// <summary>
+/// 将控制台输出捕获并写入 AppLogService 的 TextWriter 实现，通常用于将控制台日志也写入应用日志文件。
+/// 它会在行结束时将缓冲的一行写入 AppLogService。
+/// </summary>
 public sealed class ConsoleLogTextWriter(TextWriter innerWriter, AppLogService appLogService, LogLevel logLevel, string category) : TextWriter
 {
     private readonly object _syncRoot = new();

@@ -1,10 +1,14 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 
+/// <summary>
+/// 在 Windows 平台上为应用启动一个外部 Chrome 窗口（仅在非开发环境下），用于将 Web UI 在桌面上以浏览器窗口打开。
+/// 通过 IHostedService 生命周期钩子在启动时自动启动 Chrome（若找到可执行文件）并在应用停止时关闭。
+/// </summary>
 public sealed class ChromeShellService(
     IHostApplicationLifetime hostApplicationLifetime,
     IServer server,
