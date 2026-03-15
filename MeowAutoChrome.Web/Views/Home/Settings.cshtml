@@ -75,6 +75,24 @@
                     </div>
                 </section>
 
+                <section id="userAgentSettingsCard" class="card shadow-sm settings-card">
+                    <div class="card-header fw-semibold">User-Agent</div>
+                    <div class="card-body">
+                        <label asp-for="UserAgent" class="form-label"></label>
+                        <textarea asp-for="UserAgent" class="form-control" rows="3" placeholder="留空时使用浏览器默认 User-Agent"></textarea>
+                        <div class="form-text">这里设置后会作为程序级默认 UA。留空则不强制注入全局 UA。</div>
+                        <span asp-validation-for="UserAgent" class="text-danger"></span>
+                    </div>
+                    <div class="card-body border-top">
+                        <div class="form-check form-switch">
+                            <input asp-for="AllowInstanceUserAgentOverride" class="form-check-input" />
+                            <label asp-for="AllowInstanceUserAgentOverride" class="form-check-label"></label>
+                        </div>
+                        <div class="form-text">默认关闭。关闭后，只要程序设置了全局 UA，实例设置里就不能再单独覆盖。</div>
+                        <span asp-validation-for="AllowInstanceUserAgentOverride" class="text-danger"></span>
+                    </div>
+                </section>
+
                 <section id="layoutSettingsCard" class="card shadow-sm settings-card">
                     <div class="card-header fw-semibold">界面布局</div>
                     <div class="card-body">

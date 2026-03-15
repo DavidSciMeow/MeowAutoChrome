@@ -55,12 +55,15 @@ namespace MeowAutoChrome.Web.Controllers
 
         private async Task<string> SaveProgramSettingsAsync(ProgramSettingsViewModel model)
         {
+            var previousSettings = await programSettingsService.GetAsync();
             var settings = new ProgramSettings
             {
                 SearchUrlTemplate = model.SearchUrlTemplate,
                 ScreencastFps = model.ScreencastFps,
                 PluginPanelWidth = model.PluginPanelWidth,
                 UserDataDirectory = model.UserDataDirectory,
+                UserAgent = model.UserAgent,
+                AllowInstanceUserAgentOverride = model.AllowInstanceUserAgentOverride,
                 Headless = model.Headless
             };
 
@@ -68,8 +71,11 @@ namespace MeowAutoChrome.Web.Controllers
 
             var userDataDirectoryChanged = !string.Equals(browserInstances.PrimaryInstance.UserDataDirectoryPath, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
             var headlessChanged = browserInstances.PrimaryInstance.IsHeadless != settings.Headless;
-            if (userDataDirectoryChanged || headlessChanged)
-                await browserInstances.UpdateLaunchSettingsAsync(settings.UserDataDirectory, settings.Headless);
+            var userAgentChanged = !string.Equals(previousSettings.UserAgent, settings.UserAgent, StringComparison.Ordinal);
+            var userAgentOverrideChanged = previousSettings.AllowInstanceUserAgentOverride != settings.AllowInstanceUserAgentOverride;
+            var launchSettingsChanged = userDataDirectoryChanged || headlessChanged || userAgentChanged || userAgentOverrideChanged;
+            if (launchSettingsChanged)
+                await browserInstances.UpdateLaunchSettingsAsync(settings.UserDataDirectory, settings.Headless, forceReload: true);
 
             await screencastService.UpdateSettingsAsync(
                 screencastService.RequestedEnabled,
@@ -77,17 +83,19 @@ namespace MeowAutoChrome.Web.Controllers
                 screencastService.MaxHeight,
                 FpsToInterval(model.ScreencastFps));
 
-            if (userDataDirectoryChanged || headlessChanged)
+            if (launchSettingsChanged)
                 await screencastService.OnBrowserModeChangedAsync();
 
-            if (userDataDirectoryChanged && headlessChanged)
-                return "设置已自动保存，浏览器用户数据目录和 Headless 模式已切换。";
-
+            var changes = new List<string>();
             if (userDataDirectoryChanged)
-                return "设置已自动保存，浏览器用户数据目录已切换。";
-
+                changes.Add("浏览器用户数据目录已切换");
             if (headlessChanged)
-                return "设置已自动保存，Headless 模式已切换。";
+                changes.Add("Headless 模式已切换");
+            if (userAgentChanged || userAgentOverrideChanged)
+                changes.Add("User-Agent 配置已同步到实例");
+
+            if (changes.Count > 0)
+                return $"设置已自动保存，{string.Join('，', changes)}。";
 
             return "设置已自动保存。";
         }
@@ -105,6 +113,8 @@ namespace MeowAutoChrome.Web.Controllers
                 ScreencastFps = settings.ScreencastFps,
                 PluginPanelWidth = settings.PluginPanelWidth,
                 UserDataDirectory = settings.UserDataDirectory,
+                UserAgent = settings.UserAgent,
+                AllowInstanceUserAgentOverride = settings.AllowInstanceUserAgentOverride,
                 Headless = settings.Headless
             });
         }

@@ -61,6 +61,65 @@
             </div>
         </div>
     </div>
+
+<div class="modal fade" id="instanceSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="instanceSettingsModalTitle">实例设置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="instanceSettingsModalSummary" class="text-muted small mb-3"></div>
+                <input type="hidden" id="instanceSettingsInstanceId" />
+                <input type="hidden" id="instanceSettingsCurrentUserDataDirectory" />
+                <input type="hidden" id="instanceSettingsIsSelected" />
+
+                <div class="mb-3">
+                    <label class="form-label" for="instanceUserDataDirectoryInput">UserData 目录</label>
+                    <input type="text" class="form-control" id="instanceUserDataDirectoryInput" placeholder="输入浏览器 UserData 目录" />
+                    <div class="form-text">切换目录时会询问是否把旧目录一起迁移过去。</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="instanceUserAgentInput">实例 User-Agent</label>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="instanceUseProgramUserAgentInput" />
+                        <label class="form-check-label" for="instanceUseProgramUserAgentInput">跟随程序设置 User-Agent</label>
+                    </div>
+                    <input type="text" class="form-control" id="instanceUserAgentInput" placeholder="留空时使用浏览器默认 User-Agent" />
+                    <div id="instanceUserAgentProgramHint" class="form-text">程序设置 UA：未设置</div>
+                    <div id="instanceUserAgentEffectiveHint" class="form-text">当前生效 UA：浏览器默认</div>
+                    <div id="instanceUserAgentLockHint" class="form-text text-warning d-none">程序设置已锁定全局 UA，当前实例不能覆盖。</div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-sm-6">
+                        <label class="form-label" for="instanceViewportWidthInput">默认宽度</label>
+                        <input type="number" min="320" step="1" class="form-control" id="instanceViewportWidthInput" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label" for="instanceViewportHeightInput">默认高度</label>
+                        <input type="number" min="240" step="1" class="form-control" id="instanceViewportHeightInput" />
+                    </div>
+                </div>
+
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="instancePreserveAspectRatioInput" />
+                    <label class="form-check-label" for="instancePreserveAspectRatioInput">跟随时保持宽高比</label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="instanceAutoResizeViewportInput" />
+                    <label class="form-check-label" for="instanceAutoResizeViewportInput">跟随浏览器区域大小自动调整网页尺寸</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="instanceSettingsSubmitBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
     <div class="browser-pane-divider" id="browserPaneDivider" role="separator" aria-orientation="vertical" aria-label="调整浏览器区与插件区宽度" tabindex="0"></div>
     <div class="browser-pane browser-pane-right">
         <div class="card h-100 plugin-panel">
@@ -154,6 +213,7 @@
             const pluginArgumentModalElement = document.getElementById("pluginArgumentModal");
             const screenshotPreviewModalElement = document.getElementById("screenshotPreviewModal");
             const pluginOutputModalElement = document.getElementById("pluginOutputModal");
+            const instanceSettingsModalElement = document.getElementById("instanceSettingsModal");
             const screenshotPreviewImage = document.getElementById("screenshotPreviewImage");
             const pluginArgumentModalTitle = document.getElementById("pluginArgumentModalTitle");
             const pluginArgumentModalDescription = document.getElementById("pluginArgumentModalDescription");
@@ -163,10 +223,27 @@
             const pluginOutputModalSummary = document.getElementById("pluginOutputModalSummary");
             const pluginOutputModalData = document.getElementById("pluginOutputModalData");
             const pluginOutputModalEntries = document.getElementById("pluginOutputModalEntries");
+            const instanceSettingsModalTitle = document.getElementById("instanceSettingsModalTitle");
+            const instanceSettingsModalSummary = document.getElementById("instanceSettingsModalSummary");
+            const instanceSettingsInstanceIdInput = document.getElementById("instanceSettingsInstanceId");
+            const instanceSettingsCurrentUserDataDirectoryInput = document.getElementById("instanceSettingsCurrentUserDataDirectory");
+            const instanceSettingsIsSelectedInput = document.getElementById("instanceSettingsIsSelected");
+            const instanceUserDataDirectoryInput = document.getElementById("instanceUserDataDirectoryInput");
+            const instanceUseProgramUserAgentInput = document.getElementById("instanceUseProgramUserAgentInput");
+            const instanceUserAgentInput = document.getElementById("instanceUserAgentInput");
+            const instanceUserAgentProgramHint = document.getElementById("instanceUserAgentProgramHint");
+            const instanceUserAgentEffectiveHint = document.getElementById("instanceUserAgentEffectiveHint");
+            const instanceUserAgentLockHint = document.getElementById("instanceUserAgentLockHint");
+            const instanceViewportWidthInput = document.getElementById("instanceViewportWidthInput");
+            const instanceViewportHeightInput = document.getElementById("instanceViewportHeightInput");
+            const instancePreserveAspectRatioInput = document.getElementById("instancePreserveAspectRatioInput");
+            const instanceAutoResizeViewportInput = document.getElementById("instanceAutoResizeViewportInput");
+            const instanceSettingsSubmitBtn = document.getElementById("instanceSettingsSubmitBtn");
             const shotBtn = document.getElementById("shotBtn");
             const pluginArgumentModal = pluginArgumentModalElement ? new bootstrap.Modal(pluginArgumentModalElement) : null;
             const screenshotPreviewModal = screenshotPreviewModalElement ? new bootstrap.Modal(screenshotPreviewModalElement) : null;
             const pluginOutputModal = pluginOutputModalElement ? new bootstrap.Modal(pluginOutputModalElement) : null;
+            const instanceSettingsModal = instanceSettingsModalElement ? new bootstrap.Modal(instanceSettingsModalElement) : null;
             const pluginCatalog = new Map();
             const pluginOutputStore = new Map();
             const pluginOutputUi = new Map();
@@ -185,6 +262,14 @@
             let activePluginOutputPluginId = null;
             let browserHubConnectionId = null;
             let screenshotPreviewUrl = null;
+            let selectedInstanceId = null;
+            let currentInstanceViewport = null;
+            let instanceViewportSyncTimer = null;
+            let applyingInstanceViewportSync = false;
+            let pendingInstanceViewportSync = false;
+            let instanceSettingsAspectRatio = null;
+            let synchronizingAspectRatio = false;
+            let canvasKeyboardCaptureActive = false;
 
             function clampPluginPanelWidth(width) {
                 const workspaceWidth = Math.max(0, browserWorkspace?.clientWidth || 0);
@@ -263,14 +348,23 @@
             let pending = null, busy = false, activeFrame = null;
 
             img.onload = function () {
-                const targetWidth = activeFrame?.width ?? img.naturalWidth;
-                const targetHeight = activeFrame?.height ?? img.naturalHeight;
+                const viewport = getCanvasViewportSize();
+                const targetWidth = canvas.width || viewport.width;
+                const targetHeight = canvas.height || viewport.height;
+                const sourceWidth = activeFrame?.width ?? img.naturalWidth;
+                const sourceHeight = activeFrame?.height ?? img.naturalHeight;
 
-                if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-                    canvas.width  = targetWidth;
-                    canvas.height = targetHeight;
-                }
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resizeCanvasBuffer(targetWidth, targetHeight);
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+                const scale = Math.min(targetWidth / Math.max(1, sourceWidth), targetHeight / Math.max(1, sourceHeight));
+                const drawWidth = Math.max(1, Math.round(sourceWidth * scale));
+                const drawHeight = Math.max(1, Math.round(sourceHeight * scale));
+                const offsetX = Math.floor((targetWidth - drawWidth) / 2);
+                const offsetY = Math.floor((targetHeight - drawHeight) / 2);
+
+                ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
                 noSig.style.display = "none";
                 updateFps();
                 busy = false;
@@ -334,8 +428,20 @@
                     body: JSON.stringify(body ?? {})
                 });
 
-                if (!response.ok)
-                    throw new Error("请求失败: " + response.status);
+                if (!response.ok) {
+                    let message = "请求失败: " + response.status;
+                    const contentType = response.headers.get("content-type") || "";
+                    if (contentType.includes("application/json")) {
+                        const payload = await response.json().catch(() => null);
+                        message = payload?.message || payload?.title || message;
+                    } else {
+                        const text = await response.text().catch(() => "");
+                        if (text)
+                            message = text;
+                    }
+
+                    throw new Error(message);
+                }
 
                 return await response.json();
             }
@@ -348,6 +454,144 @@
             function clearError() {
                 browserError.textContent = "";
                 browserError.classList.add("d-none");
+            }
+
+            function normalizePath(path) {
+                return (path || "").trim().replace(/[\\/]+$/, "").toLowerCase();
+            }
+
+            function roundViewportWidth(value) {
+                return Math.max(320, Math.round(Number(value) || 0));
+            }
+
+            function roundViewportHeight(value) {
+                return Math.max(240, Math.round(Number(value) || 0));
+            }
+
+            function refreshInstanceSettingsAspectRatio() {
+                const width = Number(instanceViewportWidthInput.value);
+                const height = Number(instanceViewportHeightInput.value);
+                instanceSettingsAspectRatio = width > 0 && height > 0 ? width / height : null;
+            }
+
+            function syncInstanceHeightFromWidth() {
+                if (synchronizingAspectRatio || !instancePreserveAspectRatioInput.checked || !instanceSettingsAspectRatio)
+                    return;
+
+                const width = Number(instanceViewportWidthInput.value);
+                if (!(width > 0))
+                    return;
+
+                synchronizingAspectRatio = true;
+                instanceViewportHeightInput.value = String(roundViewportHeight(width / instanceSettingsAspectRatio));
+                synchronizingAspectRatio = false;
+            }
+
+            function syncInstanceWidthFromHeight() {
+                if (synchronizingAspectRatio || !instancePreserveAspectRatioInput.checked || !instanceSettingsAspectRatio)
+                    return;
+
+                const height = Number(instanceViewportHeightInput.value);
+                if (!(height > 0))
+                    return;
+
+                synchronizingAspectRatio = true;
+                instanceViewportWidthInput.value = String(roundViewportWidth(height * instanceSettingsAspectRatio));
+                synchronizingAspectRatio = false;
+            }
+
+            async function syncCurrentInstanceViewport(force = false) {
+                if (!currentInstanceViewport?.autoResizeViewport || !selectedInstanceId)
+                    return;
+
+                const viewport = getCanvasViewportSize();
+                if (applyingInstanceViewportSync) {
+                    pendingInstanceViewportSync = true;
+                    return;
+                }
+
+                applyingInstanceViewportSync = true;
+                try {
+                    await postJson("/Browser/CurrentInstanceViewport", {
+                        width: viewport.width,
+                        height: viewport.height
+                    });
+                } catch (e) {
+                    if (force)
+                        showError(e.message || "实例网页尺寸同步失败。");
+                } finally {
+                    applyingInstanceViewportSync = false;
+                    const needsAnotherSync = pendingInstanceViewportSync;
+                    pendingInstanceViewportSync = false;
+                    if (needsAnotherSync)
+                        scheduleCurrentInstanceViewportSync(force);
+                }
+            }
+
+            function scheduleCurrentInstanceViewportSync(force = false) {
+                if (!currentInstanceViewport?.autoResizeViewport)
+                    return;
+
+                if (instanceViewportSyncTimer)
+                    clearTimeout(instanceViewportSyncTimer);
+
+                instanceViewportSyncTimer = setTimeout(() => {
+                    syncCurrentInstanceViewport(force).catch(() => { });
+                }, force ? 0 : 150);
+            }
+
+            function syncInstanceUserAgentEditorState() {
+                const locked = instanceUseProgramUserAgentInput.disabled;
+                const useProgramUserAgent = locked || instanceUseProgramUserAgentInput.checked;
+                instanceUserAgentInput.disabled = useProgramUserAgent;
+                instanceUserAgentLockHint.classList.toggle("d-none", !locked);
+            }
+
+            function applyInstanceUserAgentSettings(userAgent) {
+                const locked = !!userAgent?.isLocked;
+                instanceUseProgramUserAgentInput.checked = locked || !!userAgent?.useProgramUserAgent;
+                instanceUseProgramUserAgentInput.disabled = locked;
+                instanceUserAgentInput.value = userAgent?.userAgent || "";
+                instanceUserAgentProgramHint.textContent = userAgent?.programUserAgent
+                    ? "程序设置 UA：" + userAgent.programUserAgent
+                    : "程序设置 UA：未设置";
+                instanceUserAgentEffectiveHint.textContent = userAgent?.effectiveUserAgent
+                    ? "当前生效 UA：" + userAgent.effectiveUserAgent
+                    : "当前生效 UA：浏览器默认";
+                syncInstanceUserAgentEditorState();
+            }
+
+            function applyInstanceSettingsForm(data, fallbackName) {
+                instanceSettingsModalTitle.textContent = (data.instanceName || fallbackName || "实例") + " 设置";
+                instanceSettingsModalSummary.textContent = "实例 ID: " + (data.instanceId || "") + (data.isSelected ? " · 当前实例" : "");
+                instanceSettingsInstanceIdInput.value = data.instanceId || "";
+                instanceSettingsCurrentUserDataDirectoryInput.value = data.userDataDirectory || "";
+                instanceSettingsIsSelectedInput.value = data.isSelected ? "true" : "false";
+                instanceUserDataDirectoryInput.value = data.userDataDirectory || "";
+                applyInstanceUserAgentSettings(data.userAgent);
+                instanceViewportWidthInput.value = String(data.viewport?.width || 1280);
+                instanceViewportHeightInput.value = String(data.viewport?.height || 800);
+                instancePreserveAspectRatioInput.checked = !!data.viewport?.preserveAspectRatio;
+                instanceAutoResizeViewportInput.checked = !!data.viewport?.autoResizeViewport;
+                refreshInstanceSettingsAspectRatio();
+                instanceSettingsSubmitBtn.disabled = false;
+            }
+
+            async function openInstanceSettings(instanceId, fallbackName) {
+                if (!instanceSettingsModal)
+                    return;
+
+                clearError();
+                try {
+                    const response = await fetch("/Browser/InstanceSettings?instanceId=" + encodeURIComponent(instanceId));
+                    if (!response.ok)
+                        throw new Error("实例设置获取失败: " + response.status);
+
+                    applyInstanceSettingsForm(await response.json(), fallbackName);
+                    instanceSettingsModal.show();
+                } catch (e) {
+                    showError(e.message || "实例设置获取失败。");
+                }
             }
 
             function showCanvasOverlay(message, fillBlack = false) {
@@ -406,6 +650,11 @@
             }
 
             function applyStatus(data) {
+                const previousInstanceId = selectedInstanceId;
+                const previousViewportSignature = JSON.stringify(currentInstanceViewport || null);
+                selectedInstanceId = data.currentInstanceId || null;
+                currentInstanceViewport = data.currentInstanceViewport || null;
+
                 document.title = (data.title || "浏览器控制台") + " - MeowAutoChrome";
                 if (!isEditingUrl)
                     urlInput.value = data.url || "";
@@ -425,6 +674,12 @@
 
                 if (!pointerResizeActive && data.pluginPanelWidth)
                     applyPluginPanelWidth(data.pluginPanelWidth);
+
+                if (currentInstanceViewport?.autoResizeViewport) {
+                    const nextViewportSignature = JSON.stringify(currentInstanceViewport || null);
+                    if (previousInstanceId !== selectedInstanceId || previousViewportSignature !== nextViewportSignature)
+                        scheduleCurrentInstanceViewportSync();
+                }
 
                 if (!data.screencastEnabled) {
                     noSig.style.display = "none";
@@ -830,6 +1085,78 @@
                 pluginOutputModalEntries.replaceChildren();
             });
 
+            instanceSettingsModalElement.addEventListener("hidden.bs.modal", () => {
+                instanceSettingsInstanceIdInput.value = "";
+                instanceSettingsCurrentUserDataDirectoryInput.value = "";
+                instanceSettingsIsSelectedInput.value = "false";
+                instanceUserDataDirectoryInput.value = "";
+                instanceUseProgramUserAgentInput.checked = true;
+                instanceUseProgramUserAgentInput.disabled = false;
+                instanceUserAgentInput.value = "";
+                instanceUserAgentInput.disabled = true;
+                instanceUserAgentProgramHint.textContent = "程序设置 UA：未设置";
+                instanceUserAgentEffectiveHint.textContent = "当前生效 UA：浏览器默认";
+                instanceUserAgentLockHint.classList.add("d-none");
+                instanceViewportWidthInput.value = "1280";
+                instanceViewportHeightInput.value = "800";
+                instancePreserveAspectRatioInput.checked = false;
+                instanceAutoResizeViewportInput.checked = false;
+                instanceSettingsAspectRatio = null;
+                synchronizingAspectRatio = false;
+                instanceSettingsSubmitBtn.disabled = false;
+            });
+
+            instanceSettingsSubmitBtn.addEventListener("click", async () => {
+                const instanceId = instanceSettingsInstanceIdInput.value.trim();
+                const userDataDirectory = instanceUserDataDirectoryInput.value.trim();
+                const viewportWidth = roundViewportWidth(instanceViewportWidthInput.value);
+                const viewportHeight = roundViewportHeight(instanceViewportHeightInput.value);
+
+                if (!instanceId) {
+                    showError("实例 ID 无效。");
+                    return;
+                }
+
+                if (!userDataDirectory) {
+                    showError("请输入 UserData 目录。");
+                    instanceUserDataDirectoryInput.focus();
+                    return;
+                }
+
+                const currentUserDataDirectory = instanceSettingsCurrentUserDataDirectoryInput.value;
+                const isSelectedInstance = instanceSettingsIsSelectedInput.value === "true";
+                const userDataDirectoryChanged = normalizePath(currentUserDataDirectory) !== normalizePath(userDataDirectory);
+                const migrateExistingUserData = userDataDirectoryChanged
+                    ? window.confirm("检测到你修改了 UserData 目录。\n\n确定：把旧目录一起迁移过去\n取消：切到新目录但不迁移旧数据")
+                    : false;
+                const viewport = getCanvasViewportSize();
+
+                instanceSettingsSubmitBtn.disabled = true;
+                clearError();
+                try {
+                    applyStatus(await postJson("/Browser/InstanceSettings", {
+                        instanceId,
+                        userDataDirectory,
+                        viewportWidth,
+                        viewportHeight,
+                        autoResizeViewport: instanceAutoResizeViewportInput.checked,
+                        preserveAspectRatio: instancePreserveAspectRatioInput.checked,
+                        useProgramUserAgent: instanceUseProgramUserAgentInput.checked || instanceUseProgramUserAgentInput.disabled,
+                        userAgent: instanceUseProgramUserAgentInput.checked || instanceUseProgramUserAgentInput.disabled
+                            ? null
+                            : instanceUserAgentInput.value.trim(),
+                        migrateExistingUserData,
+                        displayWidth: isSelectedInstance ? viewport.width : null,
+                        displayHeight: isSelectedInstance ? viewport.height : null
+                    }));
+                    instanceSettingsModal.hide();
+                } catch (e) {
+                    showError(e.message || "实例设置保存失败。");
+                } finally {
+                    instanceSettingsSubmitBtn.disabled = false;
+                }
+            });
+
             function getPluginStateDisplay(plugin) {
                 const hasControls = (plugin.controls || []).length > 0;
                 const state = hasControls ? (plugin.state || "Unknown") : "NoStartable";
@@ -1061,6 +1388,18 @@
                     });
                     groupHeader.appendChild(groupLabel);
 
+                    const groupSettingsBtn = document.createElement("button");
+                    groupSettingsBtn.type = "button";
+                    groupSettingsBtn.className = "browser-tab-instance-close btn btn-sm btn-light border-0";
+                    groupSettingsBtn.title = "实例设置";
+                    groupSettingsBtn.setAttribute("aria-label", "实例设置");
+                    groupSettingsBtn.innerHTML = '<i class="fa-solid fa-sliders"></i>';
+                    groupSettingsBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        await openInstanceSettings(group.instanceId, group.instanceName);
+                    });
+                    groupHeader.appendChild(groupSettingsBtn);
+
                     const groupCloseBtn = document.createElement("button");
                     groupCloseBtn.type = "button";
                     groupCloseBtn.className = "browser-tab-instance-close btn btn-sm btn-light border-0";
@@ -1175,6 +1514,18 @@
 
                     const groupActions = document.createElement("div");
                     groupActions.className = "tabs-status-actions";
+
+                    const settingsInstanceBtn = document.createElement("button");
+                    settingsInstanceBtn.type = "button";
+                    settingsInstanceBtn.className = "btn btn-sm btn-outline-secondary tabs-status-close";
+                    settingsInstanceBtn.title = "实例设置";
+                    settingsInstanceBtn.setAttribute("aria-label", "实例设置");
+                    settingsInstanceBtn.innerHTML = '<i class="fa-solid fa-sliders"></i>';
+                    settingsInstanceBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        await openInstanceSettings(group.instanceId, group.instanceName);
+                    });
+                    groupActions.appendChild(settingsInstanceBtn);
 
                     const groupBadge = document.createElement("span");
                     groupBadge.className = "badge rounded-pill " + (group.isSelected ? "text-bg-primary" : "text-bg-secondary");
@@ -1440,6 +1791,21 @@
                 applyPluginPanelWidth(pluginPanelWidth + (e.key === "ArrowLeft" ? step : -step));
                 savePluginPanelWidth(pluginPanelWidth).catch(() => { });
             });
+            instanceViewportWidthInput.addEventListener("input", () => {
+                if (!synchronizingAspectRatio)
+                    refreshInstanceSettingsAspectRatio();
+                syncInstanceHeightFromWidth();
+            });
+            instanceViewportHeightInput.addEventListener("input", () => {
+                if (!synchronizingAspectRatio)
+                    refreshInstanceSettingsAspectRatio();
+                syncInstanceWidthFromHeight();
+            });
+            instancePreserveAspectRatioInput.addEventListener("change", () => {
+                refreshInstanceSettingsAspectRatio();
+                syncInstanceHeightFromWidth();
+            });
+            instanceUseProgramUserAgentInput.addEventListener("change", syncInstanceUserAgentEditorState);
             liveToggleBtn.addEventListener("click", () => {
                 if (!screencastAvailable)
                     return;
@@ -1453,6 +1819,7 @@
 
             if (window.ResizeObserver && browserStage) {
                 const resizeObserver = new ResizeObserver(() => {
+                    scheduleCurrentInstanceViewportSync();
                     if (!liveDisplayEnabled)
                         return;
                     showCanvasOverlay("Resetting Canvas", true);
@@ -1461,6 +1828,7 @@
                 resizeObserver.observe(browserStage);
             } else {
                 window.addEventListener("resize", () => {
+                    scheduleCurrentInstanceViewportSync();
                     if (!liveDisplayEnabled)
                         return;
                     showCanvasOverlay("Resetting Canvas", true);
@@ -1560,22 +1928,94 @@
             function sendKey(type, e, text = "") {
                 if (conn.state !== signalR.HubConnectionState.Connected) return;
                 conn.invoke("SendKeyEvent", {
-                    type, key: e.key, code: e.code, text, modifiers: mods(e),
+                    type,
+                    key: e.key,
+                    code: e.code,
+                    text,
+                    modifiers: mods(e),
+                    windowsVirtualKeyCode: e.keyCode || 0,
+                    nativeVirtualKeyCode: e.keyCode || 0,
+                    autoRepeat: !!e.repeat,
+                    isKeypad: e.location === 3,
+                    isSystemKey: !!e.altKey,
                 }).catch(() => {});
             }
 
-            canvas.addEventListener("keydown", e => {
+            function releaseCanvasKeyboardCapture() {
+                canvasKeyboardCaptureActive = false;
+                canvas.blur();
+            }
+
+            function isEditableElement(target) {
+                if (!(target instanceof Element))
+                    return false;
+
+                const tagName = target.tagName.toUpperCase();
+                return target.isContentEditable || tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+            }
+
+            function isCanvasKeyboardBlockedByModal() {
+                return pluginArgumentModalElement.classList.contains("show")
+                    || screenshotPreviewModalElement.classList.contains("show")
+                    || pluginOutputModalElement.classList.contains("show")
+                    || instanceSettingsModalElement.classList.contains("show");
+            }
+
+            function shouldForwardCanvasKeyboardEvent(e) {
+                if (!canvasKeyboardCaptureActive || !liveDisplayEnabled || canvas.classList.contains("d-none") || isCanvasKeyboardBlockedByModal())
+                    return false;
+
+                if (isEditableElement(e.target) && e.target !== canvas)
+                    return false;
+
+                return true;
+            }
+
+            window.addEventListener("pointerdown", e => {
+                const target = e.target;
+                const activatedFromStage = target instanceof Node
+                    && !!browserStage
+                    && browserStage.contains(target)
+                    && !(tabsStatusPanel?.contains(target));
+
+                canvasKeyboardCaptureActive = activatedFromStage;
+                if (canvasKeyboardCaptureActive)
+                    canvas.focus();
+                else
+                    canvas.blur();
+            }, true);
+
+            window.addEventListener("blur", releaseCanvasKeyboardCapture);
+
+            window.addEventListener("keydown", e => {
+                if (canvasKeyboardCaptureActive
+                    && e.key === "Escape"
+                    && !e.ctrlKey
+                    && !e.altKey
+                    && !e.metaKey
+                    && !e.shiftKey) {
+                    e.preventDefault();
+                    releaseCanvasKeyboardCapture();
+                    return;
+                }
+
+                if (!shouldForwardCanvasKeyboardEvent(e))
+                    return;
+
                 e.preventDefault();
                 sendKey("rawKeyDown", e);
                 // 可打印字符额外补一个 char 事件，Chromium 才能正确输入文字
                 if (e.key.length === 1 && !e.ctrlKey && !e.metaKey)
                     sendKey("char", e, e.key);
-            });
+            }, true);
 
-            canvas.addEventListener("keyup", e => {
+            window.addEventListener("keyup", e => {
+                if (!shouldForwardCanvasKeyboardEvent(e))
+                    return;
+
                 e.preventDefault();
                 sendKey("keyUp", e);
-            });
+            }, true);
 
         }());
     </script>

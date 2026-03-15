@@ -24,8 +24,14 @@ public class PlayWrightWarpper
     private readonly Lock _syncRoot = new();
     private readonly ILogger<PlayWrightWarpper> _logger;
     private readonly ProgramSettingsService _programSettingsService;
+    private int _configuredViewportWidth = 1280;
+    private int _configuredViewportHeight = 800;
     private int _viewportWidth = 1280;
     private int _viewportHeight = 800;
+    private bool _autoResizeViewport;
+    private bool _preserveAspectRatio;
+    private bool _useProgramUserAgent = true;
+    private string? _customUserAgent;
 
     public static IPlaywright Playwright { get; } = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
     public string InstanceId { get; }
@@ -36,6 +42,12 @@ public class PlayWrightWarpper
     public string? SelectedPageId { get; private set; }
     public string UserDataDirectoryPath { get; private set; } = string.Empty;
     public bool IsHeadless { get; private set; }
+    public int ConfiguredViewportWidth => _configuredViewportWidth;
+    public int ConfiguredViewportHeight => _configuredViewportHeight;
+    public bool AutoResizeViewport => _autoResizeViewport;
+    public bool PreserveAspectRatio => _preserveAspectRatio;
+    public bool UseProgramUserAgent => _useProgramUserAgent;
+    public string? CustomUserAgent => _customUserAgent;
     public IBrowserContext BrowserContext { get; private set; }
     public IReadOnlyList<IPage> Pages => BrowserContext.Pages;
     public string? CurrentUrl => ActivePage?.Url;
@@ -81,7 +93,26 @@ public class PlayWrightWarpper
             : Path.GetFullPath(userDataDir);
 
         PrepareUserDataDirectory(configuredUserDataDir, ProgramSettings.GetLegacyUserDataDirectoryPath());
-        ActivateBrowserContext(CreateBrowserContextAsync(configuredUserDataDir, settings.Headless).GetAwaiter().GetResult(), configuredUserDataDir, settings.Headless);
+        ActivateBrowserContext(CreateBrowserContextAsync(configuredUserDataDir, settings.Headless, ResolveEffectiveUserAgent(settings)).GetAwaiter().GetResult(), configuredUserDataDir, settings.Headless);
+    }
+
+    private static string? NormalizeOptionalValue(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private string? ResolveEffectiveUserAgent(ProgramSettings settings)
+    {
+        var programUserAgent = NormalizeOptionalValue(settings.UserAgent);
+        if (!string.IsNullOrWhiteSpace(programUserAgent))
+        {
+            if (settings.AllowInstanceUserAgentOverride && !_useProgramUserAgent && !string.IsNullOrWhiteSpace(_customUserAgent))
+                return _customUserAgent;
+
+            return programUserAgent;
+        }
+
+        return !_useProgramUserAgent && !string.IsNullOrWhiteSpace(_customUserAgent)
+            ? _customUserAgent
+            : null;
     }
 
     private static bool IsHttpUri(Uri uri)
@@ -272,7 +303,7 @@ public class PlayWrightWarpper
         => !string.IsNullOrWhiteSpace(url)
             && url.StartsWith("chrome-error://chromewebdata/", StringComparison.OrdinalIgnoreCase);
 
-    private async Task<IBrowserContext> CreateBrowserContextAsync(string userDataDir, bool isHeadless)
+    private async Task<IBrowserContext> CreateBrowserContextAsync(string userDataDir, bool isHeadless, string? userAgent)
     {
         Directory.CreateDirectory(userDataDir);
         return await Playwright.Chromium.LaunchPersistentContextAsync(
@@ -284,6 +315,7 @@ public class PlayWrightWarpper
                     "--no-first-run",
                     "--disable-blink-features=AutomationControlled",
                 ],
+                UserAgent = userAgent,
                 ViewportSize = null
             });
     }
@@ -329,20 +361,45 @@ public class PlayWrightWarpper
     public async Task UpdateUserDataDirectoryAsync(string userDataDir)
         => await UpdateLaunchSettingsAsync(userDataDir, IsHeadless);
 
-    public async Task UpdateLaunchSettingsAsync(string userDataDir, bool isHeadless)
+    public BrowserInstanceViewportSettingsResponse GetViewportSettings()
+        => new(_configuredViewportWidth, _configuredViewportHeight, _autoResizeViewport, _preserveAspectRatio);
+
+    public async Task UpdateInstanceSettingsAsync(string userDataDir, bool isHeadless, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateUserData, int? displayWidth = null, int? displayHeight = null)
+    {
+        _configuredViewportWidth = Math.Max(320, viewportWidth);
+        _configuredViewportHeight = Math.Max(240, viewportHeight);
+        _autoResizeViewport = autoResizeViewport;
+        _preserveAspectRatio = preserveAspectRatio;
+        _useProgramUserAgent = useProgramUserAgent;
+        _customUserAgent = NormalizeOptionalValue(userAgent);
+
+        await UpdateLaunchSettingsAsync(userDataDir, isHeadless, migrateUserData);
+
+        if (_autoResizeViewport && displayWidth is > 0 && displayHeight is > 0)
+        {
+            await ApplyDisplayViewportSizeAsync(displayWidth.Value, displayHeight.Value);
+            return;
+        }
+
+        await ApplyConfiguredViewportSizeAsync();
+    }
+
+    public async Task UpdateLaunchSettingsAsync(string userDataDir, bool isHeadless, bool migrateUserData = true, bool forceReload = false)
     {
         var targetDirectory = Path.GetFullPath(userDataDir);
 
         await _launchSettingsSemaphore.WaitAsync();
         try
         {
-            if (string.Equals(UserDataDirectoryPath, targetDirectory, StringComparison.OrdinalIgnoreCase) && IsHeadless == isHeadless)
+            if (!forceReload && string.Equals(UserDataDirectoryPath, targetDirectory, StringComparison.OrdinalIgnoreCase) && IsHeadless == isHeadless)
                 return;
 
             var previousContext = BrowserContext;
             var previousUserDataDirectory = UserDataDirectoryPath;
             var previousIsHeadless = IsHeadless;
             var directoryChanged = !string.Equals(previousUserDataDirectory, targetDirectory, StringComparison.OrdinalIgnoreCase);
+            var settings = await _programSettingsService.GetAsync();
+            var effectiveUserAgent = ResolveEffectiveUserAgent(settings);
             IBrowserContext? nextContext = null;
 
             LastErrorMessage = null;
@@ -352,11 +409,12 @@ public class PlayWrightWarpper
                 if (previousContext != null)
                     await previousContext.CloseAsync();
 
-                PrepareUserDataDirectory(targetDirectory, previousUserDataDirectory);
-                nextContext = await CreateBrowserContextAsync(targetDirectory, isHeadless);
+                PrepareUserDataDirectory(targetDirectory, previousUserDataDirectory, migrateUserData);
+                nextContext = await CreateBrowserContextAsync(targetDirectory, isHeadless, effectiveUserAgent);
                 ActivateBrowserContext(nextContext, targetDirectory, isHeadless);
+                await ApplyConfiguredViewportSizeAsync();
 
-                _logger.LogInformation("浏览器启动设置已更新。UserDataDirectoryPath: {UserDataDirectoryPath}; Headless: {Headless}", targetDirectory, isHeadless);
+                _logger.LogInformation("浏览器启动设置已更新。UserDataDirectoryPath: {UserDataDirectoryPath}; Headless: {Headless}; UserAgent: {UserAgent}", targetDirectory, isHeadless, effectiveUserAgent ?? "(default)");
             }
             catch (Exception ex)
             {
@@ -375,13 +433,14 @@ public class PlayWrightWarpper
 
                 try
                 {
-                    if (directoryChanged)
-                        PrepareUserDataDirectory(previousUserDataDirectory, targetDirectory);
+                    if (directoryChanged && migrateUserData)
+                        PrepareUserDataDirectory(previousUserDataDirectory, targetDirectory, moveContents: true);
 
                     if (previousContext != null)
                     {
-                        var restoredContext = await CreateBrowserContextAsync(previousUserDataDirectory, previousIsHeadless);
+                        var restoredContext = await CreateBrowserContextAsync(previousUserDataDirectory, previousIsHeadless, effectiveUserAgent);
                         ActivateBrowserContext(restoredContext, previousUserDataDirectory, previousIsHeadless);
+                        await ApplyConfiguredViewportSizeAsync();
                         _logger.LogWarning("浏览器启动设置回滚成功。UserDataDirectoryPath: {UserDataDirectoryPath}; Headless: {Headless}", previousUserDataDirectory, previousIsHeadless);
                     }
                 }
@@ -400,11 +459,11 @@ public class PlayWrightWarpper
         }
     }
 
-    private void PrepareUserDataDirectory(string targetDirectory, string? sourceDirectory)
+    private void PrepareUserDataDirectory(string targetDirectory, string? sourceDirectory, bool moveContents = true)
     {
         Directory.CreateDirectory(targetDirectory);
 
-        if (string.IsNullOrWhiteSpace(sourceDirectory))
+        if (!moveContents || string.IsNullOrWhiteSpace(sourceDirectory))
             return;
 
         var normalizedSourceDirectory = Path.GetFullPath(sourceDirectory);
@@ -459,6 +518,44 @@ public class PlayWrightWarpper
 
         if (!Directory.EnumerateFileSystemEntries(sourceDirectory).Any())
             Directory.Delete(sourceDirectory, recursive: false);
+    }
+
+    private async Task ApplyViewportSizeInternalAsync(int width, int height)
+    {
+        _viewportWidth = Math.Max(320, width);
+        _viewportHeight = Math.Max(240, height);
+
+        foreach (var page in BrowserContext.Pages.ToList())
+            await ApplyViewportSizeAsync(page);
+    }
+
+    public Task ApplyConfiguredViewportSizeAsync()
+        => ApplyViewportSizeInternalAsync(_configuredViewportWidth, _configuredViewportHeight);
+
+    public async Task ApplyDisplayViewportSizeAsync(int displayWidth, int displayHeight)
+    {
+        if (!_autoResizeViewport)
+        {
+            await ApplyConfiguredViewportSizeAsync();
+            return;
+        }
+
+        var targetWidth = Math.Max(320, displayWidth);
+        var targetHeight = Math.Max(240, displayHeight);
+
+        if (_preserveAspectRatio)
+        {
+            var ratioWidth = Math.Max(1, _configuredViewportWidth);
+            var ratioHeight = Math.Max(1, _configuredViewportHeight);
+            var scale = Math.Min((double)targetWidth / ratioWidth, (double)targetHeight / ratioHeight);
+            if (scale <= 0)
+                scale = 1;
+
+            targetWidth = Math.Max(320, (int)Math.Round(ratioWidth * scale));
+            targetHeight = Math.Max(240, (int)Math.Round(ratioHeight * scale));
+        }
+
+        await ApplyViewportSizeInternalAsync(targetWidth, targetHeight);
     }
 
     private async Task ApplyViewportSizeAsync(IPage page)
@@ -686,11 +783,9 @@ public class PlayWrightWarpper
 
     public async Task SetViewportSizeAsync(int width, int height)
     {
-        _viewportWidth = Math.Max(320, width);
-        _viewportHeight = Math.Max(240, height);
-
-        foreach (var page in BrowserContext.Pages.ToList())
-            await ApplyViewportSizeAsync(page);
+        _configuredViewportWidth = Math.Max(320, width);
+        _configuredViewportHeight = Math.Max(240, height);
+        await ApplyConfiguredViewportSizeAsync();
     }
 
     private sealed class BrowserPageDiagnostics

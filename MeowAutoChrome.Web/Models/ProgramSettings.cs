@@ -36,6 +36,10 @@ public sealed class ProgramSettings
 
     public string UserDataDirectory { get; set; } = GetDefaultUserDataDirectoryPath();
 
+    public string? UserAgent { get; set; }
+
+    public bool AllowInstanceUserAgentOverride { get; set; }
+
     public bool Headless { get; set; } = true;
 }
 
@@ -54,6 +58,12 @@ public sealed class ProgramSettingsViewModel
     [Display(Name = "浏览器用户数据目录")]
     [Required(ErrorMessage = "请输入浏览器用户数据目录。")]
     public string UserDataDirectory { get; set; } = ProgramSettings.GetDefaultUserDataDirectoryPath();
+
+    [Display(Name = "全局 User-Agent")]
+    public string? UserAgent { get; set; }
+
+    [Display(Name = "允许实例覆盖全局 User-Agent")]
+    public bool AllowInstanceUserAgentOverride { get; set; }
 
     [Display(Name = "Headless 模式")]
     public bool Headless { get; set; } = true;

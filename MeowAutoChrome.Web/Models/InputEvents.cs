@@ -17,5 +17,10 @@ public record KeyEventData(
     string Key,        // e.g. "Enter", "a"
     string Code,       // e.g. "KeyA", "Enter"
     string? Text,      // printable text (char event only)
-    int Modifiers
+    int Modifiers,
+    int WindowsVirtualKeyCode,
+    int NativeVirtualKeyCode,
+    bool AutoRepeat,
+    bool IsKeypad,
+    bool IsSystemKey
 );

@@ -63,6 +63,9 @@ public sealed class ProgramSettingsService(IWebHostEnvironment environment)
             : settings.SearchUrlTemplate.Trim();
 
         settings.UserDataDirectory = NormalizeUserDataDirectory(settings.UserDataDirectory);
+        settings.UserAgent = string.IsNullOrWhiteSpace(settings.UserAgent)
+            ? null
+            : settings.UserAgent.Trim();
 
         settings.ScreencastFps = Math.Clamp(settings.ScreencastFps <= 0 ? ProgramSettings.DefaultScreencastFps : settings.ScreencastFps, 1, 60);
         settings.PluginPanelWidth = Math.Clamp(

@@ -89,6 +89,34 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
             .ToArray();
     }
 
+    public async Task<BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId)
+    {
+        if (!TryGetInstance(instanceId, out var instance))
+            return null;
+
+        var programSettings = await _programSettingsService.GetAsync();
+        var programUserAgent = NormalizeOptionalValue(programSettings.UserAgent);
+        var isUserAgentLocked = !string.IsNullOrWhiteSpace(programUserAgent) && !programSettings.AllowInstanceUserAgentOverride;
+        var effectiveUserAgent = ResolveEffectiveUserAgent(programUserAgent, programSettings.AllowInstanceUserAgentOverride, instance.UseProgramUserAgent, instance.CustomUserAgent);
+
+        return new BrowserInstanceSettingsResponse(
+            instance.InstanceId,
+            instance.DisplayName,
+            instance.UserDataDirectoryPath,
+            string.Equals(instance.InstanceId, CurrentInstanceId, StringComparison.OrdinalIgnoreCase),
+            instance.GetViewportSettings(),
+            new BrowserInstanceUserAgentSettingsResponse(
+                programUserAgent,
+                programSettings.AllowInstanceUserAgentOverride,
+                isUserAgentLocked || instance.UseProgramUserAgent,
+                instance.CustomUserAgent,
+                effectiveUserAgent,
+                isUserAgentLocked));
+    }
+
+    public BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
+        => CurrentInstance.GetViewportSettings();
+
     public IReadOnlyList<string> GetPluginInstanceIds(string pluginId)
         => SnapshotInstances()
             .Where(instance => string.Equals(instance.OwnerPluginId, pluginId, StringComparison.OrdinalIgnoreCase))
@@ -281,7 +309,7 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
             await instance.SetViewportSizeAsync(width, height);
     }
 
-    public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless)
+    public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false)
     {
         foreach (var instance in SnapshotInstances())
         {
@@ -289,8 +317,57 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
                 ? primaryUserDataDirectory
                 : instance.UserDataDirectoryPath;
 
-            await instance.UpdateLaunchSettingsAsync(targetUserDataDirectory, isHeadless);
+            await instance.UpdateLaunchSettingsAsync(targetUserDataDirectory, isHeadless, forceReload: forceReload);
         }
+    }
+
+    public async Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth = null, int? displayHeight = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!TryGetInstance(instanceId, out var instance))
+            return false;
+
+        var programSettings = await _programSettingsService.GetAsync();
+        var programUserAgent = NormalizeOptionalValue(programSettings.UserAgent);
+        if (!string.IsNullOrWhiteSpace(programUserAgent)
+            && !programSettings.AllowInstanceUserAgentOverride
+            && (!useProgramUserAgent || !string.IsNullOrWhiteSpace(userAgent)))
+        {
+            throw new InvalidOperationException("程序设置已强制指定 User-Agent，当前不允许实例覆盖。");
+        }
+
+        var resolvedUserDataDirectory = Path.GetFullPath(userDataDirectory.Trim());
+        if (IsUserDataDirectoryInUse(resolvedUserDataDirectory, instanceId))
+            throw new InvalidOperationException($"实例 {instance.DisplayName} 对应的用户数据目录已被占用，请改用其他目录。");
+
+        await instance.UpdateInstanceSettingsAsync(
+            resolvedUserDataDirectory,
+            instance.IsHeadless,
+            viewportWidth,
+            viewportHeight,
+            autoResizeViewport,
+            preserveAspectRatio,
+            useProgramUserAgent,
+            userAgent,
+            migrateExistingUserData,
+            displayWidth,
+            displayHeight);
+
+        if (string.Equals(instance.InstanceId, PrimaryInstanceId, StringComparison.OrdinalIgnoreCase))
+        {
+            var primaryProgramSettings = await _programSettingsService.GetAsync();
+            primaryProgramSettings.UserDataDirectory = resolvedUserDataDirectory;
+            await _programSettingsService.SaveAsync(primaryProgramSettings);
+        }
+
+        return true;
+    }
+
+    public async Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await CurrentInstance.ApplyDisplayViewportSizeAsync(width, height);
     }
 
     private PlayWrightWarpper CreateWrapper(string instanceId, string displayName, string color, string? ownerPluginId, string? userDataDirectory)
@@ -327,10 +404,33 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
             "profiles",
             SanitizeProfileName(instanceName));
 
-    private bool IsUserDataDirectoryInUse(string userDataDirectory)
+    private static string? NormalizeOptionalValue(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? ResolveEffectiveUserAgent(string? programUserAgent, bool allowInstanceOverride, bool useProgramUserAgent, string? customUserAgent)
+    {
+        var normalizedProgramUserAgent = NormalizeOptionalValue(programUserAgent);
+        var normalizedCustomUserAgent = NormalizeOptionalValue(customUserAgent);
+
+        if (!string.IsNullOrWhiteSpace(normalizedProgramUserAgent))
+        {
+            if (allowInstanceOverride && !useProgramUserAgent && !string.IsNullOrWhiteSpace(normalizedCustomUserAgent))
+                return normalizedCustomUserAgent;
+
+            return normalizedProgramUserAgent;
+        }
+
+        return !useProgramUserAgent && !string.IsNullOrWhiteSpace(normalizedCustomUserAgent)
+            ? normalizedCustomUserAgent
+            : null;
+    }
+
+    private bool IsUserDataDirectoryInUse(string userDataDirectory, string? excludedInstanceId = null)
     {
         var normalizedTarget = Path.GetFullPath(userDataDirectory);
-        return SnapshotInstances().Any(instance => string.Equals(Path.GetFullPath(instance.UserDataDirectoryPath), normalizedTarget, StringComparison.OrdinalIgnoreCase));
+        return SnapshotInstances().Any(instance =>
+            !string.Equals(instance.InstanceId, excludedInstanceId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Path.GetFullPath(instance.UserDataDirectoryPath), normalizedTarget, StringComparison.OrdinalIgnoreCase));
     }
 
     private PlayWrightWarpper? FindInstanceByTabId(string tabId)

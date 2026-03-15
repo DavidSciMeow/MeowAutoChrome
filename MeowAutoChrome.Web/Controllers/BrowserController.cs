@@ -44,12 +44,73 @@ namespace MeowAutoChrome.Web.Controllers
             return Ok(await BuildStatusAsync());
         }
 
+        [HttpGet]
+        public async Task<IActionResult> InstanceSettings([FromQuery] string instanceId)
+        {
+            if (string.IsNullOrWhiteSpace(instanceId))
+                return BadRequest();
+
+            var settings = await browserInstances.GetInstanceSettingsAsync(instanceId);
+            return settings is null ? NotFound() : Ok(settings);
+        }
+
         [HttpPost]
         public async Task<IActionResult> Navigate([FromBody] BrowserNavigateRequest request)
         {
             await browserInstances.NavigateAsync(request.Url);
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> InstanceSettings([FromBody] BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request.InstanceId)
+                || string.IsNullOrWhiteSpace(request.UserDataDirectory)
+                || request.ViewportWidth <= 0
+                || request.ViewportHeight <= 0)
+            {
+                return BadRequest();
+            }
+
+            bool updated;
+            try
+            {
+                updated = await browserInstances.UpdateInstanceSettingsAsync(
+                    request.InstanceId,
+                    request.UserDataDirectory,
+                    request.ViewportWidth,
+                    request.ViewportHeight,
+                    request.AutoResizeViewport,
+                    request.PreserveAspectRatio,
+                    request.UseProgramUserAgent,
+                    request.UserAgent,
+                    request.MigrateExistingUserData,
+                    request.DisplayWidth,
+                    request.DisplayHeight,
+                    cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+
+            if (!updated)
+                return NotFound();
+
+            await screencastService.RefreshTargetAsync();
+            return Ok(await BuildStatusAsync());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CurrentInstanceViewport([FromBody] BrowserViewportSyncRequest request, CancellationToken cancellationToken)
+        {
+            if (request.Width <= 0 || request.Height <= 0)
+                return BadRequest();
+
+            await browserInstances.SyncCurrentInstanceViewportAsync(request.Width, request.Height, cancellationToken);
+            await screencastService.RefreshTargetAsync();
+            return Ok(new { synced = true });
         }
 
         [HttpPost]
@@ -158,7 +219,9 @@ namespace MeowAutoChrome.Web.Controllers
                 metrics.MemoryUsageMb,
                 browserInstances.TotalPageCount,
                 settings.PluginPanelWidth,
-                await browserInstances.GetTabsAsync());
+                await browserInstances.GetTabsAsync(),
+                browserInstances.CurrentInstanceId,
+                browserInstances.GetCurrentInstanceViewportSettings());
         }
 
         private string? GetBrowserHubConnectionId()

@@ -172,7 +172,13 @@ public class ScreencastService
             ["key"] = d.Key,
             ["code"] = d.Code,
             ["text"] = d.Text ?? "",
+            ["unmodifiedText"] = d.Text ?? "",
             ["modifiers"] = d.Modifiers,
+            ["windowsVirtualKeyCode"] = d.WindowsVirtualKeyCode,
+            ["nativeVirtualKeyCode"] = d.NativeVirtualKeyCode,
+            ["autoRepeat"] = d.AutoRepeat,
+            ["isKeypad"] = d.IsKeypad,
+            ["isSystemKey"] = d.IsSystemKey,
         };
 
         try { await s.SendAsync("Input.dispatchKeyEvent", args); }
@@ -198,8 +204,6 @@ public class ScreencastService
             _frameIntervalMs = frameIntervalMs;
 
             var restartNeeded = wasEnabled != Enabled || widthChanged || heightChanged;
-
-            await browserInstances.SetViewportSizeAsync(_maxWidth, _maxHeight);
 
             if (!restartNeeded || _clientCount <= 0)
                 return;
