@@ -13,11 +13,12 @@ public sealed class MultiInstanceExamplePlugin : BrowserPluginBase
     [BrowserPluginAction("create-instance", "创建独立实例", Description = "创建一个新的独立 Chromium 实例，可选打开初始化地址。")]
     public async Task<BrowserPluginActionResult> CreateInstanceAsync(
         [BrowserPluginInput("实例名称", Description = "留空时自动生成。", Name = "displayName")] string? displayName = null,
-        [BrowserPluginInput("初始化地址", Description = "留空时默认打开 about:blank。", Name = "url")] string? url = null)
+        [BrowserPluginInput("初始化地址", Description = "留空时默认打开 about:blank。", Name = "url")] string? url = null,
+        [BrowserPluginInput("UserData 目录", Description = "留空时按实例名称自动查找或创建对应目录。", Name = "userDataDirectory")] string? userDataDirectory = null)
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
-        var instanceId = await CurrentBrowserInstanceManager.CreateBrowserInstanceAsync(PluginId, displayName, CurrentCancellationToken);
+        var instanceId = await CurrentBrowserInstanceManager.CreateBrowserInstanceAsync(PluginId, displayName, userDataDirectory, CurrentCancellationToken);
         var color = CurrentBrowserInstanceManager.GetInstanceColor(instanceId) ?? "#2563eb";
         var context = CurrentBrowserInstanceManager.GetBrowserContext(instanceId);
         if (context is not null)
@@ -36,6 +37,7 @@ public sealed class MultiInstanceExamplePlugin : BrowserPluginBase
                 ["instanceId"] = instanceId,
                 ["color"] = color,
                 ["displayName"] = displayName,
+                ["userDataDirectory"] = userDataDirectory,
                 ["currentInstanceId"] = CurrentBrowserInstanceId,
             });
     }

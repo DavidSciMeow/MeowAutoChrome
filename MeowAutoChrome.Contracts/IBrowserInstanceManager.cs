@@ -21,7 +21,7 @@ public interface IBrowserInstanceManager
     string? GetInstanceColor(string instanceId);
     IBrowserContext? GetBrowserContext(string instanceId);
     IPage? GetActivePage(string instanceId);
-    Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, CancellationToken cancellationToken = default);
+    Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, CancellationToken cancellationToken = default);
     Task<bool> RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
     Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
 }

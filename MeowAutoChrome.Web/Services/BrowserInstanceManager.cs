@@ -9,6 +9,12 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
 {
     private const string PrimaryInstanceId = "default";
     private const string PrimaryInstanceName = "主实例";
+    private static readonly HashSet<string> ReservedFileNames =
+    [
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    ];
     private static readonly string[] InstanceColors =
     [
         "#2563eb",
@@ -98,7 +104,7 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
     public IPage? GetActivePage(string instanceId)
         => TryGetInstance(instanceId, out var instance) ? instance.ActivePage : null;
 
-    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, CancellationToken cancellationToken = default)
+    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -108,22 +114,23 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
         var instanceId = $"{SanitizePathSegment(ownerPluginId)}-{Guid.NewGuid():N}";
         var color = GetNextColor();
         var instanceName = string.IsNullOrWhiteSpace(displayName)
-            ? $"{ownerPluginId} #{GetPluginInstanceIds(ownerPluginId).Count + 1}"
+            ? BuildDefaultInstanceName(ownerPluginId)
             : displayName.Trim();
-        var userDataDirectory = Path.Combine(
-            ProgramSettings.GetAppDataDirectoryPath(),
-            "instances",
-            SanitizePathSegment(ownerPluginId),
-            instanceId);
+        var resolvedUserDataDirectory = string.IsNullOrWhiteSpace(userDataDirectory)
+            ? ResolveDefaultUserDataDirectory(ownerPluginId, instanceName)
+            : Path.GetFullPath(userDataDirectory.Trim());
 
-        var instance = CreateWrapper(instanceId, instanceName, color, ownerPluginId, userDataDirectory);
+        if (IsUserDataDirectoryInUse(resolvedUserDataDirectory))
+            throw new InvalidOperationException($"实例 {instanceName} 对应的用户数据目录已被占用，请先关闭同名实例或改用其他实例名。");
+
+        var instance = CreateWrapper(instanceId, instanceName, color, ownerPluginId, resolvedUserDataDirectory);
 
         lock (_syncRoot)
         {
             _instances[instanceId] = instance;
         }
 
-        _logger.LogInformation("已创建浏览器实例。InstanceId: {InstanceId}; OwnerPluginId: {OwnerPluginId}; Color: {Color}", instanceId, ownerPluginId, color);
+        _logger.LogInformation("已创建浏览器实例。InstanceId: {InstanceId}; OwnerPluginId: {OwnerPluginId}; DisplayName: {DisplayName}; UserDataDirectory: {UserDataDirectory}; Color: {Color}", instanceId, ownerPluginId, instanceName, resolvedUserDataDirectory, color);
         return instanceId;
     }
 
@@ -309,6 +316,23 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
             return _instances.Values.ToArray();
     }
 
+    private static string BuildDefaultInstanceName(string ownerPluginId)
+        => $"{SanitizeProfileName(ownerPluginId)}-{Guid.NewGuid():N[..8]}";
+
+    private static string ResolveDefaultUserDataDirectory(string ownerPluginId, string instanceName)
+        => Path.Combine(
+            ProgramSettings.GetAppDataDirectoryPath(),
+            "instances",
+            SanitizePathSegment(ownerPluginId),
+            "profiles",
+            SanitizeProfileName(instanceName));
+
+    private bool IsUserDataDirectoryInUse(string userDataDirectory)
+    {
+        var normalizedTarget = Path.GetFullPath(userDataDirectory);
+        return SnapshotInstances().Any(instance => string.Equals(Path.GetFullPath(instance.UserDataDirectoryPath), normalizedTarget, StringComparison.OrdinalIgnoreCase));
+    }
+
     private PlayWrightWarpper? FindInstanceByTabId(string tabId)
         => SnapshotInstances().FirstOrDefault(instance => instance.ContainsTab(tabId));
 
@@ -327,5 +351,26 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
         var invalidChars = Path.GetInvalidFileNameChars();
         var sanitized = new string(value.Trim().Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray());
         return string.IsNullOrWhiteSpace(sanitized) ? "instance" : sanitized;
+    }
+
+    private static string SanitizeProfileName(string value)
+    {
+        var sanitized = new string((value ?? string.Empty)
+            .Trim()
+            .Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '-')
+            .ToArray());
+
+        while (sanitized.Contains("--", StringComparison.Ordinal))
+            sanitized = sanitized.Replace("--", "-", StringComparison.Ordinal);
+
+        sanitized = sanitized.Trim('-', '.', ' ');
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+            sanitized = "instance";
+
+        if (ReservedFileNames.Contains(sanitized.ToUpperInvariant()))
+            sanitized = "instance-" + sanitized.ToLowerInvariant();
+
+        return sanitized;
     }
 }
