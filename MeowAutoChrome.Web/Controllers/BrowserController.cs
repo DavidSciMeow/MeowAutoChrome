@@ -9,6 +9,8 @@ namespace MeowAutoChrome.Web.Controllers
 {
     public class BrowserController(BrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, BrowserPluginHost pluginHost, ResourceMetricsService resourceMetricsService, ProgramSettingsService programSettingsService) : Controller
     {
+        private const string BrowserHubConnectionIdHeaderName = "X-BrowserHub-ConnectionId";
+
         public IActionResult Index() => View();
 
         [HttpGet]
@@ -21,7 +23,7 @@ namespace MeowAutoChrome.Web.Controllers
             if (string.IsNullOrWhiteSpace(request.PluginId) || string.IsNullOrWhiteSpace(request.Command))
                 return BadRequest();
 
-            var result = await pluginHost.ControlAsync(request.PluginId, request.Command, request.Arguments, cancellationToken);
+            var result = await pluginHost.ControlAsync(request.PluginId, request.Command, request.Arguments, GetBrowserHubConnectionId(), cancellationToken);
             return result is null ? NotFound() : Ok(result);
         }
 
@@ -31,7 +33,7 @@ namespace MeowAutoChrome.Web.Controllers
             if (string.IsNullOrWhiteSpace(request.PluginId) || string.IsNullOrWhiteSpace(request.FunctionId))
                 return BadRequest();
 
-            var result = await pluginHost.ExecuteAsync(request.PluginId, request.FunctionId, request.Arguments, cancellationToken);
+            var result = await pluginHost.ExecuteAsync(request.PluginId, request.FunctionId, request.Arguments, GetBrowserHubConnectionId(), cancellationToken);
             return result is null ? NotFound() : Ok(result);
         }
 
@@ -146,6 +148,15 @@ namespace MeowAutoChrome.Web.Controllers
                 browserInstances.TotalPageCount,
                 settings.PluginPanelWidth,
                 await browserInstances.GetTabsAsync());
+        }
+
+        private string? GetBrowserHubConnectionId()
+        {
+            if (!Request.Headers.TryGetValue(BrowserHubConnectionIdHeaderName, out var values))
+                return null;
+
+            var connectionId = values.FirstOrDefault()?.Trim();
+            return string.IsNullOrWhiteSpace(connectionId) ? null : connectionId;
         }
     }
 }

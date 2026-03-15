@@ -18,6 +18,8 @@ public abstract class BrowserPluginBase : IBrowserPlugin
     protected string CurrentBrowserInstanceId => HostContext?.BrowserInstanceId ?? throw new InvalidOperationException("宿主尚未提供 BrowserInstanceId。");
     protected IBrowserInstanceManager CurrentBrowserInstanceManager => HostContext?.BrowserInstanceManager ?? throw new InvalidOperationException("宿主尚未提供 BrowserInstanceManager。");
     protected IReadOnlyDictionary<string, string?> CurrentArguments => HostContext?.Arguments ?? EmptyArguments;
+    protected string CurrentPluginId => HostContext?.PluginId ?? throw new InvalidOperationException("宿主尚未提供 PluginId。");
+    protected string CurrentTargetId => HostContext?.TargetId ?? throw new InvalidOperationException("宿主尚未提供 TargetId。");
     protected CancellationToken CurrentCancellationToken => HostContext?.CancellationToken ?? CancellationToken.None;
 
     protected virtual string PluginName => "插件";
@@ -33,6 +35,25 @@ public abstract class BrowserPluginBase : IBrowserPlugin
     private static readonly IReadOnlyDictionary<string, string?> EmptyArguments = new Dictionary<string, string?>();
 
     protected IPage RequireActivePage() => CurrentActivePage ?? throw new InvalidOperationException("宿主尚未提供活动页面。");
+
+    protected Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = true)
+    {
+        if (HostContext is null)
+            return Task.CompletedTask;
+
+        var payload = new Dictionary<string, string?>
+        {
+            ["state"] = State.ToString(),
+        };
+
+        if (data is not null)
+        {
+            foreach (var pair in data)
+                payload[pair.Key] = pair.Value;
+        }
+
+        return HostContext.PublishUpdateAsync(message, payload, openModal);
+    }
 
     public virtual Task<BrowserPluginActionResult> StartAsync()
     {

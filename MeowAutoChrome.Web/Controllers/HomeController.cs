@@ -1,13 +1,12 @@
 ﻿using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
-using MeowAutoChrome.Web.Warpper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace MeowAutoChrome.Web.Controllers
 {
-    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService, AppLogService appLogService, PlayWrightWarpper browser) : Controller
+    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService, AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
     {
         private static int FpsToInterval(int fps)
             => Math.Max(16, (int)Math.Round(1000d / Math.Clamp(fps, 1, 60)));
@@ -34,7 +33,7 @@ namespace MeowAutoChrome.Web.Controllers
 
             try
             {
-                var currentUserDataDirectory = Path.GetFullPath(browser.UserDataDirectoryPath);
+                var currentUserDataDirectory = Path.GetFullPath(browserInstances.PrimaryInstance.UserDataDirectoryPath);
                 var targetUserDataDirectory = Path.GetFullPath(model.UserDataDirectory);
 
                 if (IsNestedDirectory(currentUserDataDirectory, targetUserDataDirectory) || IsNestedDirectory(targetUserDataDirectory, currentUserDataDirectory))
@@ -67,10 +66,10 @@ namespace MeowAutoChrome.Web.Controllers
 
             await programSettingsService.SaveAsync(settings);
 
-            var userDataDirectoryChanged = !string.Equals(browser.UserDataDirectoryPath, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
-            var headlessChanged = browser.IsHeadless != settings.Headless;
+            var userDataDirectoryChanged = !string.Equals(browserInstances.PrimaryInstance.UserDataDirectoryPath, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
+            var headlessChanged = browserInstances.PrimaryInstance.IsHeadless != settings.Headless;
             if (userDataDirectoryChanged || headlessChanged)
-                await browser.UpdateLaunchSettingsAsync(settings.UserDataDirectory, settings.Headless);
+                await browserInstances.UpdateLaunchSettingsAsync(settings.UserDataDirectory, settings.Headless);
 
             await screencastService.UpdateSettingsAsync(
                 screencastService.RequestedEnabled,

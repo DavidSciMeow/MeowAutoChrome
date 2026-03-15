@@ -22,7 +22,7 @@ public sealed class MultiInstanceExamplePlugin : BrowserPluginBase
         var context = CurrentBrowserInstanceManager.GetBrowserContext(instanceId);
         if (context is not null)
         {
-            var page = await context.NewPageAsync();
+            var page = CurrentBrowserInstanceManager.GetActivePage(instanceId) ?? await context.NewPageAsync();
             if (!string.IsNullOrWhiteSpace(url))
                 await page.GotoAsync(url.Trim());
         }

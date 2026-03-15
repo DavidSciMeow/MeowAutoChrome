@@ -1,9 +1,11 @@
 ﻿using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.Attributes;
+using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Warpper;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using Microsoft.AspNetCore.SignalR;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
@@ -14,7 +16,7 @@ using System.Runtime.Loader;
 
 namespace MeowAutoChrome.Web.Services;
 
-public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, IWebHostEnvironment environment, ILogger<BrowserPluginHost> logger)
+public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, IWebHostEnvironment environment, IHubContext<BrowserHub> browserHub, ILogger<BrowserPluginHost> logger)
 {
     private static readonly string BrowserPluginAttributeFullName = typeof(BrowserPluginAttribute).FullName ?? nameof(BrowserPluginAttribute);
     private readonly string _pluginRootPath = Path.Combine(AppContext.BaseDirectory, "Plugins");
@@ -44,7 +46,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     public IReadOnlyList<BrowserPluginDescriptor> GetPlugins()
         => GetPluginCatalog().Plugins;
 
-    public async Task<BrowserPluginExecutionResponse?> ControlAsync(string pluginId, string command, IReadOnlyDictionary<string, string?>? arguments, CancellationToken cancellationToken = default)
+    public async Task<BrowserPluginExecutionResponse?> ControlAsync(string pluginId, string command, IReadOnlyDictionary<string, string?>? arguments, string? connectionId = null, CancellationToken cancellationToken = default)
     {
         var plugins = DiscoverPlugins();
 
@@ -60,7 +62,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             browserInstances.CurrentInstanceId,
             browserInstances,
             normalizedArguments,
-            cancellationToken);
+            plugin.Id,
+            command,
+            cancellationToken,
+            (message, data, openModal) => PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, cancellationToken));
 
         var result = await ExecuteWithHostContextAsync(
             instance,
@@ -78,7 +83,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return new BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
 
-    public async Task<BrowserPluginExecutionResponse?> ExecuteAsync(string pluginId, string functionId, IReadOnlyDictionary<string, string?>? arguments, CancellationToken cancellationToken = default)
+    public async Task<BrowserPluginExecutionResponse?> ExecuteAsync(string pluginId, string functionId, IReadOnlyDictionary<string, string?>? arguments, string? connectionId = null, CancellationToken cancellationToken = default)
     {
         var plugins = DiscoverPlugins();
 
@@ -98,7 +103,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             browserInstances.CurrentInstanceId,
             browserInstances,
             normalizedArguments,
-            cancellationToken);
+            plugin.Id,
+            action.Id,
+            cancellationToken,
+            (message, data, openModal) => PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, cancellationToken));
 
         var result = await ExecuteWithHostContextAsync(
             instance,
@@ -114,6 +122,23 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             cancellationToken);
 
         return new BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
+    }
+
+    private Task PublishPluginOutputAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool openModal, string? connectionId, CancellationToken cancellationToken)
+    {
+        var payload = new BrowserPluginOutputUpdate(
+            pluginId,
+            targetId,
+            message,
+            data ?? new Dictionary<string, string?>(),
+            openModal,
+            DateTimeOffset.UtcNow);
+
+        var clients = string.IsNullOrWhiteSpace(connectionId)
+            ? browserHub.Clients.All
+            : browserHub.Clients.Client(connectionId);
+
+        return clients.SendAsync("ReceivePluginOutput", payload, cancellationToken);
     }
 
     private IReadOnlyList<RuntimeBrowserPlugin> DiscoverPlugins()

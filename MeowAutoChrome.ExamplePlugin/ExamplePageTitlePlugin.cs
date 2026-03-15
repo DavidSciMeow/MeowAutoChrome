@@ -94,5 +94,52 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
                 ["pageCount"] = CurrentBrowserContext.Pages.Count.ToString(),
             });
     }
+
+    [BrowserPluginAction("generate-letter", "生成信件", Description = "按当前页面标题和地址生成一封示例信件，并实时推送进度。")]
+    public async Task<BrowserPluginActionResult> GenerateLetterAsync(
+        [BrowserPluginInput("收件人", Description = "留空时默认写作“朋友”。", Name = "recipient")] string? recipient = null)
+    {
+        CurrentCancellationToken.ThrowIfCancellationRequested();
+
+        if (CurrentActivePage is null)
+            return this.OkResult("当前没有活动页面，无法生成信件。");
+
+        var page = RequireActivePage();
+        var normalizedRecipient = string.IsNullOrWhiteSpace(recipient) ? "朋友" : recipient.Trim();
+
+        await PublishUpdateAsync("正在读取页面标题…", new Dictionary<string, string?>
+        {
+            ["step"] = "1/3",
+            ["recipient"] = normalizedRecipient,
+        });
+        await Task.Delay(150, CurrentCancellationToken);
+
+        var title = await page.EvaluateAsync<string?>("() => document?.title ?? null");
+        var normalizedTitle = string.IsNullOrWhiteSpace(title) ? "未命名页面" : title.Trim();
+
+        await PublishUpdateAsync("正在整理页面地址…", new Dictionary<string, string?>
+        {
+            ["step"] = "2/3",
+            ["title"] = normalizedTitle,
+            ["url"] = page.Url,
+        });
+        await Task.Delay(150, CurrentCancellationToken);
+
+        var letter = $"亲爱的{normalizedRecipient}：\n\n我刚刚浏览了一个页面《{normalizedTitle}》。\n如果你也想看看，可以打开：{page.Url}\n\n祝好。";
+
+        await PublishUpdateAsync("正在生成信件正文…", new Dictionary<string, string?>
+        {
+            ["step"] = "3/3",
+            ["letter"] = letter,
+        });
+
+        return this.OkResult("信件已生成。", new Dictionary<string, string?>
+        {
+            ["recipient"] = normalizedRecipient,
+            ["title"] = normalizedTitle,
+            ["url"] = page.Url,
+            ["letter"] = letter,
+        });
+    }
 }
 

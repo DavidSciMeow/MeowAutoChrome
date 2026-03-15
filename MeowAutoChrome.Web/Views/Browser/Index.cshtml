@@ -67,7 +67,6 @@
             <div class="card-header">插件区</div>
             <div class="card-body">
                 <div id="pluginHost" class="vstack gap-3 small text-muted"></div>
-                <div id="pluginResult" class="alert alert-secondary d-none mt-3 mb-0 small"></div>
             </div>
         </div>
     </div>
@@ -87,6 +86,29 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="pluginArgumentSubmitBtn">执行</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="pluginOutputModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pluginOutputModalTitle">插件输出</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pluginOutputModalSummary" class="text-muted small mb-3 d-none"></div>
+                <div class="border rounded p-3 bg-light-subtle mb-3">
+                    <div class="fw-semibold small mb-2">当前返回值</div>
+                    <div id="pluginOutputModalData" class="vstack gap-2 small"></div>
+                </div>
+                <div class="fw-semibold small mb-2">输出时间线</div>
+                <div id="pluginOutputModalEntries" class="vstack gap-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
             </div>
         </div>
     </div>
@@ -129,17 +151,25 @@
             const liveToggleBtn = document.getElementById("liveToggleBtn");
             const tabsStatusPanel = document.getElementById("tabsStatusPanel");
             const pluginHost = document.getElementById("pluginHost");
-            const pluginResult = document.getElementById("pluginResult");
             const pluginArgumentModalElement = document.getElementById("pluginArgumentModal");
             const screenshotPreviewModalElement = document.getElementById("screenshotPreviewModal");
+            const pluginOutputModalElement = document.getElementById("pluginOutputModal");
             const screenshotPreviewImage = document.getElementById("screenshotPreviewImage");
             const pluginArgumentModalTitle = document.getElementById("pluginArgumentModalTitle");
             const pluginArgumentModalDescription = document.getElementById("pluginArgumentModalDescription");
             const pluginArgumentForm = document.getElementById("pluginArgumentForm");
             const pluginArgumentSubmitBtn = document.getElementById("pluginArgumentSubmitBtn");
+            const pluginOutputModalTitle = document.getElementById("pluginOutputModalTitle");
+            const pluginOutputModalSummary = document.getElementById("pluginOutputModalSummary");
+            const pluginOutputModalData = document.getElementById("pluginOutputModalData");
+            const pluginOutputModalEntries = document.getElementById("pluginOutputModalEntries");
             const shotBtn = document.getElementById("shotBtn");
             const pluginArgumentModal = pluginArgumentModalElement ? new bootstrap.Modal(pluginArgumentModalElement) : null;
             const screenshotPreviewModal = screenshotPreviewModalElement ? new bootstrap.Modal(screenshotPreviewModalElement) : null;
+            const pluginOutputModal = pluginOutputModalElement ? new bootstrap.Modal(pluginOutputModalElement) : null;
+            const pluginCatalog = new Map();
+            const pluginOutputStore = new Map();
+            const pluginOutputUi = new Map();
             let statusBusy = false;
             let isEditingUrl = false;
             let liveDisplayEnabled = true;
@@ -152,6 +182,8 @@
             let pluginPanelWidth = @MeowAutoChrome.Web.Models.ProgramSettings.DefaultPluginPanelWidth;
             let pointerResizeActive = false;
             let pendingPluginInvocation = null;
+            let activePluginOutputPluginId = null;
+            let browserHubConnectionId = null;
             let screenshotPreviewUrl = null;
 
             function clampPluginPanelWidth(width) {
@@ -264,15 +296,25 @@
                 noSig.style.display = "flex";
             });
 
+            conn.on("ReceivePluginOutput", update => {
+                applyPluginOutputUpdate(update);
+            });
+
             conn.onreconnecting(() => { status.textContent = "重连中..."; status.className = "badge bg-warning text-dark"; });
-            conn.onreconnected(()  => { status.textContent = "已连接";   status.className = "badge bg-success"; });
+            conn.onreconnected(connectionId  => {
+                browserHubConnectionId = connectionId || conn.connectionId || null;
+                status.textContent = "已连接";
+                status.className = "badge bg-success";
+            });
             conn.onclose(()        => {
+                browserHubConnectionId = null;
                 status.textContent = "已断开"; status.className = "badge bg-danger";
                 noSig.style.display = "flex";
             });
 
             conn.start()
                 .then(async () => {
+                    browserHubConnectionId = conn.connectionId || null;
                     status.textContent = "已连接";
                     status.className = "badge bg-success";
                     await refreshStatus();
@@ -282,9 +324,13 @@
                 .catch(e  => { status.textContent = "连接失败"; status.className = "badge bg-danger"; console.error(e); });
 
             async function postJson(url, body) {
+                const headers = { "Content-Type": "application/json" };
+                if (browserHubConnectionId)
+                    headers["X-BrowserHub-ConnectionId"] = browserHubConnectionId;
+
                 const response = await fetch(url, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers,
                     body: JSON.stringify(body ?? {})
                 });
 
@@ -387,23 +433,180 @@
                 }
             }
 
-            function renderPluginResult(result) {
-                pluginResult.replaceChildren();
+            function formatPluginOutputTime(timestampUtc) {
+                if (!timestampUtc)
+                    return "";
 
-                if (result.message) {
-                    const summary = document.createElement("div");
-                    summary.className = "fw-semibold mb-2";
-                    summary.textContent = result.message;
-                    pluginResult.appendChild(summary);
+                const date = new Date(timestampUtc);
+                return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
+            }
+
+            function getPluginTarget(plugin, targetId) {
+                if (!plugin || !targetId)
+                    return null;
+
+                return (plugin.controls || []).find(control => control.command === targetId)
+                    || (plugin.functions || []).find(fn => fn.id === targetId)
+                    || null;
+            }
+
+            function summarizePluginOutput(message, data) {
+                if (message)
+                    return message;
+
+                const firstEntry = Object.entries(data || {})[0];
+                return firstEntry ? (firstEntry[0] + ": " + (firstEntry[1] || "")) : "暂无返回值";
+            }
+
+            function renderPluginOutputRows(container, data, emptyText) {
+                container.replaceChildren();
+
+                const entries = Object.entries(data || {});
+                if (!entries.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "plugin-output-empty";
+                    empty.textContent = emptyText;
+                    container.appendChild(empty);
+                    return;
                 }
 
-                for (const [key, value] of Object.entries(result.data || {})) {
+                for (const [key, value] of entries) {
                     const row = document.createElement("div");
-                    row.textContent = key + ": " + (value || "");
-                    pluginResult.appendChild(row);
+                    row.className = "plugin-output-row";
+
+                    const label = document.createElement("div");
+                    label.className = "plugin-output-label";
+                    label.textContent = key;
+
+                    const content = document.createElement("div");
+                    content.className = "plugin-output-value";
+                    content.textContent = value || "";
+
+                    row.appendChild(label);
+                    row.appendChild(content);
+                    container.appendChild(row);
+                }
+            }
+
+            function syncPluginOutputUi(pluginId) {
+                const ui = pluginOutputUi.get(pluginId);
+                if (!ui)
+                    return;
+
+                const output = pluginOutputStore.get(pluginId);
+                ui.button.disabled = !output;
+
+                if (!output) {
+                    ui.badge.classList.add("d-none");
+                    return;
                 }
 
-                pluginResult.classList.remove("d-none");
+                const resultCount = Math.min((output.entries || []).length, 99);
+                ui.badge.textContent = resultCount > 0 ? String(resultCount) : "";
+                ui.badge.classList.toggle("d-none", resultCount === 0);
+            }
+
+            function renderPluginOutputModal(pluginId) {
+                const output = pluginOutputStore.get(pluginId);
+                if (!output)
+                    return;
+
+                const plugin = pluginCatalog.get(pluginId);
+                const target = getPluginTarget(plugin, output.targetId);
+                pluginOutputModalTitle.textContent = plugin?.name
+                    ? plugin.name + (target?.name ? " · " + target.name : "")
+                    : "插件输出";
+
+                pluginOutputModalSummary.textContent = [formatPluginOutputTime(output.updatedAt), summarizePluginOutput(output.message, output.data)]
+                    .filter(Boolean)
+                    .join(" · ");
+                pluginOutputModalSummary.classList.toggle("d-none", !pluginOutputModalSummary.textContent);
+
+                renderPluginOutputRows(pluginOutputModalData, output.data, "当前还没有结构化返回值。");
+                pluginOutputModalEntries.replaceChildren();
+
+                if (!(output.entries || []).length) {
+                    const empty = document.createElement("div");
+                    empty.className = "plugin-output-empty";
+                    empty.textContent = "还没有输出记录。";
+                    pluginOutputModalEntries.appendChild(empty);
+                    return;
+                }
+
+                for (const entry of output.entries) {
+                    const item = document.createElement("div");
+                    item.className = "plugin-output-entry";
+
+                    const header = document.createElement("div");
+                    header.className = "d-flex justify-content-between align-items-start gap-2 mb-2";
+
+                    const name = document.createElement("div");
+                    name.className = "fw-semibold small";
+                    name.textContent = getPluginTarget(plugin, entry.targetId)?.name || entry.targetId || "插件输出";
+
+                    const time = document.createElement("div");
+                    time.className = "text-muted small";
+                    time.textContent = formatPluginOutputTime(entry.timestampUtc);
+
+                    header.appendChild(name);
+                    header.appendChild(time);
+                    item.appendChild(header);
+
+                    if (entry.message) {
+                        const message = document.createElement("div");
+                        message.className = "plugin-output-value mb-2";
+                        message.textContent = entry.message;
+                        item.appendChild(message);
+                    }
+
+                    const dataContainer = document.createElement("div");
+                    renderPluginOutputRows(dataContainer, entry.data, "本次输出没有附加字段。");
+                    item.appendChild(dataContainer);
+                    pluginOutputModalEntries.appendChild(item);
+                }
+            }
+
+            function openPluginOutputModal(pluginId) {
+                const output = pluginOutputStore.get(pluginId);
+                if (!output || !pluginOutputModal)
+                    return;
+
+                activePluginOutputPluginId = pluginId;
+                renderPluginOutputModal(pluginId);
+                pluginOutputModal.show();
+            }
+
+            function applyPluginOutputUpdate(update) {
+                if (!update?.pluginId)
+                    return;
+
+                const existing = pluginOutputStore.get(update.pluginId);
+                const mergedData = { ...(existing?.data || {}), ...(update.data || {}) };
+                const next = {
+                    pluginId: update.pluginId,
+                    targetId: update.targetId || existing?.targetId || "",
+                    message: update.message ?? existing?.message ?? "",
+                    data: mergedData,
+                    updatedAt: update.timestampUtc || new Date().toISOString(),
+                    entries: existing?.entries ? [...existing.entries] : []
+                };
+
+                if (update.message || Object.keys(update.data || {}).length) {
+                    next.entries.unshift({
+                        targetId: next.targetId,
+                        message: update.message || "",
+                        data: update.data || {},
+                        timestampUtc: next.updatedAt
+                    });
+                    next.entries = next.entries.slice(0, 30);
+                }
+
+                const isCurrentModal = activePluginOutputPluginId === update.pluginId && pluginOutputModalElement.classList.contains("show");
+                pluginOutputStore.set(update.pluginId, next);
+                syncPluginOutputUi(update.pluginId);
+
+                if (isCurrentModal)
+                    renderPluginOutputModal(update.pluginId);
             }
 
             function createPluginParameterField(parameter, parameterInputs) {
@@ -547,7 +750,14 @@
                             arguments: argumentsPayload
                         });
 
-                    renderPluginResult(result);
+                    applyPluginOutputUpdate({
+                        pluginId: result.pluginId || plugin.id,
+                        targetId: result.targetId || (kind === "control" ? target.command : target.id),
+                        message: result.message,
+                        data: result.data || {},
+                        openModal: true,
+                        timestampUtc: new Date().toISOString()
+                    });
                     await loadPlugins();
                     await refreshStatus();
                 };
@@ -611,6 +821,15 @@
                 screenshotPreviewUrl = null;
             });
 
+            pluginOutputModalElement.addEventListener("hidden.bs.modal", () => {
+                activePluginOutputPluginId = null;
+                pluginOutputModalTitle.textContent = "插件输出";
+                pluginOutputModalSummary.textContent = "";
+                pluginOutputModalSummary.classList.add("d-none");
+                pluginOutputModalData.replaceChildren();
+                pluginOutputModalEntries.replaceChildren();
+            });
+
             function getPluginStateDisplay(plugin) {
                 const hasControls = (plugin.controls || []).length > 0;
                 const state = hasControls ? (plugin.state || "Unknown") : "NoStartable";
@@ -628,6 +847,8 @@
 
             function renderPlugins(plugins) {
                 pluginHost.replaceChildren();
+                pluginCatalog.clear();
+                pluginOutputUi.clear();
 
                 if (!plugins.length) {
                     const empty = document.createElement("div");
@@ -637,6 +858,8 @@
                 }
 
                 for (const plugin of plugins) {
+                    pluginCatalog.set(plugin.id, plugin);
+
                     const card = document.createElement("div");
                     card.className = "border rounded p-2";
 
@@ -648,13 +871,31 @@
                     title.textContent = plugin.name;
                     header.appendChild(title);
 
+                    const headerActions = document.createElement("div");
+                    headerActions.className = "d-flex align-items-center gap-2";
+
                     const stateDisplay = getPluginStateDisplay(plugin);
                     const state = document.createElement("button");
                     state.type = "button";
                     state.className = stateDisplay.className;
                     state.textContent = stateDisplay.text;
                     state.disabled = true;
-                    header.appendChild(state);
+
+                    const outputButton = document.createElement("button");
+                    outputButton.type = "button";
+                    outputButton.className = "btn btn-sm btn-outline-secondary position-relative";
+                    outputButton.title = "查看插件输出";
+                    outputButton.innerHTML = '<i class="fa-regular fa-envelope me-1"></i>结果';
+                    outputButton.disabled = true;
+                    outputButton.addEventListener("click", () => openPluginOutputModal(plugin.id));
+
+                    const outputBadge = document.createElement("span");
+                    outputBadge.className = "position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none";
+                    outputButton.appendChild(outputBadge);
+                    headerActions.appendChild(outputButton);
+                    headerActions.appendChild(state);
+
+                    header.appendChild(headerActions);
 
                     card.appendChild(header);
 
@@ -664,6 +905,12 @@
                         desc.textContent = plugin.description;
                         card.appendChild(desc);
                     }
+
+                    pluginOutputUi.set(plugin.id, {
+                        button: outputButton,
+                        badge: outputBadge
+                    });
+                    syncPluginOutputUi(plugin.id);
 
                     function createCommandButton(text, style, disabled, onClick) {
                         const button = document.createElement("button");

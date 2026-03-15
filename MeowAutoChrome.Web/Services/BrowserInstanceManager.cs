@@ -252,6 +252,18 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
             await instance.SetViewportSizeAsync(width, height);
     }
 
+    public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless)
+    {
+        foreach (var instance in SnapshotInstances())
+        {
+            var targetUserDataDirectory = string.Equals(instance.InstanceId, PrimaryInstanceId, StringComparison.OrdinalIgnoreCase)
+                ? primaryUserDataDirectory
+                : instance.UserDataDirectoryPath;
+
+            await instance.UpdateLaunchSettingsAsync(targetUserDataDirectory, isHeadless);
+        }
+    }
+
     private PlayWrightWarpper CreateWrapper(string instanceId, string displayName, string color, string? ownerPluginId, string? userDataDirectory)
         => new(_programSettingsService, _loggerFactory.CreateLogger<PlayWrightWarpper>(), instanceId, displayName, color, ownerPluginId, userDataDirectory);
 
