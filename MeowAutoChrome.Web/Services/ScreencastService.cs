@@ -98,8 +98,12 @@ public class ScreencastService
         _frameIntervalMs = FpsToInterval(settings.ScreencastFps);
     }
 
-    private static int FpsToInterval(int fps)
-        => Math.Max(16, (int)Math.Round(1000d / Math.Clamp(fps, 1, 60)));
+    /// <summary>
+    /// 转换用户设置的 FPS（帧率）为两帧之间的最小间隔（毫秒）。确保间隔不小于 16ms（约 60 FPS），并且对输入的 FPS 进行合理限制（1-60）。这个方法用于根据用户期望的帧率计算实际的发送频率限制。
+    /// </summary>
+    /// <param name="fps">帧率</param>
+    /// <returns>两帧之间的最小间隔</returns>
+    private static int FpsToInterval(int fps) => Math.Max(16, (int)Math.Round(1000d / Math.Clamp(fps, 1, 60)));
 
     /// <summary>
     /// 处理客户端连接事件。每当有客户端连接时调用；当第一个客户端连接时会启动 Screencast 推流。
