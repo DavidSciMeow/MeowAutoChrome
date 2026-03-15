@@ -475,6 +475,37 @@ body {
     border-top: 3px solid var(--instance-color, transparent);
 }
 
+.browser-tab-instance-group {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+    padding: 0.2rem 0.3rem 0.25rem;
+    border-radius: 1rem 1rem 0 0;
+    background: color-mix(in srgb, var(--instance-color, #2563eb) 8%, rgba(255, 255, 255, 0.7));
+    border: 1px solid color-mix(in srgb, var(--instance-color, #2563eb) 28%, #dbe3ef);
+    border-top: 3px solid var(--instance-color, #2563eb);
+}
+
+.browser-tab-instance-group-active {
+    background: color-mix(in srgb, var(--instance-color, #2563eb) 10%, #ffffff);
+    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+}
+
+.browser-tab-instance-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    flex: 0 0 auto;
+}
+
+.browser-tab-instance-tabs {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+}
+
 .browser-tab-instance-label {
     flex: 0 0 auto;
     align-self: center;
@@ -486,10 +517,17 @@ body {
     font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
+    cursor: pointer;
 }
 
 .browser-tab-instance-label-active {
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--instance-color, #2563eb) 30%, transparent);
+}
+
+.browser-tab-instance-close,
+.browser-tab-close {
+    flex: 0 0 auto;
+    border-radius: 999px;
 }
 
 .browser-tab-item-active {
@@ -497,11 +535,6 @@ body {
     border-color: #cfd6e1;
     border-bottom-color: #ffffff;
     box-shadow: 0 -2px 0 rgba(255, 255, 255, 0.7) inset;
-}
-
-.browser-tab-close {
-    flex: 0 0 auto;
-    border-radius: 999px;
 }
 
 .browser-toolbar {

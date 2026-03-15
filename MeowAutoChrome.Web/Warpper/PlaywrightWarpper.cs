@@ -584,6 +584,30 @@ public class PlayWrightWarpper
         return await SelectPageAsync(fallbackPageId);
     }
 
+    public async Task<bool> CloseAllTabsAsync()
+    {
+        CleanupTrackedPages();
+
+        var pages = BrowserContext.Pages.ToList();
+        var allClosed = true;
+
+        foreach (var page in pages)
+        {
+            try
+            {
+                await page.CloseAsync();
+            }
+            catch
+            {
+                allClosed = false;
+            }
+        }
+
+        CleanupTrackedPages();
+        SelectedPageId = null;
+        return allClosed;
+    }
+
     public async Task<string?> GetTitleAsync()
     {
         var page = ActivePage;

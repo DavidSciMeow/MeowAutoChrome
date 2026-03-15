@@ -64,6 +64,17 @@ namespace MeowAutoChrome.Web.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> CloseInstance([FromBody] BrowserCloseInstanceRequest request, CancellationToken cancellationToken)
+        {
+            var closed = await browserInstances.CloseBrowserInstanceAsync(request.InstanceId, cancellationToken);
+            if (!closed)
+                return NotFound();
+
+            await screencastService.RefreshTargetAsync();
+            return Ok(await BuildStatusAsync());
+        }
+
+        [HttpPost]
         public async Task<IActionResult> Back()
         {
             await browserInstances.GoBackAsync();

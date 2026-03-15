@@ -993,6 +993,10 @@
                 applyStatus(await postJson("/Browser/SelectTab", { tabId }));
             }
 
+            async function closeInstance(instanceId) {
+                applyStatus(await postJson("/Browser/CloseInstance", { instanceId }));
+            }
+
             function groupTabsByInstance(tabs) {
                 const groups = [];
                 const groupMap = new Map();
@@ -1011,7 +1015,9 @@
                         groups.push(group);
                     }
 
-                    groupMap.get(tab.instanceId).tabs.push(tab);
+                    const group = groupMap.get(tab.instanceId);
+                    group.isSelected = group.isSelected || !!tab.isInSelectedInstance;
+                    group.tabs.push(tab);
                 }
 
                 return groups;
@@ -1030,11 +1036,49 @@
                 }
 
                 for (const group of groupTabsByInstance(tabs)) {
-                    const groupLabel = document.createElement("div");
+                    const groupContainer = document.createElement("div");
+                    groupContainer.className = "browser-tab-instance-group" + (group.isSelected ? " browser-tab-instance-group-active" : "");
+                    groupContainer.style.setProperty("--instance-color", group.instanceColor);
+
+                    const groupHeader = document.createElement("div");
+                    groupHeader.className = "browser-tab-instance-header";
+
+                    const groupLabel = document.createElement("button");
+                    groupLabel.type = "button";
                     groupLabel.className = "browser-tab-instance-label" + (group.isSelected ? " browser-tab-instance-label-active" : "");
-                    groupLabel.style.setProperty("--instance-color", group.instanceColor);
+                    groupLabel.title = "切换到实例：" + group.instanceName;
                     groupLabel.textContent = group.instanceName;
-                    tabsBar.appendChild(groupLabel);
+                    groupLabel.addEventListener("click", async () => {
+                        const targetTab = group.tabs.find(tab => tab.isSelected) || group.tabs[0];
+                        if (!targetTab)
+                            return;
+
+                        try {
+                            await selectTab(targetTab.id);
+                        } catch (e) {
+                            showError(e.message || "切换实例失败。");
+                        }
+                    });
+                    groupHeader.appendChild(groupLabel);
+
+                    const groupCloseBtn = document.createElement("button");
+                    groupCloseBtn.type = "button";
+                    groupCloseBtn.className = "browser-tab-instance-close btn btn-sm btn-light border-0";
+                    groupCloseBtn.title = "关闭整个实例";
+                    groupCloseBtn.setAttribute("aria-label", "关闭整个实例");
+                    groupCloseBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    groupCloseBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        try {
+                            await closeInstance(group.instanceId);
+                        } catch (e) {
+                            showError(e.message || "关闭实例失败。");
+                        }
+                    });
+                    groupHeader.appendChild(groupCloseBtn);
+
+                    const groupTabs = document.createElement("div");
+                    groupTabs.className = "browser-tab-instance-tabs";
 
                     for (const tab of group.tabs) {
                         const tabItem = document.createElement("div");
@@ -1071,8 +1115,12 @@
 
                         tabItem.appendChild(btn);
                         tabItem.appendChild(closeBtn);
-                        tabsBar.appendChild(tabItem);
+                        groupTabs.appendChild(tabItem);
                     }
+
+                    groupContainer.appendChild(groupHeader);
+                    groupContainer.appendChild(groupTabs);
+                    tabsBar.appendChild(groupContainer);
                 }
 
                 updateTabScrollButtons();
@@ -1125,10 +1173,31 @@
                     groupTitle.textContent = group.instanceName;
                     groupHeader.appendChild(groupTitle);
 
+                    const groupActions = document.createElement("div");
+                    groupActions.className = "tabs-status-actions";
+
                     const groupBadge = document.createElement("span");
                     groupBadge.className = "badge rounded-pill " + (group.isSelected ? "text-bg-primary" : "text-bg-secondary");
                     groupBadge.textContent = group.isSelected ? "当前实例" : "独立实例";
-                    groupHeader.appendChild(groupBadge);
+                    groupActions.appendChild(groupBadge);
+
+                    const closeInstanceBtn = document.createElement("button");
+                    closeInstanceBtn.type = "button";
+                    closeInstanceBtn.className = "btn btn-sm btn-outline-secondary tabs-status-close";
+                    closeInstanceBtn.title = "关闭整个实例";
+                    closeInstanceBtn.setAttribute("aria-label", "关闭整个实例");
+                    closeInstanceBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    closeInstanceBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        try {
+                            await closeInstance(group.instanceId);
+                        } catch (e) {
+                            showError(e.message || "关闭实例失败。");
+                        }
+                    });
+                    groupActions.appendChild(closeInstanceBtn);
+
+                    groupHeader.appendChild(groupActions);
 
                     groupCard.appendChild(groupHeader);
 

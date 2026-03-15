@@ -225,6 +225,28 @@ public sealed class BrowserInstanceManager : IBrowserInstanceManager
         return true;
     }
 
+    public async Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(instanceId))
+            return false;
+
+        if (string.Equals(instanceId, PrimaryInstanceId, StringComparison.OrdinalIgnoreCase))
+        {
+            var closed = await PrimaryInstance.CloseAllTabsAsync();
+            if (closed)
+            {
+                lock (_syncRoot)
+                    _selectedInstanceId = PrimaryInstanceId;
+            }
+
+            return closed;
+        }
+
+        return await RemoveBrowserInstanceAsync(instanceId, cancellationToken);
+    }
+
     public Task CreateTabAsync(string? url = null)
         => CurrentInstance.CreateTabAsync(url);
 

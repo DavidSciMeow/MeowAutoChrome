@@ -7,6 +7,8 @@ public record BrowserSelectTabRequest(string TabId);
 
 public record BrowserCloseTabRequest(string TabId);
 
+public record BrowserCloseInstanceRequest(string InstanceId);
+
 public record ScreencastSettingsRequest(bool Enabled, int MaxWidth, int MaxHeight, int FrameIntervalMs);
 
 public record BrowserLayoutSettingsRequest(int PluginPanelWidth);
