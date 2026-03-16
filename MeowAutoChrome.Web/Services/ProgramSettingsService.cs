@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using MeowAutoChrome.Web.Models;
+using MeowAutoChrome.Web.ProgarmControl;
 
 namespace MeowAutoChrome.Web.Services;
 
@@ -9,9 +9,21 @@ namespace MeowAutoChrome.Web.Services;
 /// </summary>
 public sealed class ProgramSettingsService(IWebHostEnvironment environment)
 {
+    /// <summary>
+    /// 同步访问设置文件的信号量，确保同一时间只有一个线程可以读取或写入配置文件，避免竞争条件和数据损坏。
+    /// </summary>
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    /// <summary>
+    /// appsettings.json 文件的完整路径，用于存储当前的程序设置。
+    /// </summary>
     private readonly string _settingsFilePath = ProgramSettings.GetSettingsFilePath();
+    /// <summary>
+    /// appsettings.legacy.json 文件的完整路径，用于存储旧版本的程序设置；如果存在但新版设置文件不存在，则会自动迁移到新版位置。
+    /// </summary>
     private readonly string _legacySettingsFilePath = ProgramSettings.GetLegacySettingsFilePath();
+    /// <summary>
+    /// appsettings.json 文件的内存缓存，避免频繁磁盘访问；在 GetAsync 和 SaveAsync 中更新和使用。仅在持有 _semaphore 时访问。
+    /// </summary>
     private ProgramSettings? _cachedSettings;
 
     /// <summary>

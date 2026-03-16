@@ -1,4 +1,5 @@
-﻿@model MeowAutoChrome.Web.Models.ProgramSettingsViewModel
+﻿@using MeowAutoChrome.Web.ProgarmControl
+@model MeowAutoChrome.Web.Models.ProgramSettingsViewModel
 @{
     ViewData["Title"] = "程序设置";
 }
@@ -20,7 +21,7 @@
                 <div>
                     <h1 class="h4 mb-1">程序设置</h1>
                     <div class="text-muted small">修改后会自动保存并立即应用。</div>
-                    <div class="text-muted small">设置文件位置：<code>@MeowAutoChrome.Web.Models.ProgramSettings.GetSettingsFilePath()</code></div>
+                    <div class="text-muted small">设置文件位置：<code>@ProgramSettings.GetSettingsFilePath()</code></div>
                 </div>
                 <div id="settingsAutoSaveStatus" class="settings-autosave-status settings-autosave-status-success">已加载设置</div>
             </div>
@@ -58,9 +59,9 @@
                     <div class="card-header fw-semibold">浏览器用户数据</div>
                     <div class="card-body">
                         <label asp-for="UserDataDirectory" class="form-label"></label>
-                        <input asp-for="UserDataDirectory" class="form-control" placeholder="@MeowAutoChrome.Web.Models.ProgramSettings.GetDefaultUserDataDirectoryPath()" />
+                        <input asp-for="UserDataDirectory" class="form-control" placeholder="@ProgramSettings.GetDefaultUserDataDirectoryPath()" />
                         <div class="form-text">
-                            默认目录：<code>@MeowAutoChrome.Web.Models.ProgramSettings.GetDefaultUserDataDirectoryPath()</code>。<br />
+                            默认目录：<code>@ProgramSettings.GetDefaultUserDataDirectoryPath()</code>。<br />
                             修改后会尝试把当前目录中已有的浏览器用户数据迁移到新目录。
                         </div>
                         <span asp-validation-for="UserDataDirectory" class="text-danger"></span>
@@ -99,8 +100,8 @@
                         <label asp-for="PluginPanelWidth" class="form-label"></label>
                         <input asp-for="PluginPanelWidth"
                                type="range"
-                               min="@MeowAutoChrome.Web.Models.ProgramSettings.MinPluginPanelWidth"
-                               max="@MeowAutoChrome.Web.Models.ProgramSettings.MaxPluginPanelWidth"
+                               min="@ProgramSettings.MinPluginPanelWidth"
+                               max="@ProgramSettings.MaxPluginPanelWidth"
                                class="form-range" />
                         <div class="d-flex justify-content-between align-items-center small text-muted">
                             <span>浏览器区与插件区之间分隔条的默认位置。</span>
