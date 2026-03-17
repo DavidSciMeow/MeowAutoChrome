@@ -1,5 +1,8 @@
 ﻿namespace MeowAutoChrome.Web.ProgarmControl;
 
+/// <summary>
+/// 程序设置类，包含应用的全局配置项和相关路径获取方法。
+/// </summary>
 public sealed class ProgramSettings
 {
     /// <summary>

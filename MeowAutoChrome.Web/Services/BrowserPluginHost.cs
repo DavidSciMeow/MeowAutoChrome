@@ -16,21 +16,72 @@ using System.Runtime.Loader;
 
 namespace MeowAutoChrome.Web.Services;
 
+/// <summary>
+/// 插件宿主服务：负责发现、加载与执行运行时浏览器插件，并将插件的输出通过 SignalR 广播给前端。
+/// 支持插件的元数据扫描、依赖解析与隔离加载（AssemblyLoadContext）。
+/// </summary>
+/// <param name="browserInstances">浏览器实例管理器，用于将插件与浏览器上下文关联。</param>
+/// <param name="environment">ASP.NET 主机环境（用于解析路径等）。</param>
+/// <param name="browserHub">SignalR Hub 上下文，用于向前端广播插件输出。</param>
+/// <param name="logger">日志记录器。</param>
 public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, IWebHostEnvironment environment, IHubContext<BrowserHub> browserHub, ILogger<BrowserPluginHost> logger)
 {
+    /// <summary>
+    /// 插件属性特性全名，用于在程序集元数据中识别标记为浏览器插件的类型。
+    /// </summary>
     private static readonly string BrowserPluginAttributeFullName = typeof(BrowserPluginAttribute).FullName ?? nameof(BrowserPluginAttribute);
+
+    /// <summary>
+    /// 插件根目录的物理路径（默认为应用目录下的 "Plugins" 子目录）。
+    /// </summary>
     private readonly string _pluginRootPath = Path.Combine(AppContext.BaseDirectory, "Plugins");
+
+    /// <summary>
+    /// 线程同步对象，用于保护对插件实例及装载上下文字典的并发访问。
+    /// </summary>
     private readonly Lock _syncRoot = new();
+
+    /// <summary>
+    /// 已创建的插件运行时实例缓存，键为插件 ID。
+    /// </summary>
     private readonly Dictionary<string, RuntimeBrowserPluginInstance> _instances = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 已加载的插件程序集缓存，键为插件程序集的完整路径。
+    /// </summary>
     private readonly Dictionary<string, Assembly> _pluginAssemblies = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 插件对应的自定义 AssemblyLoadContext 缓存，键为插件程序集的完整路径。
+    /// </summary>
     private readonly Dictionary<string, PluginLoadContext> _pluginLoadContexts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 用于解析参数可空性信息的上下文实例。
+    /// </summary>
     private static readonly NullabilityInfoContext NullabilityContext = new();
 
+    /// <summary>
+    /// 插件所在根目录路径（默认为应用目录下的 "Plugins" 子目录）。
+    /// </summary>
     public string PluginRootPath => _pluginRootPath;
 
+    /// <summary>
+    /// ASP.NET 主机环境（用于解析路径等）。
+    /// </summary>
+    public IWebHostEnvironment Environment { get; } = environment;
+
+
+    /// <summary>
+    /// 确保插件根目录存在（如果不存在则创建该目录）。
+    /// </summary>
     public void EnsurePluginDirectoryExists()
         => Directory.CreateDirectory(_pluginRootPath);
 
+    /// <summary>
+    /// 获取插件目录下可用的插件描述列表及扫描过程中产生的错误信息。
+    /// </summary>
+    /// <returns>包含插件描述与扫描错误列表的目录响应对象。</returns>
     public BrowserPluginCatalogResponse GetPluginCatalog()
     {
         var discovery = DiscoverPluginsCore();
@@ -43,9 +94,22 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return new BrowserPluginCatalogResponse(plugins, errors);
     }
 
+    /// <summary>
+    /// 扫描并返回插件目录下可用的插件描述列表（不包含错误信息）。
+    /// </summary>
+    /// <returns>插件描述列表。</returns>
     public IReadOnlyList<BrowserPluginDescriptor> GetPlugins()
         => GetPluginCatalog().Plugins;
 
+    /// <summary>
+    /// 对指定插件执行控制命令（如 start/stop/pause/resume），并返回执行结果。
+    /// </summary>
+    /// <param name="pluginId">插件 ID。</param>
+    /// <param name="command">控制命令（start/stop/pause/resume）。</param>
+    /// <param name="arguments">可选的命令参数字典。</param>
+    /// <param name="connectionId">可选的 SignalR 连接 ID，用于将输出仅发送给指定客户端。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>执行结果或 null（若插件未找到）。</returns>
     public async Task<BrowserPluginExecutionResponse?> ControlAsync(string pluginId, string command, IReadOnlyDictionary<string, string?>? arguments, string? connectionId = null, CancellationToken cancellationToken = default)
     {
         var plugins = DiscoverPlugins();
@@ -83,6 +147,15 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return new BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
 
+    /// <summary>
+    /// 对指定插件执行动作函数，并返回执行结果。
+    /// </summary>
+    /// <param name="pluginId">插件 ID。</param>
+    /// <param name="functionId">动作函数 ID。</param>
+    /// <param name="arguments">可选的函数参数字典。</param>
+    /// <param name="connectionId">可选的 SignalR 连接 ID，用于将输出仅发送给指定客户端。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>执行结果或 null（若插件或函数未找到）。</returns>
     public async Task<BrowserPluginExecutionResponse?> ExecuteAsync(string pluginId, string functionId, IReadOnlyDictionary<string, string?>? arguments, string? connectionId = null, CancellationToken cancellationToken = default)
     {
         var plugins = DiscoverPlugins();
@@ -124,6 +197,18 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return new BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
 
+    /// <summary>
+    /// 将插件输出封装为 <see cref="BrowserPluginOutputUpdate"/> 并通过 SignalR 推送到前端。
+    /// 若提供了 <paramref name="connectionId"/> 则只发送到指定连接，否则广播到所有连接。
+    /// </summary>
+    /// <param name="pluginId">来源插件的 ID。</param>
+    /// <param name="targetId">输出所属的目标 ID（动作或控制命令）。</param>
+    /// <param name="message">要显示的文本消息（可空）。</param>
+    /// <param name="data">可选的键值对数据负载。</param>
+    /// <param name="openModal">指示前端是否应以模态方式展示该输出。</param>
+    /// <param name="connectionId">可选的 SignalR 连接 ID，仅发送到该连接时使用。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>代表异步发送操作的任务。</returns>
     private Task PublishPluginOutputAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool openModal, string? connectionId, CancellationToken cancellationToken)
     {
         var payload = new BrowserPluginOutputUpdate(
@@ -141,13 +226,24 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return clients.SendAsync("ReceivePluginOutput", payload, cancellationToken);
     }
 
+    /// <summary>
+    /// 返回当前已发现的运行时代插件列表（不包含扫描错误信息）。
+    /// 该方法是对 <see cref="DiscoverPluginsCore"/> 的简单包装，直接返回插件集合。
+    /// </summary>
+    /// <returns>已发现的插件描述集合。</returns>
     private IReadOnlyList<RuntimeBrowserPlugin> DiscoverPlugins()
         => DiscoverPluginsCore().Plugins;
 
+    /// <summary>
+    /// 扫描插件根目录，发现所有有效插件类型并尝试加载，返回插件信息和扫描错误。
+    /// </summary>
+    /// <returns>插件发现快照，包括插件集合和错误集合。</returns>
     private PluginDiscoverySnapshot DiscoverPluginsCore()
     {
         EnsurePluginDirectoryExists();
 
+        // 遍历插件目录，逐个扫描 dll 的类型元数据并尝试加载符合约定的插件类型。
+        // 返回值包含已解析的插件信息以及扫描过程中收集到的错误描述，便于上层展示或日志记录。
         var plugins = new List<RuntimeBrowserPlugin>();
         var errors = new List<string>();
 
@@ -186,6 +282,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             errors.ToArray());
     }
 
+    /// <summary>
+    /// 根据运行时插件信息创建插件描述符，初始化插件实例并处理异常。
+    /// </summary>
+    /// <param name="plugin">运行时插件信息。</param>
+    /// <param name="errors">错误收集列表。</param>
+    /// <returns>插件描述符或 null（初始化失败时）。</returns>
     private BrowserPluginDescriptor? CreatePluginDescriptor(RuntimeBrowserPlugin plugin, ICollection<string> errors)
     {
         try
@@ -245,6 +347,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
     }
 
+    /// <summary>
+    /// 获取或创建指定插件的运行时实例（线程安全）。
+    /// </summary>
+    /// <param name="plugin">插件元数据。</param>
+    /// <returns>插件运行时实例。</returns>
     private RuntimeBrowserPluginInstance GetOrCreatePluginInstance(RuntimeBrowserPlugin plugin)
     {
         lock (_syncRoot)
@@ -262,6 +369,14 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
     }
 
+    /// <summary>
+    /// 在指定插件实例上以指定 HostContext 执行异步操作，自动处理上下文赋值与并发锁。
+    /// </summary>
+    /// <param name="instance">插件运行时实例。</param>
+    /// <param name="hostContext">宿主上下文。</param>
+    /// <param name="execute">执行委托。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>插件动作执行结果。</returns>
     private static async Task<BrowserPluginActionResult> ExecuteWithHostContextAsync(RuntimeBrowserPluginInstance instance, IHostContext hostContext, Func<IBrowserPlugin, Task<BrowserPluginActionResult>> execute, CancellationToken cancellationToken)
     {
         await instance.ExecutionLock.WaitAsync(cancellationToken);
@@ -285,6 +400,14 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
     }
 
+    /// <summary>
+    /// 在指定程序集内根据候选类型名发现所有有效插件类型。
+    /// </summary>
+    /// <param name="assembly">插件程序集。</param>
+    /// <param name="pluginPath">插件程序集路径。</param>
+    /// <param name="candidateTypeNames">候选类型全名集合。</param>
+    /// <param name="errors">错误收集列表。</param>
+    /// <returns>发现的插件集合。</returns>
     private IEnumerable<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, ICollection<string> errors)
     {
         var plugins = new List<RuntimeBrowserPlugin>();
@@ -321,6 +444,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return plugins;
     }
 
+    /// <summary>
+    /// 扫描插件程序集，返回所有标记为 BrowserPluginAttribute 的类型全名。
+    /// </summary>
+    /// <param name="pluginPath">插件程序集路径。</param>
+    /// <returns>插件类型全名集合。</returns>
     private static IReadOnlyList<string> DiscoverPluginTypeNames(string pluginPath)
     {
         using var stream = new FileStream(pluginPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -350,9 +478,22 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             .ToArray();
     }
 
+    /// <summary>
+    /// 判断类型元数据是否包含指定特性。
+    /// </summary>
+    /// <param name="metadataReader">元数据读取器。</param>
+    /// <param name="attributes">特性句柄集合。</param>
+    /// <param name="attributeFullName">特性全名。</param>
+    /// <returns>是否包含该特性。</returns>
     private static bool HasCustomAttribute(MetadataReader metadataReader, CustomAttributeHandleCollection attributes, string attributeFullName)
         => attributes.Any(attributeHandle => string.Equals(GetAttributeTypeFullName(metadataReader, attributeHandle), attributeFullName, StringComparison.Ordinal));
 
+    /// <summary>
+    /// 获取特性类型的完整名称。
+    /// </summary>
+    /// <param name="metadataReader">元数据读取器。</param>
+    /// <param name="attributeHandle">特性句柄。</param>
+    /// <returns>特性类型全名或 null。</returns>
     private static string? GetAttributeTypeFullName(MetadataReader metadataReader, CustomAttributeHandle attributeHandle)
     {
         var attribute = metadataReader.GetCustomAttribute(attributeHandle);
@@ -368,6 +509,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         };
     }
 
+    /// <summary>
+    /// 获取类型定义的完整名称（含命名空间）。
+    /// </summary>
+    /// <param name="metadataReader">元数据读取器。</param>
+    /// <param name="typeDefinition">类型定义。</param>
+    /// <returns>类型全名。</returns>
     private static string GetTypeFullName(MetadataReader metadataReader, TypeDefinition typeDefinition)
     {
         var typeName = metadataReader.GetString(typeDefinition.Name);
@@ -375,6 +522,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return string.IsNullOrWhiteSpace(typeNamespace) ? typeName : $"{typeNamespace}.{typeName}";
     }
 
+    /// <summary>
+    /// 获取类型引用的完整名称（含命名空间）。
+    /// </summary>
+    /// <param name="metadataReader">元数据读取器。</param>
+    /// <param name="typeReference">类型引用。</param>
+    /// <returns>类型全名。</returns>
     private static string GetTypeFullName(MetadataReader metadataReader, TypeReference typeReference)
     {
         var typeName = metadataReader.GetString(typeReference.Name);
@@ -382,6 +535,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return string.IsNullOrWhiteSpace(typeNamespace) ? typeName : $"{typeNamespace}.{typeName}";
     }
 
+    /// <summary>
+    /// 发现插件类型的所有控制命令。
+    /// </summary>
+    /// <param name="type">插件类型。</param>
+    /// <returns>控制命令集合。</returns>
     private static IReadOnlyList<RuntimeBrowserPluginControl> DiscoverControls(Type type)
     {
         var controls = new List<RuntimeBrowserPluginControl>();
@@ -394,6 +552,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return controls;
     }
 
+    /// <summary>
+    /// 发现插件类型的所有动作方法。
+    /// </summary>
+    /// <param name="type">插件类型。</param>
+    /// <returns>动作集合。</returns>
     private static IReadOnlyList<RuntimeBrowserPluginAction> DiscoverActions(Type type)
     {
         var actions = new List<RuntimeBrowserPluginAction>();
@@ -435,6 +598,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return actions;
     }
 
+    /// <summary>
+    /// 加载指定路径的插件程序集，并缓存其 AssemblyLoadContext。
+    /// </summary>
+    /// <param name="pluginPath">插件程序集路径。</param>
+    /// <param name="errors">错误收集列表。</param>
+    /// <returns>加载成功的程序集或 null。</returns>
     private Assembly? TryLoadPluginAssembly(string pluginPath, ICollection<string> errors)
     {
         try
@@ -470,6 +639,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
     }
 
+    /// <summary>
+    /// 汇总 ReflectionTypeLoadException 的所有 LoaderException 消息。
+    /// </summary>
+    /// <param name="exception">类型加载异常。</param>
+    /// <returns>简要异常信息。</returns>
     private static string SummarizeLoaderExceptions(ReflectionTypeLoadException exception)
     {
         var messages = GetLoaderExceptionDescriptions(exception)
@@ -482,6 +656,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return string.Join("； ", messages.Take(3));
     }
 
+    /// <summary>
+    /// 获取类型加载异常中的所有 LoaderException 描述。
+    /// </summary>
+    /// <param name="exception">类型加载异常。</param>
+    /// <returns>异常消息集合。</returns>
     private static IEnumerable<string> GetLoaderExceptionDescriptions(ReflectionTypeLoadException exception)
         => exception.LoaderExceptions
             ?.Where(loaderException => loaderException is not null)
@@ -489,6 +668,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             .Where(message => !string.IsNullOrWhiteSpace(message))
         ?? [];
 
+    /// <summary>
+    /// 生成异常的简要描述。
+    /// </summary>
+    /// <param name="exception">异常对象。</param>
+    /// <returns>异常描述。</returns>
     private static string DescribeException(Exception exception)
         => exception switch
         {
@@ -499,6 +683,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             _ => exception.Message.Trim()
         };
 
+    /// <summary>
+    /// 生成缺失文件异常的描述。
+    /// </summary>
+    /// <param name="exception">文件未找到异常。</param>
+    /// <returns>异常描述。</returns>
     private static string DescribeFileNotFoundException(FileNotFoundException exception)
     {
         var assemblyName = GetAssemblyDisplayName(exception.FileName);
@@ -507,6 +696,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             : $"缺少依赖 DLL：{assemblyName}";
     }
 
+    /// <summary>
+    /// 生成文件加载异常的描述。
+    /// </summary>
+    /// <param name="exception">文件加载异常。</param>
+    /// <returns>异常描述。</returns>
     private static string DescribeFileLoadException(FileLoadException exception)
     {
         var assemblyName = GetAssemblyDisplayName(exception.FileName);
@@ -515,6 +709,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             : $"程序集加载失败：{assemblyName}（可能是版本不匹配或文件被占用）";
     }
 
+    /// <summary>
+    /// 生成程序集格式异常的描述。
+    /// </summary>
+    /// <param name="exception">程序集格式异常。</param>
+    /// <returns>异常描述。</returns>
     private static string DescribeBadImageFormatException(BadImageFormatException exception)
     {
         var assemblyName = GetAssemblyDisplayName(exception.FileName);
@@ -523,11 +722,21 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             : $"程序集格式无效：{assemblyName}（可能是目标框架或位数不兼容）";
     }
 
+    /// <summary>
+    /// 生成类型加载异常的描述。
+    /// </summary>
+    /// <param name="exception">类型加载异常。</param>
+    /// <returns>异常描述。</returns>
     private static string DescribeTypeLoadException(TypeLoadException exception)
         => string.IsNullOrWhiteSpace(exception.TypeName)
             ? $"类型加载失败：{exception.Message.Trim()}"
             : $"类型加载失败：{exception.TypeName}";
 
+    /// <summary>
+    /// 获取程序集文件名或显示名。
+    /// </summary>
+    /// <param name="assemblyNameOrPath">程序集名或路径。</param>
+    /// <returns>程序集显示名。</returns>
     private static string? GetAssemblyDisplayName(string? assemblyNameOrPath)
     {
         if (string.IsNullOrWhiteSpace(assemblyNameOrPath))
@@ -544,6 +753,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return commaIndex > 0 ? candidate[..commaIndex].Trim() : candidate;
     }
 
+    /// <summary>
+    /// 判断方法签名是否为受支持的插件动作签名。
+    /// </summary>
+    /// <param name="method">方法信息。</param>
+    /// <returns>是否为受支持签名。</returns>
     private static bool HasSupportedSignature(MethodInfo method)
     {
         if (method.ReturnType != typeof(Task<BrowserPluginActionResult>))
@@ -552,6 +766,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return method.GetParameters().All(parameter => IsHostParameter(parameter) || IsBindableParameter(parameter));
     }
 
+    /// <summary>
+    /// 构建插件方法调用参数数组。
+    /// </summary>
+    /// <param name="method">方法信息。</param>
+    /// <param name="hostContext">宿主上下文。</param>
+    /// <returns>参数数组。</returns>
     private static object?[] BuildInvocationArguments(
         MethodInfo method,
         IHostContext hostContext)
@@ -567,6 +787,15 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return invocationArguments;
     }
 
+    /// <summary>
+    /// 运行时插件元数据。
+    /// </summary>
+    /// <param name="Id">插件唯一标识。</param>
+    /// <param name="Name">插件名称。</param>
+    /// <param name="Description">插件描述。</param>
+    /// <param name="Type">插件运行时类型。</param>
+    /// <param name="Controls">插件控制命令集合。</param>
+    /// <param name="Actions">插件动作集合。</param>
     private sealed record RuntimeBrowserPlugin(
         string Id,
         string Name,
@@ -575,8 +804,21 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         IReadOnlyList<RuntimeBrowserPluginControl> Controls,
         IReadOnlyList<RuntimeBrowserPluginAction> Actions);
 
+    /// <summary>
+    /// 插件发现快照，包含插件集合和错误集合。
+    /// </summary>
+    /// <param name="Plugins">发现到的插件集合。</param>
+    /// <param name="Errors">扫描过程中的错误集合。</param>
     private sealed record PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> Plugins, IReadOnlyList<string> Errors);
 
+    /// <summary>
+    /// 插件控制命令元数据。
+    /// </summary>
+    /// <param name="Command">命令标识。</param>
+    /// <param name="Name">命令名称。</param>
+    /// <param name="Description">命令描述。</param>
+    /// <param name="Method">对应的方法信息。</param>
+    /// <param name="Parameters">命令参数集合。</param>
     private sealed record RuntimeBrowserPluginControl(
         string Command,
         string Name,
@@ -584,6 +826,14 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         MethodInfo Method,
         IReadOnlyList<RuntimeBrowserPluginActionParameter> Parameters);
 
+    /// <summary>
+    /// 插件动作元数据。
+    /// </summary>
+    /// <param name="Id">动作唯一标识。</param>
+    /// <param name="Name">动作名称。</param>
+    /// <param name="Description">动作描述。</param>
+    /// <param name="Method">对应的方法信息。</param>
+    /// <param name="Parameters">动作参数集合。</param>
     private sealed record RuntimeBrowserPluginAction(
         string Id,
         string Name,
@@ -591,6 +841,16 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         MethodInfo Method,
         IReadOnlyList<RuntimeBrowserPluginActionParameter> Parameters);
 
+    /// <summary>
+    /// 插件动作参数元数据。
+    /// </summary>
+    /// <param name="Name">参数名称。</param>
+    /// <param name="Label">参数显示名称。</param>
+    /// <param name="Description">参数描述。</param>
+    /// <param name="DefaultValue">参数默认值。</param>
+    /// <param name="Required">是否必填。</param>
+    /// <param name="InputType">输入类型。</param>
+    /// <param name="Options">参数选项集合。</param>
     private sealed record RuntimeBrowserPluginActionParameter(
         string Name,
         string Label,
@@ -600,27 +860,56 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         string InputType,
         IReadOnlyList<RuntimeBrowserPluginActionParameterOption> Options);
 
+    /// <summary>
+    /// 插件动作参数选项元数据。
+    /// </summary>
+    /// <param name="Value">选项值。</param>
+    /// <param name="Label">选项显示名称。</param>
     private sealed record RuntimeBrowserPluginActionParameterOption(string Value, string Label);
 
+    /// <summary>
+    /// 插件运行时实例及其类型和并发锁。
+    /// </summary>
+    /// <param name="type">插件类型。</param>
+    /// <param name="instance">插件实例。</param>
     private sealed class RuntimeBrowserPluginInstance(Type type, IBrowserPlugin instance)
     {
+        /// <summary>
+        /// 插件类型。
+        /// </summary>
         public Type Type { get; } = type;
+        /// <summary>
+        /// 插件实例。
+        /// </summary>
         public IBrowserPlugin Instance { get; } = instance;
+        /// <summary>
+        /// 执行锁，确保同一时间只有一个操作在执行插件实例的方法，避免并发访问导致的状态不一致或竞态条件。
+        /// </summary>
         public SemaphoreSlim ExecutionLock { get; } = new(1, 1);
     }
 
-    private sealed class PluginLoadContext : AssemblyLoadContext
+
+    /// <summary>
+    /// 插件自定义 AssemblyLoadContext，用于隔离插件依赖。
+    /// </summary>
+    /// <param name="pluginAssemblyPath">插件程序集路径。</param>
+    private sealed class PluginLoadContext(string pluginAssemblyPath) : AssemblyLoadContext($"BrowserPlugin:{Path.GetFileNameWithoutExtension(pluginAssemblyPath)}", isCollectible: false)
     {
-        private readonly AssemblyDependencyResolver _resolver;
-        private readonly string _pluginDirectoryPath;
+        /// <summary>
+        /// .NET Core 提供的程序集依赖解析器，基于插件程序集路径自动解析依赖项位置。
+        /// </summary>
+        private readonly AssemblyDependencyResolver _resolver = new(pluginAssemblyPath);
 
-        public PluginLoadContext(string pluginAssemblyPath)
-            : base($"BrowserPlugin:{Path.GetFileNameWithoutExtension(pluginAssemblyPath)}", isCollectible: false)
-        {
-            _resolver = new AssemblyDependencyResolver(pluginAssemblyPath);
-            _pluginDirectoryPath = Path.GetDirectoryName(pluginAssemblyPath) ?? AppContext.BaseDirectory;
-        }
+        /// <summary>
+        /// .NET 运行时加载程序集时会在插件目录及其子目录中查找依赖项，避免因插件依赖未找到而导致的加载失败。
+        /// </summary>
+        private readonly string _pluginDirectoryPath = Path.GetDirectoryName(pluginAssemblyPath) ?? AppContext.BaseDirectory;
 
+        /// <summary>
+        /// 加载程序集
+        /// </summary>
+        /// <param name="assemblyName">正在加载的程序集的名称。</param>
+        /// <returns>要加载的程序集对象。</returns>
         protected override Assembly? Load(AssemblyName assemblyName)
         {
             var sharedAssembly = Default.Assemblies.FirstOrDefault(current => AssemblyName.ReferenceMatchesDefinition(current.GetName(), assemblyName));
@@ -637,6 +926,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 : null;
         }
 
+        /// <summary>
+        /// 加载未管理的 DLL。
+        /// </summary>
+        /// <param name="unmanagedDllName">未管理的 DLL 名称。</param>
+        /// <returns>未管理的 DLL 的句柄。</returns>
         protected override nint LoadUnmanagedDll(string unmanagedDllName)
         {
             var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
@@ -652,6 +946,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             return nint.Zero;
         }
 
+        /// <summary>
+        /// 枚举可能的本地库候选路径。
+        /// </summary>
+        /// <param name="unmanagedDllName">未管理的 DLL 名称。</param>
+        /// <returns>可能的本地库路径集合。</returns>
         private IEnumerable<string> EnumerateNativeLibraryCandidates(string unmanagedDllName)
         {
             var libraryFileName = GetNativeLibraryFileName(unmanagedDllName);
@@ -673,6 +972,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             }
         }
 
+        /// <summary>
+        /// .NET 运行时对不同平台的本地库有不同的命名约定，该方法根据当前平台生成可能的库文件名，以增加加载成功的概率。
+        /// </summary>
+        /// <param name="unmanagedDllName">未管理的 DLL 名称。</param>
+        /// <returns>可能的库文件名。</returns>
         private static string GetNativeLibraryFileName(string unmanagedDllName)
         {
             if (Path.HasExtension(unmanagedDllName))
@@ -688,6 +992,13 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
     }
 
+    /// <summary>
+    /// 创建插件动作参数元数据。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <param name="parameterMetadata">参数特性。</param>
+    /// <param name="legacyMetadata">兼容旧特性的参数元数据。</param>
+    /// <returns>动作参数元数据。</returns>
     private static RuntimeBrowserPluginActionParameter CreateActionParameter(ParameterInfo parameter, BrowserPluginInputAttribute? parameterMetadata, BrowserPluginInputAttribute? legacyMetadata)
     {
         var defaultValue = GetDefaultValue(parameter);
@@ -708,6 +1019,16 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             GetOptions(parameter));
     }
 
+    /// <summary>
+    /// 向插件控制命令集合添加指定控制命令。
+    /// </summary>
+    /// <param name="type">插件类型。</param>
+    /// <param name="controls">控制命令集合。</param>
+    /// <param name="command">命令标识。</param>
+    /// <param name="name">命令名称。</param>
+    /// <param name="description">命令描述。</param>
+    /// <param name="methodName">方法名。</param>
+    /// <param name="parameterTypes">参数类型数组。</param>
     private static void AddControl(Type type, ICollection<RuntimeBrowserPluginControl> controls, string command, string name, string description, string methodName, params Type[] parameterTypes)
     {
         var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, parameterTypes, null);
@@ -722,6 +1043,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             CreateMethodInputParameters(method)));
     }
 
+    /// <summary>
+    /// 创建方法的所有输入参数元数据集合。
+    /// </summary>
+    /// <param name="method">方法信息。</param>
+    /// <returns>参数元数据集合。</returns>
     private static IReadOnlyList<RuntimeBrowserPluginActionParameter> CreateMethodInputParameters(MethodInfo method)
         => method
             .GetCustomAttributes<BrowserPluginInputAttribute>()
@@ -736,6 +1062,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 Array.Empty<RuntimeBrowserPluginActionParameterOption>()))
             .ToArray();
 
+    /// <summary>
+    /// 规范化参数输入类型。
+    /// </summary>
+    /// <param name="inputType">输入类型字符串。</param>
+    /// <returns>规范化后的输入类型。</returns>
     private static string NormalizeInputType(string? inputType)
     {
         if (string.IsNullOrWhiteSpace(inputType))
@@ -751,6 +1082,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         };
     }
 
+    /// <summary>
+    /// 确保插件动作 ID 在集合中唯一。
+    /// </summary>
+    /// <param name="baseId">基础 ID。</param>
+    /// <param name="usedIds">已用 ID 集合。</param>
+    /// <returns>唯一 ID。</returns>
     private static string EnsureUniqueActionId(string baseId, HashSet<string> usedIds)
     {
         var candidate = baseId;
@@ -764,6 +1101,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return candidate;
     }
 
+    /// <summary>
+    /// 判断参数是否为宿主上下文相关类型。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>如果是宿主参数返回 true，否则返回 false。</returns>
     private static bool IsHostParameter(ParameterInfo parameter)
         => parameter.ParameterType == typeof(IBrowserContext)
             || parameter.ParameterType == typeof(IPage)
@@ -771,6 +1113,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             || parameter.ParameterType == typeof(IHostContext)
             || parameter.ParameterType == typeof(IReadOnlyDictionary<string, string?>);
 
+    /// <summary>
+    /// 判断参数类型是否为可绑定类型。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>如果是可绑定类型返回 true，否则返回 false。</returns>
     private static bool IsBindableParameter(ParameterInfo parameter)
     {
         var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
@@ -790,6 +1137,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             || parameterType.IsEnum;
     }
 
+    /// <summary>
+    /// 解析方法参数的实际调用值。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <param name="hostContext">宿主上下文。</param>
+    /// <returns>参数值。</returns>
     private static object? ResolveInvocationArgument(ParameterInfo parameter, IHostContext hostContext)
     {
         if (parameter.ParameterType == typeof(IBrowserContext))
@@ -810,6 +1163,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return BindUserArgument(parameter, hostContext.Arguments);
     }
 
+    /// <summary>
+    /// 从参数字典绑定用户输入参数。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <param name="arguments">参数字典。</param>
+    /// <returns>参数值。</returns>
     private static object? BindUserArgument(ParameterInfo parameter, IReadOnlyDictionary<string, string?> arguments)
     {
         var parameterName = parameter.Name ?? throw new InvalidOperationException("插件动作参数缺少名称。");
@@ -835,6 +1194,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
     }
 
+    /// <summary>
+    /// 将字符串参数值转换为指定类型。
+    /// </summary>
+    /// <param name="parameterType">目标类型。</param>
+    /// <param name="rawValue">原始字符串值。</param>
+    /// <returns>转换后的值。</returns>
     private static object? ConvertArgumentValue(Type parameterType, string rawValue)
     {
         var targetType = Nullable.GetUnderlyingType(parameterType) ?? parameterType;
@@ -878,9 +1243,19 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         throw new InvalidOperationException($"不支持的参数类型：{targetType.Name}");
     }
 
+    /// <summary>
+    /// 判断参数是否为必填参数。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>是否必填。</returns>
     private static bool IsRequiredParameter(ParameterInfo parameter)
         => !parameter.HasDefaultValue && !IsNullableParameter(parameter);
 
+    /// <summary>
+    /// 判断参数是否为可空类型。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>是否可空。</returns>
     private static bool IsNullableParameter(ParameterInfo parameter)
     {
         if (Nullable.GetUnderlyingType(parameter.ParameterType) is not null)
@@ -892,6 +1267,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return NullabilityContext.Create(parameter).ReadState != NullabilityState.NotNull;
     }
 
+    /// <summary>
+    /// 获取参数的默认值字符串。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>默认值字符串。</returns>
     private static string? GetDefaultValue(ParameterInfo parameter)
     {
         if (!parameter.HasDefaultValue)
@@ -909,6 +1289,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         };
     }
 
+    /// <summary>
+    /// 获取参数的输入类型（用于前端渲染）。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>输入类型字符串。</returns>
     private static string GetInputType(ParameterInfo parameter)
     {
         var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
@@ -936,6 +1321,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         return "text";
     }
 
+    /// <summary>
+    /// 获取枚举类型参数的所有选项。
+    /// </summary>
+    /// <param name="parameter">参数信息。</param>
+    /// <returns>参数选项集合。</returns>
     private static IReadOnlyList<RuntimeBrowserPluginActionParameterOption> GetOptions(ParameterInfo parameter)
     {
         var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
@@ -948,6 +1338,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             .ToArray();
     }
 
+    /// <summary>
+    /// 获取枚举成员的显示标签。
+    /// </summary>
+    /// <param name="enumType">枚举类型。</param>
+    /// <param name="memberName">成员名。</param>
+    /// <returns>显示标签。</returns>
     private static string GetEnumOptionLabel(Type enumType, string memberName)
     {
         var field = enumType.GetField(memberName, BindingFlags.Public | BindingFlags.Static);

@@ -123,7 +123,6 @@ public class ScreencastService
     /// <summary>
     /// 处理客户端断开事件。每当有客户端断开时调用；当最后一个客户端断开时会停止 Screencast 推流。
     /// </summary>
-    /// <param name="exception">断开连接时发生的异常（若有）。</param>
     public async Task OnClientDisconnectedAsync()
     {
         await _semaphore.WaitAsync();

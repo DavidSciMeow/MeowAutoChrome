@@ -11,7 +11,7 @@
 /// <param name="ClickCount">点击次数（用于双击等场景）。</param>
 /// <param name="Modifiers">修饰键位掩码：Alt=1 Ctrl=2 Meta=4 Shift=8。</param>
 /// <param name="DeltaX">对于滚轮事件的 X 方向增量（如果适用）。</param>
-/// <param name="DeltaY">对于滚轮事件的 Y 方向增量（如果适用）。param>
+/// <param name="DeltaY">对于滚轮事件的 Y 方向增量（如果适用）。</param>
 public record MouseEventData(
     string Type,
     double X,

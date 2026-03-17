@@ -7,6 +7,7 @@ namespace MeowAutoChrome.Web.Services;
 /// 程序设置服务：负责读取、规范化、保存程序配置（ProgramSettings），并在需要时迁移旧版设置文件。
 /// 通过文件系统持久化配置并在内存中缓存以减少磁盘 I/O。线程安全。
 /// </summary>
+/// <param name="environment">ASP.NET 主机环境（用于解析路径等）。</param>
 public sealed class ProgramSettingsService(IWebHostEnvironment environment)
 {
     /// <summary>
@@ -25,6 +26,11 @@ public sealed class ProgramSettingsService(IWebHostEnvironment environment)
     /// appsettings.json 文件的内存缓存，避免频繁磁盘访问；在 GetAsync 和 SaveAsync 中更新和使用。仅在持有 _semaphore 时访问。
     /// </summary>
     private ProgramSettings? _cachedSettings;
+
+    /// <summary>
+    /// ASP.NET 主机环境（用于解析路径等）。
+    /// </summary>
+    public IWebHostEnvironment Environment { get; } = environment;
 
     /// <summary>
     /// 异步获取当前的程序设置副本；若配置文件不存在则返回默认设置。

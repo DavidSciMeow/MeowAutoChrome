@@ -15,7 +15,7 @@ public sealed class ChromeShellService(
     IWebHostEnvironment environment,
     AppLogService appLogService) : IHostedService, IDisposable
 {
-    private readonly object _syncRoot = new();
+    private readonly Lock _syncRoot = new();
     private Process? _chromeProcess;
     private bool _applicationStopping;
 

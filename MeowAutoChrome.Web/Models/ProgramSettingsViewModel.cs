@@ -3,6 +3,9 @@ using System.ComponentModel.DataAnnotations;
 
 namespace MeowAutoChrome.Web.Models;
 
+/// <summary>
+/// 程序设置的视图模型
+/// </summary>
 public sealed class ProgramSettingsViewModel
 {
     /// <summary>

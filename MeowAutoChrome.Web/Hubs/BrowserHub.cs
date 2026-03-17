@@ -13,6 +13,11 @@ namespace MeowAutoChrome.Web.Hubs;
 public class BrowserHub(PlayWrightWarpper client, ScreencastService screencast) : Hub
 {
     /// <summary>
+    /// Playwright 封装器，用于与浏览器进行交互（通过依赖注入提供）。
+    /// </summary>
+    public PlayWrightWarpper Client { get; } = client;
+
+    /// <summary>
     /// 当 SignalR 客户端连接时调用，通知 ScreencastService 处理连接逻辑。
     /// </summary>
     public override async Task OnConnectedAsync()

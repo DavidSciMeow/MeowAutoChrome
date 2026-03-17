@@ -22,6 +22,12 @@ namespace MeowAutoChrome.Web.Controllers
         /// 用于从请求头中传递 BrowserHub 连接 ID 的自定义 header 名称，允许插件输出定向发送到特定客户端（例如仅发送给发起控制请求的页面）。如果未提供该 header，则插件输出将发送给所有连接的客户端。
         /// </summary>
         private const string BrowserHubConnectionIdHeaderName = "X-BrowserHub-ConnectionId";
+
+        /// <summary>
+        /// SignalR Hub 上下文
+        /// </summary>
+        public IHubContext<BrowserHub> Hub { get; } = hub;
+
         /// <summary>
         /// 浏览器页面的索引视图。
         /// </summary>

@@ -1,10 +1,23 @@
 ﻿using MeowAutoChrome.Web.Models;
+using MeowAutoChrome.Web.ProgarmControl;
 using MeowAutoChrome.Web.Services;
 using Microsoft.Playwright;
 using System.Net;
 
 namespace MeowAutoChrome.Web.Warpper;
 
+/// <summary>
+/// 表示浏览器选项卡（Tab / Page）的视图信息，用于前端列出标签页。
+/// </summary>
+/// <param name="Id">页面唯一标识符。</param>
+/// <param name="Title">页面标题（若可用）。</param>
+/// <param name="Url">页面当前 URL。</param>
+/// <param name="IsSelected">是否为当前选中的页面。</param>
+/// <param name="InstanceId">所属浏览器实例 ID。</param>
+/// <param name="InstanceName">所属浏览器实例显示名称。</param>
+/// <param name="InstanceColor">所属实例颜色（用于 UI 突出）。</param>
+/// <param name="InstanceOwnerId">所属插件 ID（如果是插件创建的实例）。</param>
+/// <param name="IsInSelectedInstance">是否位于当前选中实例中。</param>
 public record BrowserTabInfo(
     string Id,
     string? Title,
@@ -16,6 +29,10 @@ public record BrowserTabInfo(
     string? InstanceOwnerId,
     bool IsInSelectedInstance);
 
+/// <summary>
+/// PlayWrightWarpper 封装 Playwright 的浏览器上下文与页面管理，负责启动/关闭浏览器上下文、管理标签页、导航与截图等操作。
+/// 该类在项目中以实例表示一个可单独配置的浏览器实例（例如不同的 user-data-dir、User-Agent、headless 模式等）。
+/// </summary>
 public class PlayWrightWarpper
 {
     private readonly Dictionary<IPage, string> _pageIds = new(ReferenceEqualityComparer.Instance);
@@ -33,24 +50,81 @@ public class PlayWrightWarpper
     private bool _useProgramUserAgent = true;
     private string? _customUserAgent;
 
+    /// <summary>
+    /// 全局 Playwright 实例。
+    /// </summary>
     public static IPlaywright Playwright { get; } = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
+    /// <summary>
+    /// 此浏览器实例的唯一标识符。
+    /// </summary>
     public string InstanceId { get; }
+    /// <summary>
+    /// 供 UI 显示的实例名称。
+    /// </summary>
     public string DisplayName { get; }
+    /// <summary>
+    /// 实例用于 UI 的颜色字符串（例如 CSS color）。
+    /// </summary>
     public string Color { get; }
+    /// <summary>
+    /// 如果此实例由插件创建，则为插件 ID，否则为 null。
+    /// </summary>
     public string? OwnerPluginId { get; }
+    /// <summary>
+    /// 最近一次发生的错误信息（用于界面展示），仅供诊断使用。
+    /// </summary>
     public string? LastErrorMessage { get; private set; }
+    /// <summary>
+    /// 当前选中的页面 ID（由 EnsurePageId 生成并管理）。
+    /// </summary>
     public string? SelectedPageId { get; private set; }
+    /// <summary>
+    /// 与此实例关联的用户数据目录路径。
+    /// </summary>
     public string UserDataDirectoryPath { get; private set; } = string.Empty;
+    /// <summary>
+    /// 当前实例是否以 headless 模式运行。
+    /// </summary>
     public bool IsHeadless { get; private set; }
+    /// <summary>
+    /// 用户配置的视口宽度。
+    /// </summary>
     public int ConfiguredViewportWidth => _configuredViewportWidth;
+    /// <summary>
+    /// 用户配置的视口高度。
+    /// </summary>
     public int ConfiguredViewportHeight => _configuredViewportHeight;
+    /// <summary>
+    /// 是否自动根据显示尺寸调整视口。
+    /// </summary>
     public bool AutoResizeViewport => _autoResizeViewport;
+    /// <summary>
+    /// 是否保持原始宽高比以适配显示尺寸。
+    /// </summary>
     public bool PreserveAspectRatio => _preserveAspectRatio;
+    /// <summary>
+    /// 是否使用程序级的 User-Agent（而非实例自定义的）。
+    /// </summary>
     public bool UseProgramUserAgent => _useProgramUserAgent;
+    /// <summary>
+    /// 实例自定义的 User-Agent（当不使用程序级 User-Agent 时生效）。
+    /// </summary>
     public string? CustomUserAgent => _customUserAgent;
-    public IBrowserContext BrowserContext { get; private set; }
+    /// <summary>
+    /// 当前的 Playwright 浏览器上下文（对应一个 profile / user-data-dir）。
+    /// </summary>
+    public IBrowserContext BrowserContext { get; private set; } = null!;
+    /// <summary>
+    /// 当前上下文中所有已打开的页面集合。
+    /// </summary>
     public IReadOnlyList<IPage> Pages => BrowserContext.Pages;
+    /// <summary>
+    /// 当前选中页面的 URL（如果存在活动页面）。
+    /// </summary>
     public string? CurrentUrl => ActivePage?.Url;
+    /// <summary>
+    /// 当前活动页面。
+    /// </summary>
     public IPage? ActivePage
     {
         get
@@ -71,6 +145,16 @@ public class PlayWrightWarpper
     }
 
 
+    /// <summary>
+    /// 初始化浏览器实例包装器。
+    /// </summary>
+    /// <param name="programSettingsService">程序设置服务。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="instanceId">实例 ID。</param>
+    /// <param name="displayName">实例显示名称。</param>
+    /// <param name="color">实例颜色。</param>
+    /// <param name="ownerPluginId">所属插件 ID。</param>
+    /// <param name="userDataDir">用户数据目录。</param>
     public PlayWrightWarpper(
         ProgramSettingsService programSettingsService,
         ILogger<PlayWrightWarpper> logger,
@@ -80,6 +164,7 @@ public class PlayWrightWarpper
         string? ownerPluginId = null,
         string? userDataDir = null)
     {
+        // 构造函数：初始化实例字段、读取程序设置并创建或激活对应的浏览器上下文。
         _programSettingsService = programSettingsService;
         _logger = logger;
         InstanceId = instanceId;
@@ -202,6 +287,11 @@ public class PlayWrightWarpper
         if (SelectedPageId != null && !_pageIds.ContainsValue(SelectedPageId)) SelectedPageId = null;
     }
 
+    /// <summary>
+    /// 判断当前实例是否包含指定标签页。
+    /// </summary>
+    /// <param name="pageId">标签页 ID。</param>
+    /// <returns>是否包含该标签页。</returns>
     public bool ContainsTab(string pageId)
     {
         CleanupTrackedPages();
@@ -303,7 +393,7 @@ public class PlayWrightWarpper
         => !string.IsNullOrWhiteSpace(url)
             && url.StartsWith("chrome-error://chromewebdata/", StringComparison.OrdinalIgnoreCase);
 
-    private async Task<IBrowserContext> CreateBrowserContextAsync(string userDataDir, bool isHeadless, string? userAgent)
+    private static async Task<IBrowserContext> CreateBrowserContextAsync(string userDataDir, bool isHeadless, string? userAgent)
     {
         Directory.CreateDirectory(userDataDir);
         return await Playwright.Chromium.LaunchPersistentContextAsync(
@@ -344,6 +434,9 @@ public class PlayWrightWarpper
         RegisterBrowserContext(browserContext);
     }
 
+    /// <summary>
+    /// 关闭当前浏览器上下文并释放资源（如果存在）。
+    /// </summary>
     public async Task CloseAsync()
     {
         if (BrowserContext is null)
@@ -358,12 +451,34 @@ public class PlayWrightWarpper
         }
     }
 
+    /// <summary>
+    /// 更新实例使用的用户数据目录（等同于更新启动设置中的 user-data-dir）。
+    /// </summary>
+    /// <param name="userDataDir">目标用户数据目录路径。</param>
     public async Task UpdateUserDataDirectoryAsync(string userDataDir)
         => await UpdateLaunchSettingsAsync(userDataDir, IsHeadless);
 
+    /// <summary>
+    /// 获取当前实例的视口设置（配置宽高与自动调整/保持宽高比选项）。
+    /// </summary>
+    /// <returns>视口设置响应对象。</returns>
     public BrowserInstanceViewportSettingsResponse GetViewportSettings()
         => new(_configuredViewportWidth, _configuredViewportHeight, _autoResizeViewport, _preserveAspectRatio);
 
+    /// <summary>
+    /// 更新实例级别的设置（包括 user-data-dir、headless、视口与 UA 等），并在需要时重新启动上下文。
+    /// </summary>
+    /// <param name="userDataDir">目标用户数据目录。</param>
+    /// <param name="isHeadless">是否以无头模式运行。</param>
+    /// <param name="viewportWidth">目标视口宽度。</param>
+    /// <param name="viewportHeight">目标视口高度。</param>
+    /// <param name="autoResizeViewport">是否自动调整视口。</param>
+    /// <param name="preserveAspectRatio">是否保持宽高比。</param>
+    /// <param name="useProgramUserAgent">是否使用程序级 User-Agent。</param>
+    /// <param name="userAgent">实例自定义 User-Agent。</param>
+    /// <param name="migrateUserData">是否迁移用户数据。</param>
+    /// <param name="displayWidth">可选显示宽度。</param>
+    /// <param name="displayHeight">可选显示高度。</param>
     public async Task UpdateInstanceSettingsAsync(string userDataDir, bool isHeadless, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateUserData, int? displayWidth = null, int? displayHeight = null)
     {
         _configuredViewportWidth = Math.Max(320, viewportWidth);
@@ -384,6 +499,13 @@ public class PlayWrightWarpper
         await ApplyConfiguredViewportSizeAsync();
     }
 
+    /// <summary>
+    /// 更新启动设置并在必要时重建或切换浏览器上下文。
+    /// </summary>
+    /// <param name="userDataDir">目标用户数据目录。</param>
+    /// <param name="isHeadless">是否以无头模式运行。</param>
+    /// <param name="migrateUserData">是否迁移用户数据。</param>
+    /// <param name="forceReload">是否强制重建上下文。</param>
     public async Task UpdateLaunchSettingsAsync(string userDataDir, bool isHeadless, bool migrateUserData = true, bool forceReload = false)
     {
         var targetDirectory = Path.GetFullPath(userDataDir);
@@ -529,9 +651,17 @@ public class PlayWrightWarpper
             await ApplyViewportSizeAsync(page);
     }
 
+    /// <summary>
+    /// 应用用户配置的视口尺寸到所有页面。若启用自动调整则此调用被忽略。
+    /// </summary>
     public Task ApplyConfiguredViewportSizeAsync()
         => ApplyViewportSizeInternalAsync(_configuredViewportWidth, _configuredViewportHeight);
 
+    /// <summary>
+    /// 根据显示区域大小计算并应用给定的显示视口尺寸（考虑保持宽高比与自动调整设置）。
+    /// </summary>
+    /// <param name="displayWidth">显示宽度（像素）。</param>
+    /// <param name="displayHeight">显示高度（像素）。</param>
     public async Task ApplyDisplayViewportSizeAsync(int displayWidth, int displayHeight)
     {
         if (!_autoResizeViewport)
@@ -569,6 +699,10 @@ public class PlayWrightWarpper
         }
     }
 
+    /// <summary>
+    /// 获取当前上下文中所有标签页的视图信息列表（供前端展示）。
+    /// </summary>
+    /// <returns>标签页信息列表。</returns>
     public async Task<IReadOnlyList<BrowserTabInfo>> GetTabsAsync()
     {
         CleanupTrackedPages();
@@ -601,6 +735,11 @@ public class PlayWrightWarpper
         return tabs;
     }
 
+    /// <summary>
+    /// 将指定标签页设为选中并尝试调整视口与置前操作。
+    /// </summary>
+    /// <param name="pageId">要选中的页面 ID。</param>
+    /// <returns>是否成功选中页面。</returns>
     public async Task<bool> SelectPageAsync(string pageId)
     {
         CleanupTrackedPages();
@@ -623,6 +762,10 @@ public class PlayWrightWarpper
         return true;
     }
 
+    /// <summary>
+    /// 新建标签页并可选地导航到指定 URL。
+    /// </summary>
+    /// <param name="url">可选的初始导航地址。</param>
     public async Task CreateTabAsync(string? url = null)
     {
         CleanupTrackedPages();
@@ -639,6 +782,11 @@ public class PlayWrightWarpper
         SelectedPageId = previousSelectedPageId ?? createdPageId;
     }
 
+    /// <summary>
+    /// 关闭指定的标签页并尝试恢复到合适的选中页。
+    /// </summary>
+    /// <param name="pageId">要关闭的页面 ID。</param>
+    /// <returns>是否成功关闭。</returns>
     public async Task<bool> CloseTabAsync(string pageId)
     {
         CleanupTrackedPages();
@@ -681,6 +829,10 @@ public class PlayWrightWarpper
         return await SelectPageAsync(fallbackPageId);
     }
 
+    /// <summary>
+    /// 关闭当前上下文中所有标签页并清理选中状态。
+    /// </summary>
+    /// <returns>是否所有页面都成功关闭。</returns>
     public async Task<bool> CloseAllTabsAsync()
     {
         CleanupTrackedPages();
@@ -705,6 +857,10 @@ public class PlayWrightWarpper
         return allClosed;
     }
 
+    /// <summary>
+    /// 获取当前活动页面的标题（若可用）。
+    /// </summary>
+    /// <returns>页面标题或 null。</returns>
     public async Task<string?> GetTitleAsync()
     {
         var page = ActivePage;
@@ -721,6 +877,10 @@ public class PlayWrightWarpper
         }
     }
 
+    /// <summary>
+    /// 导航当前活动页面到指定地址或使用搜索模板进行搜索。
+    /// </summary>
+    /// <param name="url">目标地址或搜索关键词。</param>
     public async Task NavigateAsync(string url)
     {
         LastErrorMessage = null;
@@ -740,7 +900,7 @@ public class PlayWrightWarpper
         try
         {
             await ApplyViewportSizeAsync(page);
-            await page.GotoAsync(uri.AbsoluteUri);
+            await page.GotoAsync(uri?.AbsoluteUri ?? "about:blank");
         }
         catch (PlaywrightException ex)
         {
@@ -748,6 +908,10 @@ public class PlayWrightWarpper
         }
     }
 
+    /// <summary>
+    /// 在当前活动页面后退。
+    /// </summary>
+    /// <returns>是否成功后退到上一页。</returns>
     public async Task<bool> GoBackAsync()
     {
         var page = ActivePage;
@@ -755,6 +919,10 @@ public class PlayWrightWarpper
         return await page.GoBackAsync() != null;
     }
 
+    /// <summary>
+    /// 在当前活动页面前进。
+    /// </summary>
+    /// <returns>是否成功前进到下一页。</returns>
     public async Task<bool> GoForwardAsync()
     {
         var page = ActivePage;
@@ -762,6 +930,9 @@ public class PlayWrightWarpper
         return await page.GoForwardAsync() != null;
     }
 
+    /// <summary>
+    /// 重新加载当前活动页面。
+    /// </summary>
     public async Task ReloadAsync()
     {
         var page = ActivePage;
@@ -769,6 +940,10 @@ public class PlayWrightWarpper
         await page.ReloadAsync();
     }
 
+    /// <summary>
+    /// 捕获当前活动页面的截图并以字节数组形式返回（PNG）。
+    /// </summary>
+    /// <returns>截图字节数组或 null（无活动页面时）。</returns>
     public async Task<byte[]?> CaptureScreenshotAsync()
     {
         var page = ActivePage;
@@ -781,6 +956,11 @@ public class PlayWrightWarpper
         });
     }
 
+    /// <summary>
+    /// 设置用户配置的视口尺寸并将其应用到页面。
+    /// </summary>
+    /// <param name="width">视口宽度（像素）。</param>
+    /// <param name="height">视口高度（像素）。</param>
     public async Task SetViewportSizeAsync(int width, int height)
     {
         _configuredViewportWidth = Math.Max(320, width);
