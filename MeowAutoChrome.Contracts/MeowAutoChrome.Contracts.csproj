@@ -18,7 +18,7 @@
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <PackageProjectUrl>https://github.com/DavidSciMeow/MeowAutoChrome</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DavidSciMeow/MeowAutoChrome</RepositoryUrl>
-    <PackageIcon>icon.png</PackageIcon>
+    <PackageIcon>icon.jpeg</PackageIcon>
     <Title>MeowAutoChrome.Contracts</Title>
     <Authors>DavidSciMeow</Authors>
   </PropertyGroup>
@@ -28,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="icon.png">
+    <None Update="icon.jpeg">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
