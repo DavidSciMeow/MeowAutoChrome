@@ -1,17 +1,17 @@
-﻿using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts.Attributes;
+﻿using MeowAutoChrome.Contracts.Attributes;
+using MeowAutoChrome.Contracts.BrowserPlugin;
 
 namespace MeowAutoChrome.ExamplePlugin;
 
-[BrowserPlugin("example.page-title", "Example 标题插件", Description = "示例插件：读取当前活动网页标题和地址。")]
-public sealed class ExamplePageTitlePlugin : BrowserPluginBase
+[Plugin("example.page-title", "Example 标题插件", Description = "示例插件：读取当前活动网页标题和地址。")]
+public sealed class ExamplePageTitlePlugin : PluginBase
 {
     public override bool SupportsPause => true;
 
     protected override string PluginName => "Example 插件";
 
-    [BrowserPluginAction("读取网页标题", Description = "直接通过当前活动页面读取 document.title。")]
-    public async Task<BrowserPluginActionResult> ReadTitleAsync()
+    [PAction("读取网页标题", Description = "直接通过当前活动页面读取 document.title。")]
+    public async Task<PluginActionResult> ReadTitleAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -33,8 +33,8 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
             });
     }
 
-    [BrowserPluginAction("读取 Playwright 对象", Description = "直接读取宿主注入的 BrowserContext 和 ActivePage。")]
-    public async Task<BrowserPluginActionResult> InspectPlaywrightAsync()
+    [PAction("读取 Playwright 对象", Description = "直接读取宿主注入的 BrowserContext 和 ActivePage。")]
+    public async Task<PluginActionResult> InspectPlaywrightAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -60,9 +60,9 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
             });
     }
 
-    [BrowserPluginAction("读取指定 ID 元素", Description = "输入 DOM 元素 ID，读取该元素的文本内容。")]
-    public async Task<BrowserPluginActionResult> ReadElementByIdAsync(
-        [BrowserPluginInput("元素 ID", Description = "要读取的 DOM id。")] string elementId
+    [PAction("读取指定 ID 元素", Description = "输入 DOM 元素 ID，读取该元素的文本内容。")]
+    public async Task<PluginActionResult> ReadElementByIdAsync(
+        [PInput("元素 ID", Description = "要读取的 DOM id。")] string elementId
         )
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
@@ -93,6 +93,55 @@ public sealed class ExamplePageTitlePlugin : BrowserPluginBase
                 ["url"] = page.Url,
                 ["pageCount"] = CurrentBrowserContext.Pages.Count.ToString(),
             });
+    }
+
+    [PAction("generate-letter", "生成信件", Description = "按当前页面标题和地址生成一封示例信件，并实时推送进度。")]
+    public async Task<PluginActionResult> GenerateLetterAsync(
+        [PInput("收件人", Description = "留空时默认写作“朋友”。", Name = "recipient")] string? recipient = null)
+    {
+        CurrentCancellationToken.ThrowIfCancellationRequested();
+
+        if (CurrentActivePage is null)
+            return this.OkResult("当前没有活动页面，无法生成信件。");
+
+        var page = RequireActivePage();
+        var normalizedRecipient = string.IsNullOrWhiteSpace(recipient) ? "朋友" : recipient.Trim();
+
+        await PublishUpdateAsync("正在读取页面标题… 一秒以后告诉你", new Dictionary<string, string?>
+        {
+            ["step"] = "1/3",
+            ["recipient"] = normalizedRecipient,
+        });
+
+        await Task.Delay(1000, CurrentCancellationToken);
+
+        var title = await page.EvaluateAsync<string?>("() => document?.title ?? null");
+        var normalizedTitle = string.IsNullOrWhiteSpace(title) ? "未命名页面" : title.Trim();
+
+        await PublishUpdateAsync("正在整理页面地址… 三秒后告诉你", new Dictionary<string, string?>
+        {
+            ["step"] = "2/3",
+            ["title"] = normalizedTitle,
+            ["url"] = page.Url,
+        });
+
+        await Task.Delay(3000, CurrentCancellationToken);
+
+        var letter = $"亲爱的{normalizedRecipient}：\n\n我刚刚浏览了一个页面《{normalizedTitle}》。\n如果你也想看看，可以打开：{page.Url}\n\n祝好。";
+
+        await PublishUpdateAsync("正在生成信件正文…", new Dictionary<string, string?>
+        {
+            ["step"] = "3/3",
+            ["letter"] = letter,
+        });
+
+        return this.OkResult("信件已生成。", new Dictionary<string, string?>
+        {
+            ["recipient"] = normalizedRecipient,
+            ["title"] = normalizedTitle,
+            ["url"] = page.Url,
+            ["letter"] = letter,
+        });
     }
 }
 

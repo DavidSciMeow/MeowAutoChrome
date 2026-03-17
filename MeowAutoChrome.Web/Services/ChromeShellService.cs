@@ -1,20 +1,29 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 
+/// <summary>
+/// 在 Windows 平台上为应用启动一个外部 Chrome 窗口（仅在非开发环境下），用于将 Web UI 在桌面上以浏览器窗口打开。
+/// 通过 IHostedService 生命周期钩子在启动时自动启动 Chrome（若找到可执行文件）并在应用停止时关闭。
+/// </summary>
 public sealed class ChromeShellService(
     IHostApplicationLifetime hostApplicationLifetime,
     IServer server,
     IWebHostEnvironment environment,
     AppLogService appLogService) : IHostedService, IDisposable
 {
-    private readonly object _syncRoot = new();
+    private readonly Lock _syncRoot = new();
     private Process? _chromeProcess;
     private bool _applicationStopping;
 
+    /// <summary>
+    /// 用于在应用启动时自动打开 Chrome 浏览器窗口指向应用的 URL（仅在生产环境且 Windows 平台上）。在应用停止时会尝试关闭该浏览器窗口。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns></returns>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (environment.IsDevelopment() || !OperatingSystem.IsWindows())
@@ -24,13 +33,17 @@ public sealed class ChromeShellService(
         hostApplicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
         return Task.CompletedTask;
     }
-
+    /// <summary>
+    /// 用于在应用停止时尝试关闭之前启动的 Chrome 浏览器窗口。会设置一个标志以避免在浏览器窗口被用户手动关闭时触发应用停止逻辑。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns></returns>
     public Task StopAsync(CancellationToken cancellationToken)
     {
         OnApplicationStopping();
         return Task.CompletedTask;
     }
-
+    /// <inheritdoc/>
     public void Dispose()
     {
         lock (_syncRoot)
