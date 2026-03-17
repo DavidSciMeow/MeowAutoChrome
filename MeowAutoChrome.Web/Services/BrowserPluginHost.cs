@@ -1,5 +1,4 @@
-﻿using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts.Attributes;
+﻿using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Warpper;
@@ -13,6 +12,8 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Runtime.Loader;
+using MeowAutoChrome.Contracts.BrowserPlugin;
+using MeowAutoChrome.Contracts.Interface;
 
 namespace MeowAutoChrome.Web.Services;
 
@@ -29,7 +30,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <summary>
     /// 插件属性特性全名，用于在程序集元数据中识别标记为浏览器插件的类型。
     /// </summary>
-    private static readonly string BrowserPluginAttributeFullName = typeof(BrowserPluginAttribute).FullName ?? nameof(BrowserPluginAttribute);
+    private static readonly string BrowserPluginAttributeFullName = typeof(PluginAttribute).FullName ?? nameof(PluginAttribute);
 
     /// <summary>
     /// 插件根目录的物理路径（默认为应用目录下的 "Plugins" 子目录）。
@@ -120,7 +121,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var hostContext = new BrowserPluginHostContext(
+        var hostContext = new PluginHostContext(
             browserInstances.BrowserContext,
             browserInstances.ActivePage,
             browserInstances.CurrentInstanceId,
@@ -170,7 +171,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var hostContext = new BrowserPluginHostContext(
+        var hostContext = new PluginHostContext(
             browserInstances.BrowserContext,
             browserInstances.ActivePage,
             browserInstances.CurrentInstanceId,
@@ -187,7 +188,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             pluginInstance =>
             {
                 var invocation = action.Method.Invoke(pluginInstance, BuildInvocationArguments(action.Method, hostContext));
-                if (invocation is not Task<BrowserPluginActionResult> task)
+                if (invocation is not Task<PluginActionResult> task)
                     throw new InvalidOperationException($"插件动作返回类型无效：{plugin.Type.FullName}.{action.Method.Name}");
 
                 return task;
@@ -359,7 +360,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             if (_instances.TryGetValue(plugin.Id, out var current) && current.Type == plugin.Type)
                 return current;
 
-            var instance = Activator.CreateInstance(plugin.Type) as IBrowserPlugin;
+            var instance = Activator.CreateInstance(plugin.Type) as IPlugin;
             if (instance is null)
                 throw new InvalidOperationException($"无法创建插件实例：{plugin.Type.FullName}");
 
@@ -377,7 +378,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="execute">执行委托。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>插件动作执行结果。</returns>
-    private static async Task<BrowserPluginActionResult> ExecuteWithHostContextAsync(RuntimeBrowserPluginInstance instance, IHostContext hostContext, Func<IBrowserPlugin, Task<BrowserPluginActionResult>> execute, CancellationToken cancellationToken)
+    private static async Task<PluginActionResult> ExecuteWithHostContextAsync(RuntimeBrowserPluginInstance instance, IHostContext hostContext, Func<IPlugin, Task<PluginActionResult>> execute, CancellationToken cancellationToken)
     {
         await instance.ExecutionLock.WaitAsync(cancellationToken);
 
@@ -417,10 +418,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             try
             {
                 var type = assembly.GetType(candidateTypeName, throwOnError: false, ignoreCase: false);
-                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(IBrowserPlugin).IsAssignableFrom(type))
+                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(IPlugin).IsAssignableFrom(type))
                     continue;
 
-                var pluginAttribute = type.GetCustomAttribute<BrowserPluginAttribute>();
+                var pluginAttribute = type.GetCustomAttribute<PluginAttribute>();
                 if (pluginAttribute is null)
                     continue;
 
@@ -445,7 +446,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     }
 
     /// <summary>
-    /// 扫描插件程序集，返回所有标记为 BrowserPluginAttribute 的类型全名。
+    /// 扫描插件程序集，返回所有标记为 PluginAttribute 的类型全名。
     /// </summary>
     /// <param name="pluginPath">插件程序集路径。</param>
     /// <returns>插件类型全名集合。</returns>
@@ -544,10 +545,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     {
         var controls = new List<RuntimeBrowserPluginControl>();
 
-        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(IBrowserPlugin.StartAsync));
-        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(IBrowserPlugin.StopAsync));
-        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(IBrowserPlugin.PauseAsync));
-        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(IBrowserPlugin.ResumeAsync));
+        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(IPlugin.StartAsync));
+        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(IPlugin.StopAsync));
+        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(IPlugin.PauseAsync));
+        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(IPlugin.ResumeAsync));
 
         return controls;
     }
@@ -564,12 +565,12 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
         foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public))
         {
-            var attribute = method.GetCustomAttribute<BrowserPluginActionAttribute>();
+            var attribute = method.GetCustomAttribute<PActionAttribute>();
             if (attribute is null || !HasSupportedSignature(method))
                 continue;
 
             var legacyParameterMetadata = method
-                .GetCustomAttributes<BrowserPluginInputAttribute>()
+                .GetCustomAttributes<PInputAttribute>()
                 .Where(item => !string.IsNullOrWhiteSpace(item.Name) || !string.IsNullOrWhiteSpace(item.Label))
                 .GroupBy(item => item.Name ?? item.Label, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
@@ -579,7 +580,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 .Where(parameter => !IsHostParameter(parameter))
                 .Select(parameter => CreateActionParameter(
                     parameter,
-                    parameter.GetCustomAttributes<BrowserPluginInputAttribute>().LastOrDefault(),
+                    parameter.GetCustomAttributes<PInputAttribute>().LastOrDefault(),
                     legacyParameterMetadata.GetValueOrDefault(parameter.Name ?? string.Empty)))
                 .ToArray();
 
@@ -760,7 +761,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <returns>是否为受支持签名。</returns>
     private static bool HasSupportedSignature(MethodInfo method)
     {
-        if (method.ReturnType != typeof(Task<BrowserPluginActionResult>))
+        if (method.ReturnType != typeof(Task<PluginActionResult>))
             return false;
 
         return method.GetParameters().All(parameter => IsHostParameter(parameter) || IsBindableParameter(parameter));
@@ -872,7 +873,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// </summary>
     /// <param name="type">插件类型。</param>
     /// <param name="instance">插件实例。</param>
-    private sealed class RuntimeBrowserPluginInstance(Type type, IBrowserPlugin instance)
+    private sealed class RuntimeBrowserPluginInstance(Type type, IPlugin instance)
     {
         /// <summary>
         /// 插件类型。
@@ -881,7 +882,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         /// <summary>
         /// 插件实例。
         /// </summary>
-        public IBrowserPlugin Instance { get; } = instance;
+        public IPlugin Instance { get; } = instance;
         /// <summary>
         /// 执行锁，确保同一时间只有一个操作在执行插件实例的方法，避免并发访问导致的状态不一致或竞态条件。
         /// </summary>
@@ -999,7 +1000,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="parameterMetadata">参数特性。</param>
     /// <param name="legacyMetadata">兼容旧特性的参数元数据。</param>
     /// <returns>动作参数元数据。</returns>
-    private static RuntimeBrowserPluginActionParameter CreateActionParameter(ParameterInfo parameter, BrowserPluginInputAttribute? parameterMetadata, BrowserPluginInputAttribute? legacyMetadata)
+    private static RuntimeBrowserPluginActionParameter CreateActionParameter(ParameterInfo parameter, PInputAttribute? parameterMetadata, PInputAttribute? legacyMetadata)
     {
         var defaultValue = GetDefaultValue(parameter);
         var label = !string.IsNullOrWhiteSpace(parameterMetadata?.Label)
@@ -1050,7 +1051,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <returns>参数元数据集合。</returns>
     private static IReadOnlyList<RuntimeBrowserPluginActionParameter> CreateMethodInputParameters(MethodInfo method)
         => method
-            .GetCustomAttributes<BrowserPluginInputAttribute>()
+            .GetCustomAttributes<PInputAttribute>()
             .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Name) || !string.IsNullOrWhiteSpace(attribute.Label))
             .Select(attribute => new RuntimeBrowserPluginActionParameter(
                 attribute.Name?.Trim() ?? attribute.Label.Trim(),

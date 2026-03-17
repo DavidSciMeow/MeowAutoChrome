@@ -536,7 +536,8 @@ public class PlayWrightWarpper
                 ActivateBrowserContext(nextContext, targetDirectory, isHeadless);
                 await ApplyConfiguredViewportSizeAsync();
 
-                _logger.LogInformation("浏览器启动设置已更新。UserDataDirectoryPath: {UserDataDirectoryPath}; Headless: {Headless}; UserAgent: {UserAgent}", targetDirectory, isHeadless, effectiveUserAgent ?? "(default)");
+                if(_logger.IsEnabled(LogLevel.Information))
+                    _logger.LogInformation("浏览器启动设置已更新。UserDataDirectoryPath: {UserDataDirectoryPath}; Headless: {Headless}; UserAgent: {UserAgent}", targetDirectory, isHeadless, effectiveUserAgent ?? "(default)");
             }
             catch (Exception ex)
             {
@@ -563,12 +564,14 @@ public class PlayWrightWarpper
                         var restoredContext = await CreateBrowserContextAsync(previousUserDataDirectory, previousIsHeadless, effectiveUserAgent);
                         ActivateBrowserContext(restoredContext, previousUserDataDirectory, previousIsHeadless);
                         await ApplyConfiguredViewportSizeAsync();
+                        if(_logger.IsEnabled(LogLevel.Warning))
                         _logger.LogWarning("浏览器启动设置回滚成功。UserDataDirectoryPath: {UserDataDirectoryPath}; Headless: {Headless}", previousUserDataDirectory, previousIsHeadless);
                     }
                 }
                 catch (Exception restoreException)
                 {
-                    _logger.LogCritical(restoreException, "浏览器启动设置回滚失败。OriginalUserDataDirectoryPath: {UserDataDirectoryPath}; OriginalHeadless: {Headless}", previousUserDataDirectory, previousIsHeadless);
+                    if (_logger.IsEnabled(LogLevel.Critical))
+                        _logger.LogCritical(restoreException, "浏览器启动设置回滚失败。OriginalUserDataDirectoryPath: {UserDataDirectoryPath}; OriginalHeadless: {Headless}", previousUserDataDirectory, previousIsHeadless);
                 }
 
                 LastErrorMessage = $"浏览器启动设置更新失败：{ex.Message}";
@@ -599,7 +602,8 @@ public class PlayWrightWarpper
             throw new InvalidOperationException("浏览器用户数据目录不能设置为当前目录的子目录或父目录。");
 
         MoveDirectoryContents(normalizedSourceDirectory, targetDirectory);
-        _logger.LogInformation("浏览器用户数据已从 {SourceDirectory} 迁移到 {TargetDirectory}", normalizedSourceDirectory, targetDirectory);
+        if(_logger.IsEnabled(LogLevel.Information))
+            _logger.LogInformation("浏览器用户数据已从 {SourceDirectory} 迁移到 {TargetDirectory}", normalizedSourceDirectory, targetDirectory);
     }
 
     private static bool IsNestedDirectory(string parentPath, string childPath)

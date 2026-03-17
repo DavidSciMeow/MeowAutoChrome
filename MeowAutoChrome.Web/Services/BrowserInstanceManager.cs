@@ -1,4 +1,5 @@
-﻿using MeowAutoChrome.Contracts;
+﻿using MeowAutoChrome.Contracts.BrowserContext;
+using MeowAutoChrome.Contracts.Interface;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.ProgarmControl;
 using MeowAutoChrome.Web.Warpper;
