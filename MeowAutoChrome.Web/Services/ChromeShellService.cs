@@ -19,6 +19,11 @@ public sealed class ChromeShellService(
     private Process? _chromeProcess;
     private bool _applicationStopping;
 
+    /// <summary>
+    /// 用于在应用启动时自动打开 Chrome 浏览器窗口指向应用的 URL（仅在生产环境且 Windows 平台上）。在应用停止时会尝试关闭该浏览器窗口。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns></returns>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (environment.IsDevelopment() || !OperatingSystem.IsWindows())
@@ -28,13 +33,17 @@ public sealed class ChromeShellService(
         hostApplicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
         return Task.CompletedTask;
     }
-
+    /// <summary>
+    /// 用于在应用停止时尝试关闭之前启动的 Chrome 浏览器窗口。会设置一个标志以避免在浏览器窗口被用户手动关闭时触发应用停止逻辑。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns></returns>
     public Task StopAsync(CancellationToken cancellationToken)
     {
         OnApplicationStopping();
         return Task.CompletedTask;
     }
-
+    /// <inheritdoc/>
     public void Dispose()
     {
         lock (_syncRoot)

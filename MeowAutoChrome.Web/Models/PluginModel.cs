@@ -109,5 +109,5 @@ public sealed record BrowserPluginOutputUpdate(string PluginId, string TargetId,
 /// </summary>
 /// <param name="Plugins">插件描述集合。</param>
 /// <param name="Errors">错误信息集合。</param>
-public sealed record BrowserPluginCatalogResponse(IReadOnlyList<BrowserPluginDescriptor> Plugins, IReadOnlyList<string> Errors);
+public sealed record BrowserPluginCatalogResponse(IReadOnlyList<BrowserPluginDescriptor?> Plugins, IReadOnlyList<string> Errors);
 

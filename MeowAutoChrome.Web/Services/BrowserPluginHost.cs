@@ -76,8 +76,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <summary>
     /// 确保插件根目录存在（如果不存在则创建该目录）。
     /// </summary>
-    public void EnsurePluginDirectoryExists()
-        => Directory.CreateDirectory(_pluginRootPath);
+    public void EnsurePluginDirectoryExists() => Directory.CreateDirectory(_pluginRootPath);
 
     /// <summary>
     /// 获取插件目录下可用的插件描述列表及扫描过程中产生的错误信息。
@@ -99,8 +98,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// 扫描并返回插件目录下可用的插件描述列表（不包含错误信息）。
     /// </summary>
     /// <returns>插件描述列表。</returns>
-    public IReadOnlyList<BrowserPluginDescriptor> GetPlugins()
-        => GetPluginCatalog().Plugins;
+    public IReadOnlyList<BrowserPluginDescriptor?> GetPlugins()  => GetPluginCatalog().Plugins;
 
     /// <summary>
     /// 对指定插件执行控制命令（如 start/stop/pause/resume），并返回执行结果。
@@ -250,7 +248,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
         foreach (var pluginPath in Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories))
         {
-            IReadOnlyList<string> candidateTypeNames;
+            string[] candidateTypeNames;
 
             try
             {
@@ -265,7 +263,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 continue;
             }
 
-            if (candidateTypeNames.Count == 0)
+            if (candidateTypeNames.Length == 0)
                 continue;
 
             var assembly = TryLoadPluginAssembly(pluginPath, errors);
@@ -276,11 +274,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         }
 
         return new PluginDiscoverySnapshot(
-            plugins
+            [.. plugins
             .Where(plugin => plugin.Actions.Count > 0 || plugin.Controls.Count > 0)
-            .OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray(),
-            errors.ToArray());
+            .OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase)],
+            [.. errors]);
     }
 
     /// <summary>
@@ -289,7 +286,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="plugin">运行时插件信息。</param>
     /// <param name="errors">错误收集列表。</param>
     /// <returns>插件描述符或 null（初始化失败时）。</returns>
-    private BrowserPluginDescriptor? CreatePluginDescriptor(RuntimeBrowserPlugin plugin, ICollection<string> errors)
+    private BrowserPluginDescriptor? CreatePluginDescriptor(RuntimeBrowserPlugin plugin, List<string> errors)
     {
         try
         {
@@ -301,13 +298,13 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 plugin.Description,
                 instance.Instance.State.ToString(),
                 instance.Instance.SupportsPause,
-                plugin.Controls
+                [.. plugin.Controls
                     .Where(control => instance.Instance.SupportsPause || (control.Command != "pause" && control.Command != "resume"))
                     .Select(control => new BrowserPluginControlDescriptor(
                         control.Command,
                         control.Name,
                         control.Description,
-                        control.Parameters
+                        [.. control.Parameters
                             .Select(parameter => new BrowserPluginActionParameterDescriptor(
                                 parameter.Name,
                                 parameter.Label,
@@ -315,17 +312,13 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                                 parameter.DefaultValue,
                                 parameter.Required,
                                 parameter.InputType,
-                                parameter.Options
-                                    .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
-                                    .ToArray()))
-                            .ToArray()))
-                    .ToArray(),
-                plugin.Actions
+                                [.. parameter.Options.Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))]))]))],
+                [.. plugin.Actions
                     .Select(action => new BrowserPluginFunctionDescriptor(
                         action.Id,
                         action.Name,
                         action.Description,
-                        action.Parameters
+                        [.. action.Parameters
                             .Select(parameter => new BrowserPluginActionParameterDescriptor(
                                 parameter.Name,
                                 parameter.Label,
@@ -333,11 +326,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                                 parameter.DefaultValue,
                                 parameter.Required,
                                 parameter.InputType,
-                                parameter.Options
-                                    .Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))
-                                    .ToArray()))
-                            .ToArray()))
-                    .ToArray());
+                                [.. parameter.Options.Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))]))]))]);
         }
         catch (Exception ex)
         {
@@ -360,8 +349,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             if (_instances.TryGetValue(plugin.Id, out var current) && current.Type == plugin.Type)
                 return current;
 
-            var instance = Activator.CreateInstance(plugin.Type) as IPlugin;
-            if (instance is null)
+            if (Activator.CreateInstance(plugin.Type) is not IPlugin instance)
                 throw new InvalidOperationException($"无法创建插件实例：{plugin.Type.FullName}");
 
             current = new RuntimeBrowserPluginInstance(plugin.Type, instance);
@@ -409,7 +397,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="candidateTypeNames">候选类型全名集合。</param>
     /// <param name="errors">错误收集列表。</param>
     /// <returns>发现的插件集合。</returns>
-    private IEnumerable<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, ICollection<string> errors)
+    private List<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, List<string> errors)
     {
         var plugins = new List<RuntimeBrowserPlugin>();
 
@@ -450,7 +438,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// </summary>
     /// <param name="pluginPath">插件程序集路径。</param>
     /// <returns>插件类型全名集合。</returns>
-    private static IReadOnlyList<string> DiscoverPluginTypeNames(string pluginPath)
+    private static string[] DiscoverPluginTypeNames(string pluginPath)
     {
         using var stream = new FileStream(pluginPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         using var peReader = new PEReader(stream);
@@ -474,9 +462,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             typeNames.Add(typeName);
         }
 
-        return typeNames
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        return [.. typeNames.Distinct(StringComparer.Ordinal)];
     }
 
     /// <summary>
@@ -541,7 +527,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// </summary>
     /// <param name="type">插件类型。</param>
     /// <returns>控制命令集合。</returns>
-    private static IReadOnlyList<RuntimeBrowserPluginControl> DiscoverControls(Type type)
+    private static List<RuntimeBrowserPluginControl> DiscoverControls(Type type)
     {
         var controls = new List<RuntimeBrowserPluginControl>();
 
@@ -558,7 +544,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// </summary>
     /// <param name="type">插件类型。</param>
     /// <returns>动作集合。</returns>
-    private static IReadOnlyList<RuntimeBrowserPluginAction> DiscoverActions(Type type)
+    private static List<RuntimeBrowserPluginAction> DiscoverActions(Type type)
     {
         var actions = new List<RuntimeBrowserPluginAction>();
         var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -605,7 +591,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="pluginPath">插件程序集路径。</param>
     /// <param name="errors">错误收集列表。</param>
     /// <returns>加载成功的程序集或 null。</returns>
-    private Assembly? TryLoadPluginAssembly(string pluginPath, ICollection<string> errors)
+    private Assembly? TryLoadPluginAssembly(string pluginPath, List<string> errors)
     {
         try
         {
@@ -1050,7 +1036,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="method">方法信息。</param>
     /// <returns>参数元数据集合。</returns>
     private static IReadOnlyList<RuntimeBrowserPluginActionParameter> CreateMethodInputParameters(MethodInfo method)
-        => method
+        => [.. method
             .GetCustomAttributes<PInputAttribute>()
             .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Name) || !string.IsNullOrWhiteSpace(attribute.Label))
             .Select(attribute => new RuntimeBrowserPluginActionParameter(
@@ -1060,8 +1046,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 attribute.DefaultValue,
                 attribute.Required,
                 NormalizeInputType(attribute.InputType),
-                Array.Empty<RuntimeBrowserPluginActionParameterOption>()))
-            .ToArray();
+                []))];
 
     /// <summary>
     /// 规范化参数输入类型。
@@ -1331,12 +1316,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     {
         var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
         if (!parameterType.IsEnum)
-            return Array.Empty<RuntimeBrowserPluginActionParameterOption>();
+            return [];
 
-        return Enum
+        return [.. Enum
             .GetNames(parameterType)
-            .Select(name => new RuntimeBrowserPluginActionParameterOption(name, GetEnumOptionLabel(parameterType, name)))
-            .ToArray();
+            .Select(name => new RuntimeBrowserPluginActionParameterOption(name, GetEnumOptionLabel(parameterType, name)))];
     }
 
     /// <summary>
