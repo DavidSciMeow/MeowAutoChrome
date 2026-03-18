@@ -718,7 +718,9 @@
                 container.replaceChildren();
 
                 const entries = Object.entries(data || {});
-                if (!entries.length) {
+                // filter out internal 'state' key so it is not shown as a separate row
+                const filtered = entries.filter(([k]) => String(k || "").toLowerCase() !== "state");
+                if (!filtered.length) {
                     const empty = document.createElement("div");
                     empty.className = "plugin-output-empty";
                     empty.textContent = emptyText;
@@ -726,7 +728,7 @@
                     return;
                 }
 
-                for (const [key, value] of entries) {
+                for (const [key, value] of filtered) {
                     const row = document.createElement("div");
                     row.className = "plugin-output-row";
 
@@ -757,9 +759,12 @@
                     return;
                 }
 
-                const resultCount = Math.min((output.entries || []).length, 99);
-                ui.badge.textContent = resultCount > 0 ? String(resultCount) : "";
-                ui.badge.classList.toggle("d-none", resultCount === 0);
+                // show unread count (fallback to total entries if unreadCount not present)
+                const unread = Math.min(Number(output.unreadCount ?? (output.entries || []).length) || 0, 99);
+                ui.badge.textContent = unread > 0 ? String(unread) : "";
+                ui.badge.classList.toggle("d-none", unread === 0);
+
+                // no per-target UI update here; per-target statuses are shown inside the plugin output modal
             }
 
             function renderPluginOutputModal(pluginId) {
@@ -779,6 +784,37 @@
                 pluginOutputModalSummary.classList.toggle("d-none", !pluginOutputModalSummary.textContent);
 
                 renderPluginOutputRows(pluginOutputModalData, output.data, "当前还没有结构化返回值。");
+                // render current target status to the left of the "当前返回值" heading
+                try {
+                    const outputContainer = pluginOutputModalData?.parentElement;
+                    if (outputContainer) {
+                        const currentLabel = outputContainer.querySelector(".fw-semibold");
+                        // remove existing status if present
+                        const existing = outputContainer.querySelector(".plugin-output-current-status");
+                        if (existing) existing.remove();
+
+                        if (currentLabel) {
+                            // make the label inline and centered
+                            currentLabel.style.display = "inline-flex";
+                            currentLabel.style.alignItems = "center";
+
+                            const state = (output.targetStates && output.targetStates[output.targetId]) || plugin?.state || "";
+                            const ds = getPluginStateDisplayByName(state);
+                            const statusBtn = document.createElement("button");
+                            statusBtn.type = "button";
+                            // place status to the left of the label
+                            statusBtn.className = (ds.className || "btn btn-sm btn-outline-secondary") + " plugin-output-current-status me-2";
+                            statusBtn.disabled = true;
+                            statusBtn.style.pointerEvents = "none";
+                            statusBtn.textContent = ds.text || "";
+
+                            currentLabel.parentElement.insertBefore(statusBtn, currentLabel);
+                        }
+                    }
+                } catch (e) {
+                    // ignore modal UI errors
+                }
+
                 pluginOutputModalEntries.replaceChildren();
 
                 if (!(output.entries || []).length) {
@@ -804,6 +840,20 @@
                     time.className = "text-muted small";
                     time.textContent = formatPluginOutputTime(entry.timestampUtc);
 
+                    // insert a small disabled status button to the left of the entry name
+                    try {
+                        const state = (output.targetStates && output.targetStates[entry.targetId]) || plugin?.state || "";
+                        const ds = getPluginStateDisplayByName(state);
+                        const entryStatus = document.createElement("button");
+                        entryStatus.type = "button";
+                        entryStatus.className = (ds.className || "btn btn-sm btn-outline-secondary") + " me-2";
+                        entryStatus.disabled = true;
+                        entryStatus.style.pointerEvents = "none";
+                        entryStatus.textContent = ds.text || "";
+                        header.insertBefore(entryStatus, name);
+                    } catch (e) {
+                        // ignore
+                    }
                     header.appendChild(name);
                     header.appendChild(time);
                     item.appendChild(header);
@@ -828,23 +878,37 @@
                     return;
 
                 activePluginOutputPluginId = pluginId;
+                // mark as read when opening
+                try {
+                    const updated = { ...(output || {}) };
+                    updated.unreadCount = 0;
+                    pluginOutputStore.set(pluginId, updated);
+                } catch (e) { }
+
                 renderPluginOutputModal(pluginId);
+                // refresh the badge UI
+                syncPluginOutputUi(pluginId);
                 pluginOutputModal.show();
             }
 
             function applyPluginOutputUpdate(update) {
                 if (!update?.pluginId)
                     return;
-
                 const existing = pluginOutputStore.get(update.pluginId);
                 const mergedData = { ...(existing?.data || {}), ...(update.data || {}) };
+                const isCurrentModal = activePluginOutputPluginId === update.pluginId && pluginOutputModalElement.classList.contains("show");
+
                 const next = {
                     pluginId: update.pluginId,
                     targetId: update.targetId || existing?.targetId || "",
                     message: update.message ?? existing?.message ?? "",
                     data: mergedData,
                     updatedAt: update.timestampUtc || new Date().toISOString(),
-                    entries: existing?.entries ? [...existing.entries] : []
+                    entries: existing?.entries ? [...existing.entries] : [],
+                    // carry existing target-specific states and apply incoming state if any
+                    targetStates: existing?.targetStates ? { ...existing.targetStates } : {},
+                    // unread count: carry existing value
+                    unreadCount: Number(existing?.unreadCount || 0)
                 };
 
                 if (update.message || Object.keys(update.data || {}).length) {
@@ -855,9 +919,18 @@
                         timestampUtc: next.updatedAt
                     });
                     next.entries = next.entries.slice(0, 30);
+
+                    // increment unread count if modal not currently open for this plugin
+                    if (!isCurrentModal)
+                        next.unreadCount = (Number(existing?.unreadCount || 0) || 0) + 1;
+                    else
+                        next.unreadCount = 0;
                 }
 
-                const isCurrentModal = activePluginOutputPluginId === update.pluginId && pluginOutputModalElement.classList.contains("show");
+                if (update.state) {
+                    next.targetStates[next.targetId] = update.state;
+                }
+
                 pluginOutputStore.set(update.pluginId, next);
                 syncPluginOutputUi(update.pluginId);
 
@@ -1010,6 +1083,7 @@
                         pluginId: result.pluginId || plugin.id,
                         targetId: result.targetId || (kind === "control" ? target.command : target.id),
                         message: result.message,
+                        state: result.state,
                         data: result.data || {},
                         openModal: true,
                         timestampUtc: new Date().toISOString()
@@ -1173,6 +1247,18 @@
                                 : { text: state, className: "btn btn-sm btn-outline-secondary" };
             }
 
+            function getPluginStateDisplayByName(state) {
+                return state === "Running"
+                    ? { text: state, className: "btn btn-sm btn-success" }
+                    : state === "Paused"
+                        ? { text: state, className: "btn btn-sm btn-warning" }
+                        : state === "Stopped"
+                            ? { text: state, className: "btn btn-sm btn-secondary" }
+                            : state === "NoStartable"
+                                ? { text: state, className: "btn btn-sm btn-info" }
+                                : { text: state || "", className: "btn btn-sm btn-outline-secondary" };
+            }
+
             function renderPlugins(plugins) {
                 pluginHost.replaceChildren();
                 pluginCatalog.clear();
@@ -1275,6 +1361,8 @@
                             });
                             button.title = control.description || control.name;
                             controls.appendChild(button);
+
+                            // per-target status will be shown inside the output modal; no status UI here
                         }
 
                         controlsCard.appendChild(controls);
@@ -1296,6 +1384,8 @@
                             });
                             button.title = fn.description || fn.name;
                             functionButtons.appendChild(button);
+
+                            // per-target status will be shown inside the output modal; no status UI here
                         }
 
                         functionCard.appendChild(functionButtons);
