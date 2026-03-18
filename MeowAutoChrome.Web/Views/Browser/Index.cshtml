@@ -1256,10 +1256,7 @@
                         const controlsCard = document.createElement("div");
                         controlsCard.className = "border rounded p-2 bg-light-subtle mb-3";
 
-                        const controlsLabel = document.createElement("div");
-                        controlsLabel.className = "fw-semibold mb-2";
-                        controlsLabel.textContent = "控制";
-                        controlsCard.appendChild(controlsLabel);
+                        // controls label removed to keep only buttons
 
                         const controls = document.createElement("div");
                         controls.className = "d-flex flex-wrap gap-2";
@@ -1287,10 +1284,7 @@
                     const functionCard = document.createElement("div");
                     functionCard.className = "border rounded p-2 bg-light-subtle";
 
-                    const functionLabel = document.createElement("div");
-                    functionLabel.className = "fw-semibold mb-2";
-                    functionLabel.textContent = "导出函数";
-                    functionCard.appendChild(functionLabel);
+                    // function label removed to keep only buttons
 
                     if (plugin.functions?.length) {
                         const functionButtons = document.createElement("div");
