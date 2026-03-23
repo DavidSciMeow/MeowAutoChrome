@@ -1,7 +1,7 @@
 ﻿using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Models;
-using MeowAutoChrome.Web.Warpper;
+using MeowAutoChrome.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using Microsoft.AspNetCore.SignalR;
@@ -25,8 +25,9 @@ namespace MeowAutoChrome.Web.Services;
 /// <param name="environment">ASP.NET 主机环境（用于解析路径等）。</param>
 /// <param name="browserHub">SignalR Hub 上下文，用于向前端广播插件输出。</param>
 /// <param name="logger">日志记录器。</param>
-public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, IWebHostEnvironment environment, IHubContext<BrowserHub> browserHub, ILogger<BrowserPluginHost> logger)
+public sealed class BrowserPluginHost(Core.Services.PluginHost.BrowserPluginHostCore coreHost, IHubContext<BrowserHub> browserHub, ILogger<BrowserPluginHost> logger)
 {
+    private readonly BrowserInstanceManagerCore browserInstances = coreHost is null ? throw new InvalidOperationException() : coreHost.GetType().GetField("_browserInstances", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(coreHost) as BrowserInstanceManagerCore ?? throw new InvalidOperationException();
     /// <summary>
     /// 插件属性特性全名，用于在程序集元数据中识别标记为浏览器插件的类型。
     /// </summary>
@@ -70,7 +71,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <summary>
     /// ASP.NET 主机环境（用于解析路径等）。
     /// </summary>
-    public IWebHostEnvironment Environment { get; } = environment;
+    public object? Environment { get; } = null; // Environment is part of Web host; Web adapter uses local IWebHostEnvironment when needed.
 
 
     /// <summary>
@@ -91,7 +92,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             .Where(plugin => plugin is not null)
             .ToArray()!;
 
-        return new BrowserPluginCatalogResponse(plugins, errors);
+        // Map detailed errors into response
+        var errorsDetailed = discovery.ErrorsDetailed ?? Array.Empty<BrowserPluginErrorDescriptor>();
+
+        return new BrowserPluginCatalogResponse(plugins, errors, errorsDetailed);
     }
 
     /// <summary>
@@ -262,6 +266,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         // 返回值包含已解析的插件信息以及扫描过程中收集到的错误描述，便于上层展示或日志记录。
         var plugins = new List<RuntimeBrowserPlugin>();
         var errors = new List<string>();
+        var errorsDetailed = new List<BrowserPluginErrorDescriptor>();
 
         foreach (var pluginPath in Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories))
         {
@@ -277,6 +282,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 var message = $"插件程序集 {Path.GetFileName(pluginPath)} 元数据扫描失败：{detail}";
                 logger.LogError(ex, "插件程序集 {PluginAssembly} 元数据扫描失败。", pluginPath);
                 errors.Add(message);
+                errorsDetailed.Add(new BrowserPluginErrorDescriptor(Path.GetFileName(pluginPath), SummarizeLoaderExceptions(ex as ReflectionTypeLoadException ?? new ReflectionTypeLoadException(Array.Empty<Type>(), new Exception[] { ex })), detail));
                 continue;
             }
 
@@ -294,7 +300,8 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             [.. plugins
             .Where(plugin => plugin.Actions.Count > 0 || plugin.Controls.Count > 0)
             .OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase)],
-            [.. errors]);
+            [.. errors],
+            [.. errorsDetailed]);
     }
 
     /// <summary>
@@ -813,7 +820,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// </summary>
     /// <param name="Plugins">发现到的插件集合。</param>
     /// <param name="Errors">扫描过程中的错误集合。</param>
-    private sealed record PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> Plugins, IReadOnlyList<string> Errors);
+    private sealed record PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> Plugins, IReadOnlyList<string> Errors, IReadOnlyList<BrowserPluginErrorDescriptor> ErrorsDetailed);
 
     /// <summary>
     /// 插件控制命令元数据。
@@ -960,9 +967,16 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
                 return LoadFromAssemblyPath(resolvedPath);
 
             var directPath = Path.Combine(_pluginDirectoryPath, $"{assemblyName.Name}.dll");
-            return File.Exists(directPath)
-                ? LoadFromAssemblyPath(directPath)
-                : null;
+            if (File.Exists(directPath))
+                return LoadFromAssemblyPath(directPath);
+
+            // Fallback: try application base directory so plugins that depend on shared
+            // libraries (copied to app output) can resolve them.
+            var baseDirPath = Path.Combine(AppContext.BaseDirectory, $"{assemblyName.Name}.dll");
+            if (File.Exists(baseDirPath))
+                return LoadFromAssemblyPath(baseDirPath);
+
+            return null;
         }
 
         /// <summary>
@@ -980,6 +994,13 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             {
                 if (File.Exists(candidatePath))
                     return LoadUnmanagedDllFromPath(candidatePath);
+            }
+
+            // Fallback: try application base directory native candidates
+            foreach (var candidate in new[] { Path.Combine(AppContext.BaseDirectory, GetNativeLibraryFileName(unmanagedDllName)), Path.Combine(AppContext.BaseDirectory, unmanagedDllName) })
+            {
+                if (File.Exists(candidate))
+                    return LoadUnmanagedDllFromPath(candidate);
             }
 
             return nint.Zero;

@@ -13,11 +13,12 @@ public sealed class ChromeShellService(
     IHostApplicationLifetime hostApplicationLifetime,
     IServer server,
     IWebHostEnvironment environment,
-    AppLogService appLogService) : IHostedService, IDisposable
+    Core.Services.AppLogService appLogService) : IHostedService, IDisposable
 {
     private readonly Lock _syncRoot = new();
     private Process? _chromeProcess;
     private bool _applicationStopping;
+    private int _restartAttempt;
 
     /// <summary>
     /// 用于在应用启动时自动打开 Chrome 浏览器窗口指向应用的 URL（仅在生产环境且 Windows 平台上）。在应用停止时会尝试关闭该浏览器窗口。
@@ -26,7 +27,9 @@ public sealed class ChromeShellService(
     /// <returns></returns>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (environment.IsDevelopment() || !OperatingSystem.IsWindows())
+        // Only skip on non-Windows platforms. Start Chrome in development as well so the shell
+        // is pulled up by default on Windows.
+        if (!OperatingSystem.IsWindows())
             return Task.CompletedTask;
 
         hostApplicationLifetime.ApplicationStarted.Register(OnApplicationStarted);
@@ -60,54 +63,119 @@ public sealed class ChromeShellService(
             appLogService.WriteEntry(LogLevel.Warning, "Unable to determine application URL for Chrome shell startup.", nameof(ChromeShellService));
             return;
         }
-
-        var chromeExecutablePath = FindChromeExecutablePath();
-        if (chromeExecutablePath == null)
-        {
-            appLogService.WriteEntry(LogLevel.Warning, "Chrome executable was not found. Skipping browser auto-start.", nameof(ChromeShellService));
-            return;
-        }
-
+        // Ensure profile dir exists
+        var profileDirectoryPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "ChromeShellProfile");
         try
         {
-            var profileDirectoryPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "ChromeShellProfile");
             Directory.CreateDirectory(profileDirectoryPath);
-
-            var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = chromeExecutablePath,
-                Arguments = $"--new-window --user-data-dir=\"{profileDirectoryPath}\" \"{applicationUrl}\"",
-                UseShellExecute = false
-            });
-
-            if (process == null)
-            {
-                appLogService.WriteEntry(LogLevel.Warning, "Chrome process did not start. Skipping browser auto-start.", nameof(ChromeShellService));
-                return;
-            }
-
-            process.EnableRaisingEvents = true;
-            process.Exited += (_, _) =>
-            {
-                if (_applicationStopping)
-                    return;
-
-                appLogService.WriteEntry(LogLevel.Information, "Chrome shell exited. Stopping application.", nameof(ChromeShellService));
-                hostApplicationLifetime.StopApplication();
-            };
-
-            lock (_syncRoot)
-            {
-                _chromeProcess?.Dispose();
-                _chromeProcess = process;
-            }
-
-            appLogService.WriteEntry(LogLevel.Information, $"Chrome shell started at {applicationUrl}.", nameof(ChromeShellService));
         }
         catch (Exception ex)
         {
-            appLogService.WriteEntry(LogLevel.Error, $"Failed to start Chrome shell: {ex}", nameof(ChromeShellService));
+            appLogService.WriteEntry(LogLevel.Error, $"Failed to create Chrome profile directory: {ex}", nameof(ChromeShellService));
+            return;
         }
+
+        // Start chrome and attach a restart-on-exit guard
+        TryStartChromeWithGuard(applicationUrl, profileDirectoryPath);
+    }
+
+    private void TryStartChromeWithGuard(string applicationUrl, string profileDirectoryPath)
+    {
+        // Run start logic on threadpool to avoid blocking startup
+        Task.Run(() =>
+        {
+            var attempt = 0;
+            var maxAttempts = 5;
+            var backoffMs = 1000;
+
+            while (!_applicationStopping && attempt < maxAttempts)
+            {
+                attempt++;
+                try
+                {
+                    var chromeExecutablePath = FindChromeExecutablePath();
+                    if (chromeExecutablePath == null)
+                    {
+                        appLogService.WriteEntry(LogLevel.Warning, "Chrome executable was not found. Retry will be attempted.", nameof(ChromeShellService));
+                        Thread.Sleep(backoffMs);
+                        backoffMs = Math.Min(10000, backoffMs * 2);
+                        continue;
+                    }
+
+                    var startInfo = new ProcessStartInfo
+                    {
+                        FileName = chromeExecutablePath,
+                        Arguments = $"--new-window --user-data-dir=\"{profileDirectoryPath}\" \"{applicationUrl}\"",
+                        UseShellExecute = true
+                    };
+
+                    var process = Process.Start(startInfo);
+                    if (process == null)
+                    {
+                        appLogService.WriteEntry(LogLevel.Warning, "Chrome process did not start. Retrying...", nameof(ChromeShellService));
+                        Thread.Sleep(backoffMs);
+                        backoffMs = Math.Min(10000, backoffMs * 2);
+                        continue;
+                    }
+
+                    // Successfully started
+                    lock (_syncRoot)
+                    {
+                        _chromeProcess?.Dispose();
+                        _chromeProcess = process;
+                    }
+
+                    appLogService.WriteEntry(LogLevel.Information, $"Chrome shell started at {applicationUrl}. ProcessId={process.Id}", nameof(ChromeShellService));
+
+                    // Attach exit handler
+                    try
+                    {
+                        process.EnableRaisingEvents = true;
+                        process.Exited += (_, _) =>
+                        {
+                            try
+                            {
+                                if (_applicationStopping)
+                                    return;
+
+                                var exitCode = -1;
+                                try { exitCode = process.HasExited ? process.ExitCode : -1; } catch { }
+                                appLogService.WriteEntry(LogLevel.Warning, $"Chrome shell exited. ProcessId={process.Id}; ExitCode={exitCode}", nameof(ChromeShellService));
+
+                                // When the main Chrome shell launched by this program is closed, treat it as intent to stop the whole application.
+                                try
+                                {
+                                    hostApplicationLifetime.StopApplication();
+                                }
+                                catch (Exception ex)
+                                {
+                                    try { appLogService.WriteEntry(LogLevel.Error, $"Failed to stop application after Chrome exit: {ex}", nameof(ChromeShellService)); } catch { }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                try { appLogService.WriteEntry(LogLevel.Error, $"Error in Chrome shell exit handler: {ex}", nameof(ChromeShellService)); } catch { }
+                            }
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        appLogService.WriteEntry(LogLevel.Warning, $"Failed to attach exit handler to Chrome process: {ex}", nameof(ChromeShellService));
+                    }
+
+                    // Exit the start loop because process is running and handler will manage restarts
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    appLogService.WriteEntry(LogLevel.Error, $"Failed to start Chrome shell: {ex}", nameof(ChromeShellService));
+                    Thread.Sleep(backoffMs);
+                    backoffMs = Math.Min(10000, backoffMs * 2);
+                }
+            }
+
+            appLogService.WriteEntry(LogLevel.Error, "Exceeded attempts to start Chrome shell or application stopping; giving up.", nameof(ChromeShellService));
+        });
     }
 
     private void OnApplicationStopping()

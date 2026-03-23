@@ -8,15 +8,15 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- Plugins are runtime-loadable and should not be compiled or embedded into the Web project -->
   <ItemGroup>
-    <Compile Remove="Plugins\**" />
-    <Content Remove="Plugins\**" />
-    <EmbeddedResource Remove="Plugins\**" />
-    <None Remove="Plugins\**" />
+    <None Include="Plugins\**" />
   </ItemGroup>
 
   <ItemGroup>
-	<None Include="wwwroot\favicon.ico" />
+    <None Include="wwwroot\favicon.ico" />
+    <!-- Ensure plugin binaries are not treated as source files by the SDK build -->
+    <None Remove="Plugins\**\*.dll" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MeowAutoChrome.Contracts\MeowAutoChrome.Contracts.csproj" />
+    <ProjectReference Include="..\MeowAutoChrome.Core\MeowAutoChrome.Core.csproj" />
   </ItemGroup>
 
 </Project>

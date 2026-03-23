@@ -1,5 +1,5 @@
 ﻿using MeowAutoChrome.Web.Models;
-using MeowAutoChrome.Web.ProgarmControl;
+using MeowAutoChrome.Core;
 using MeowAutoChrome.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -10,7 +10,7 @@ namespace MeowAutoChrome.Web.Controllers
     /// <summary>
     /// 主页控制器（用于设置、日志和隐私页面），负责处理程序设置的保存与验证，以及日志的展示与清理。
     /// </summary>
-    public class HomeController(ProgramSettingsService programSettingsService, ScreencastService screencastService, AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
+public class HomeController(IProgramSettingsProvider programSettingsService, ScreencastService screencastService, Core.Services.AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
     {
         /// <summary>
         /// 将 FPS 值转换为帧间隔（毫秒），最小支持 16ms。
@@ -25,7 +25,7 @@ namespace MeowAutoChrome.Web.Controllers
         /// </summary>
         /// <param name="entry">日志模型</param>
         /// <returns></returns>
-        private static LogEntryViewModel ToLogEntryViewModel(AppLogEntry entry)
+        private static LogEntryViewModel ToLogEntryViewModel(Core.Models.AppLogEntry entry)
             => new()
             {
                 TimestampText = entry.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"),
@@ -51,11 +51,15 @@ namespace MeowAutoChrome.Web.Controllers
 
             try
             {
-                var currentUserDataDirectory = Path.GetFullPath(browserInstances.PrimaryInstance.UserDataDirectoryPath);
-                var targetUserDataDirectory = Path.GetFullPath(model.UserDataDirectory);
+                var primary = browserInstances.CurrentInstance;
+                if (primary is not null)
+                {
+                    var currentUserDataDirectory = Path.GetFullPath(primary.UserDataDirectoryPath);
+                    var targetUserDataDirectory = Path.GetFullPath(model.UserDataDirectory);
 
-                if (IsNestedDirectory(currentUserDataDirectory, targetUserDataDirectory) || IsNestedDirectory(targetUserDataDirectory, currentUserDataDirectory))
-                    ModelState.AddModelError(nameof(model.UserDataDirectory), "浏览器用户数据目录不能设置为当前目录的子目录或父目录。");
+                    if (IsNestedDirectory(currentUserDataDirectory, targetUserDataDirectory) || IsNestedDirectory(targetUserDataDirectory, currentUserDataDirectory))
+                        ModelState.AddModelError(nameof(model.UserDataDirectory), "浏览器用户数据目录不能设置为当前目录的子目录或父目录。");
+                }
             }
             catch (Exception)
             {
@@ -98,8 +102,8 @@ namespace MeowAutoChrome.Web.Controllers
 
             await programSettingsService.SaveAsync(settings);
 
-            var userDataDirectoryChanged = !string.Equals(browserInstances.PrimaryInstance.UserDataDirectoryPath, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
-            var headlessChanged = browserInstances.PrimaryInstance.IsHeadless != settings.Headless;
+            var userDataDirectoryChanged = !string.Equals(previousSettings.UserDataDirectory, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
+            var headlessChanged = previousSettings.Headless != settings.Headless;
             var userAgentChanged = !string.Equals(previousSettings.UserAgent, settings.UserAgent, StringComparison.Ordinal);
             var userAgentOverrideChanged = previousSettings.AllowInstanceUserAgentOverride != settings.AllowInstanceUserAgentOverride;
             var launchSettingsChanged = userDataDirectoryChanged || headlessChanged || userAgentChanged || userAgentOverrideChanged;
@@ -191,7 +195,7 @@ namespace MeowAutoChrome.Web.Controllers
             return View(new LogPageViewModel
             {
                 LogDisplayPath = appLogService.LogDisplayPath,
-                Entries = (await appLogService.ReadRecentEntriesAsync()).Select(ToLogEntryViewModel).ToArray(),
+                Entries = (await appLogService.ReadRecentEntriesAsync()).Select(e => ToLogEntryViewModel(e)).ToArray(),
                 LastUpdatedUtc = appLogService.GetLastWriteTime()
             });
         }
@@ -202,7 +206,7 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpGet]
         public async Task<IActionResult> LogsContent()
         {
-            var entries = (await appLogService.ReadRecentEntriesAsync()).Select(ToLogEntryViewModel).ToArray();
+            var entries = (await appLogService.ReadRecentEntriesAsync()).Select(e => ToLogEntryViewModel(e)).ToArray();
 
             return Json(new
             {
@@ -239,7 +243,7 @@ namespace MeowAutoChrome.Web.Controllers
                     .Select(error => error.ErrorMessage)
                     .FirstOrDefault() ?? "设置保存失败。";
 
-                return BadRequest(new { message = errorMessage });
+                return Problem(detail: errorMessage, title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
             }
 
             try
@@ -249,7 +253,7 @@ namespace MeowAutoChrome.Web.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return Problem(detail: ex.Message, title: "ServerError", statusCode: StatusCodes.Status500InternalServerError);
             }
         }
 
@@ -269,5 +273,7 @@ namespace MeowAutoChrome.Web.Controllers
         {
             return View(new ErrorViewModel(Activity.Current?.Id ?? HttpContext.TraceIdentifier));
         }
+
+        // Legacy parsing helper removed from controller — parsing is handled by AppLogService in Core.
     }
 }

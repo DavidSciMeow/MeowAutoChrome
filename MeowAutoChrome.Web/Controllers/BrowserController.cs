@@ -1,7 +1,7 @@
 ﻿using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
-using MeowAutoChrome.Web.Warpper;
+using MeowAutoChrome.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 
@@ -16,7 +16,7 @@ namespace MeowAutoChrome.Web.Controllers
     /// <param name="pluginHost">插件宿主</param>
     /// <param name="resourceMetricsService">资源监控服务</param>
     /// <param name="programSettingsService">程序设置服务</param>
-    public class BrowserController(BrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, BrowserPluginHost pluginHost, ResourceMetricsService resourceMetricsService, ProgramSettingsService programSettingsService) : Controller
+public class BrowserController(BrowserInstanceManagerCore browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, BrowserPluginHost pluginHost, Core.Services.ResourceMetricsService resourceMetricsService, IProgramSettingsProvider programSettingsService) : Controller
     {
         /// <summary>
         /// 用于从请求头中传递 BrowserHub 连接 ID 的自定义 header 名称，允许插件输出定向发送到特定客户端（例如仅发送给发起控制请求的页面）。如果未提供该 header，则插件输出将发送给所有连接的客户端。
@@ -45,13 +45,15 @@ namespace MeowAutoChrome.Web.Controllers
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns></returns>
         [HttpPost]
-        public async Task<IActionResult> ControlPlugin([FromBody] BrowserPluginControlRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> ControlPlugin([FromBody] Contracts.BrowserPlugin.BrowserPluginControlRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.PluginId) || string.IsNullOrWhiteSpace(request.Command))
-                return BadRequest();
+                return Problem(detail: "插件控制请求参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
 
             var result = await pluginHost.ControlAsync(request.PluginId, request.Command, request.Arguments, GetBrowserHubConnectionId(), cancellationToken);
-            return result is null ? NotFound() : Ok(result);
+            return result is null
+                ? Problem(detail: "插件未找到或执行失败", title: "NotFound", statusCode: StatusCodes.Status404NotFound)
+                : Ok((object?)result);
         }
         /// <summary>
         /// 执行插件的动作函数并返回结果。
@@ -60,13 +62,15 @@ namespace MeowAutoChrome.Web.Controllers
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns></returns>
         [HttpPost]
-        public async Task<IActionResult> RunPluginFunction([FromBody] BrowserPluginFunctionExecutionRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> RunPluginFunction([FromBody] Contracts.BrowserPlugin.BrowserPluginFunctionExecutionRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.PluginId) || string.IsNullOrWhiteSpace(request.FunctionId))
-                return BadRequest();
+                return Problem(detail: "插件函数执行请求参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
 
             var result = await pluginHost.ExecuteAsync(request.PluginId, request.FunctionId, request.Arguments, GetBrowserHubConnectionId(), cancellationToken);
-            return result is null ? NotFound() : Ok(result);
+            return result is null
+                ? Problem(detail: "插件或函数未找到或执行失败", title: "NotFound", statusCode: StatusCodes.Status404NotFound)
+                : Ok((object?)result);
         }
         /// <summary>
         /// 获取浏览器与系统状态（用于前端仪表盘）。
@@ -86,10 +90,12 @@ namespace MeowAutoChrome.Web.Controllers
         public async Task<IActionResult> InstanceSettings([FromQuery] string instanceId)
         {
             if (string.IsNullOrWhiteSpace(instanceId))
-                return BadRequest();
+                return Problem(detail: "实例 ID 无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
 
             var settings = await browserInstances.GetInstanceSettingsAsync(instanceId);
-            return settings is null ? NotFound() : Ok(settings);
+            return settings is null
+                ? Problem(detail: "实例不存在", title: "NotFound", statusCode: StatusCodes.Status404NotFound)
+                : Ok(settings);
         }
         /// <summary>
         /// 导航当前页面到指定 URL 或关键字（将触发 Screencast 刷新）。
@@ -117,7 +123,7 @@ namespace MeowAutoChrome.Web.Controllers
                 || request.ViewportWidth <= 0
                 || request.ViewportHeight <= 0)
             {
-                return BadRequest();
+                return Problem(detail: "请求参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
             }
 
             bool updated;
@@ -139,11 +145,11 @@ namespace MeowAutoChrome.Web.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return Problem(detail: ex.Message, title: "InvalidOperation", statusCode: StatusCodes.Status400BadRequest);
             }
 
             if (!updated)
-                return NotFound();
+                return Problem(detail: "实例不存在", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
 
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
@@ -158,7 +164,7 @@ namespace MeowAutoChrome.Web.Controllers
         public async Task<IActionResult> CurrentInstanceViewport([FromBody] BrowserViewportSyncRequest request, CancellationToken cancellationToken)
         {
             if (request.Width <= 0 || request.Height <= 0)
-                return BadRequest();
+                return Problem(detail: "宽高参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
 
             await browserInstances.SyncCurrentInstanceViewportAsync(request.Width, request.Height, cancellationToken);
             await screencastService.RefreshTargetAsync();
@@ -174,7 +180,7 @@ namespace MeowAutoChrome.Web.Controllers
         {
             var closed = await browserInstances.CloseTabAsync(request.TabId);
             if (!closed)
-                return NotFound();
+                return Problem(detail: "标签页不存在或已无法关闭", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
 
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
@@ -190,7 +196,7 @@ namespace MeowAutoChrome.Web.Controllers
         {
             var closed = await browserInstances.CloseBrowserInstanceAsync(request.InstanceId, cancellationToken);
             if (!closed)
-                return NotFound();
+                return Problem(detail: "实例不存在或无法关闭", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
 
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
@@ -223,12 +229,41 @@ namespace MeowAutoChrome.Web.Controllers
             return Ok(await BuildStatusAsync());
         }
         /// <summary>
-        /// 新建标签页。
+        /// 在指定实例或当前实例中新建标签页。
+        /// 如果提供了 instanceId，会先切换到该实例再创建标签页。
         /// </summary>
         [HttpPost]
-        public async Task<IActionResult> NewTab()
+        public async Task<IActionResult> NewTab([FromBody] BrowserCreateTabRequest request)
         {
-            await browserInstances.CreateTabAsync();
+            if (!string.IsNullOrWhiteSpace(request.InstanceId))
+            {
+                var selected = await browserInstances.SelectBrowserInstanceAsync(request.InstanceId);
+                if (!selected)
+                    return Problem(detail: "实例不存在", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
+            }
+
+            if (browserInstances.CurrentInstance is null)
+            {
+                // 没有当前实例，创建一个新的实例然后返回状态
+                var ownerPluginId = "ui";
+                await browserInstances.CreateBrowserInstanceAsync(ownerPluginId);
+                await screencastService.RefreshTargetAsync();
+                return Ok(await BuildStatusAsync());
+            }
+
+            await browserInstances.CreateTabAsync(request.Url);
+            await screencastService.RefreshTargetAsync();
+            return Ok(await BuildStatusAsync());
+        }
+
+        /// <summary>
+        /// 创建一个新的浏览器实例。
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> CreateInstance([FromBody] BrowserCreateInstanceRequest request)
+        {
+            var ownerPluginId = string.IsNullOrWhiteSpace(request.OwnerPluginId) ? "ui" : request.OwnerPluginId;
+            var instanceId = await browserInstances.CreateBrowserInstanceAsync(ownerPluginId, request.DisplayName, request.UserDataDirectory);
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
         }
@@ -242,7 +277,7 @@ namespace MeowAutoChrome.Web.Controllers
         {
             var selected = await browserInstances.SelectPageAsync(request.TabId);
             if (!selected)
-                return NotFound();
+                return Problem(detail: "标签页不存在", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
 
             await screencastService.RefreshTargetAsync();
             return Ok(await BuildStatusAsync());
@@ -277,7 +312,10 @@ namespace MeowAutoChrome.Web.Controllers
         [HttpGet]
         public async Task<IActionResult> Screenshot()
         {
-            var screenshot = await browserInstances.CaptureScreenshotAsync();
+        if (browserInstances.Instances.Count == 0)
+                return Problem(detail: "无实例", title: "NoInstance", statusCode: StatusCodes.Status400BadRequest);
+
+            var screenshot = await HttpContext.RequestServices.GetRequiredService<Core.Services.ScreenshotService>().CaptureScreenshotAsync();
             if (screenshot == null)
                 return NotFound();
 
@@ -291,12 +329,26 @@ namespace MeowAutoChrome.Web.Controllers
             var metrics = resourceMetricsService.GetSnapshot();
             var settings = await programSettingsService.GetAsync();
 
+            var hasInstance = browserInstances.CurrentInstance is not null;
+            // Only expose an error message when an instance exists and reports one. Avoid returning a
+            // generic "无实例" string as an error, so the UI won't repeatedly notify the user when
+            // there simply is no instance.
+            var errorMessage = hasInstance ? browserInstances.CurrentInstance?.LastErrorMessage : null;
+
+            // supportsScreencast should reflect whether the backend/browser can produce screencast frames.
+            // Use presence of a BrowserContext (Playwright-managed) as capability indicator rather than
+            // the headless flag. A Playwright-launched headful (non-headless) context can still provide
+            // CDP screencast frames when launched by Playwright, so checking BrowserContext is more
+            // accurate for front-end UI decisions.
+            var supportsScreencast = hasInstance && browserInstances.BrowserContext != null;
+            var screencastEnabled = supportsScreencast && screencastService.Enabled;
+
             return new(
-                browserInstances.CurrentUrl,
+                browserInstances.CurrentUrl, // Updated to ensure clarity
                 await browserInstances.GetTitleAsync(),
-                browserInstances.CurrentInstance.LastErrorMessage,
-                browserInstances.IsHeadless,
-                screencastService.Enabled,
+                errorMessage,
+                supportsScreencast,
+                screencastEnabled,
                 screencastService.MaxWidth,
                 screencastService.MaxHeight,
                 screencastService.FrameIntervalMs,

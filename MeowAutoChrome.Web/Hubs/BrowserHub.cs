@@ -1,6 +1,6 @@
 ﻿using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
-using MeowAutoChrome.Web.Warpper;
+using MeowAutoChrome.Core;
 using Microsoft.AspNetCore.SignalR;
 
 namespace MeowAutoChrome.Web.Hubs;
@@ -10,12 +10,13 @@ namespace MeowAutoChrome.Web.Hubs;
 /// </summary>
 /// <param name="client">Playwright 封装器，用于与浏览器进行交互（通过依赖注入提供）。</param>
 /// <param name="screencast">屏幕投影服务，负责处理事件分发和连接管理（通过依赖注入提供）。</param>
-public class BrowserHub(PlayWrightWarpper client, ScreencastService screencast) : Hub
+public class BrowserHub(BrowserInstanceManager browserInstances, ScreencastService screencast) : Hub
 {
     /// <summary>
-    /// Playwright 封装器，用于与浏览器进行交互（通过依赖注入提供）。
+    /// Playwright 封装器的当前实例（由 BrowserInstanceManager 提供）。
+    /// 可能为 null（当尚未创建任何实例时）。
     /// </summary>
-    public PlayWrightWarpper Client { get; } = client;
+    public PlaywrightInstance? Client => browserInstances.CurrentInstance as PlaywrightInstance;
 
     /// <summary>
     /// 当 SignalR 客户端连接时调用，通知 ScreencastService 处理连接逻辑。

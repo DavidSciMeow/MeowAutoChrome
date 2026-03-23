@@ -1,10 +1,12 @@
-﻿@using MeowAutoChrome.Web.ProgarmControl
+﻿@using MeowAutoChrome.Core
 @{
     ViewData["Title"] = "浏览器控制台";
     Layout = "_Layout";
 }
 
 <div class="browser-workspace" id="browserWorkspace">
+    <!-- Toast container (top-right floating) -->
+    <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:10800;"></div>
     <div class="browser-pane browser-pane-left">
         <div class="browser-control-panel mb-3">
             <div class="browser-chrome">
@@ -17,15 +19,14 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn" id="tabsScrollRightBtn" title="向右滚动" aria-label="向右滚动">
                             <i class="fa-solid fa-chevron-right"></i>
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn" id="newTabBtn" title="New Tab" aria-label="New Tab">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
+                        <!-- newInstanceBtn moved into toolbar for clearer placement -->
                     </div>
                     <button type="button" class="btn btn-sm btn-primary browser-live-toggle" id="liveToggleBtn">实时画面</button>
                     <small class="browser-tabstrip-metric" id="cpuDisplay">CPU --</small>
                     <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
                     <small class="browser-tabstrip-metric" id="fpsDisplay">FPS --</small>
                     <span id="connStatus" class="badge bg-secondary">未连接</span>
+                    <span id="instanceStatus" class="badge bg-danger d-none ms-2">无实例</span>
                 </div>
 
                 <div class="browser-toolbar">
@@ -43,6 +44,7 @@
 
                     <div class="browser-toolbar-group">
                         <button type="button" class="btn btn-outline-primary browser-chrome-icon-btn" id="shotBtn" title="Screenshot" aria-label="Screenshot"><i class="fa-solid fa-camera"></i></button>
+                        <button type="button" class="btn btn-primary btn-md ms-2" id="newInstanceBtn" title="新建实例" aria-label="新建实例" style="font-weight:600;padding:.35rem .85rem"><i class="fa-solid fa-plus me-1"></i>新建实例</button>
                     </div>
                 </div>
 
@@ -117,6 +119,33 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="instanceSettingsSubmitBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="createInstanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建实例</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="createInstanceDisplayName">实例显示名（可选）</label>
+                    <input id="createInstanceDisplayName" class="form-control" placeholder="留空使用默认名" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="createInstanceUserDataDirectory">UserData 目录（可选）</label>
+                    <input id="createInstanceUserDataDirectory" class="form-control" placeholder="留空使用默认目录" />
+                    <div class="form-text">指定用户数据目录可为每个实例指定独立配置。</div>
+                </div>
+                <input type="hidden" id="createInstanceOwnerPluginId" value="ui" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="createInstanceSubmitBtn">创建</button>
             </div>
         </div>
     </div>
@@ -208,6 +237,7 @@
             const tabsShell = document.getElementById("tabsShell");
             const tabsScrollLeftBtn = document.getElementById("tabsScrollLeftBtn");
             const tabsScrollRightBtn = document.getElementById("tabsScrollRightBtn");
+            const newInstanceBtn = document.getElementById("newInstanceBtn");
             const liveToggleBtn = document.getElementById("liveToggleBtn");
             const tabsStatusPanel = document.getElementById("tabsStatusPanel");
             const pluginHost = document.getElementById("pluginHost");
@@ -241,6 +271,7 @@
             const instanceAutoResizeViewportInput = document.getElementById("instanceAutoResizeViewportInput");
             const instanceSettingsSubmitBtn = document.getElementById("instanceSettingsSubmitBtn");
             const shotBtn = document.getElementById("shotBtn");
+            const instanceStatusBadge = document.getElementById("instanceStatus");
             const pluginArgumentModal = pluginArgumentModalElement ? new bootstrap.Modal(pluginArgumentModalElement) : null;
             const screenshotPreviewModal = screenshotPreviewModalElement ? new bootstrap.Modal(screenshotPreviewModalElement) : null;
             const pluginOutputModal = pluginOutputModalElement ? new bootstrap.Modal(pluginOutputModalElement) : null;
@@ -249,6 +280,7 @@
             const pluginOutputStore = new Map();
             const pluginOutputUi = new Map();
             let statusBusy = false;
+            const shownMessages = new Set();
             let isEditingUrl = false;
             let liveDisplayEnabled = true;
             let measuredFps = 0;
@@ -434,22 +466,73 @@
                     const contentType = response.headers.get("content-type") || "";
                     if (contentType.includes("application/json")) {
                         const payload = await response.json().catch(() => null);
-                        message = payload?.message || payload?.title || message;
+
+                        // 支持 ProblemDetails（RFC7807）和自定义 { message } 结构
+                        if (payload) {
+                            message = payload.detail || payload.message || payload.title || message;
+                        }
                     } else {
                         const text = await response.text().catch(() => "");
                         if (text)
                             message = text;
                     }
 
-                    throw new Error(message);
+                    const err = new Error(message);
+                    err.status = response.status;
+                    err.url = url;
+                    throw err;
                 }
 
                 return await response.json();
             }
 
-            function showError(message) {
-                browserError.textContent = message || "操作失败，请稍后重试。";
-                browserError.classList.remove("d-none");
+            function showError(message, level = 'warning') {
+                // Create a Bootstrap toast in the top-right toast container
+                try {
+                    const container = document.getElementById('toastContainer');
+                    if (!container) {
+                        // fallback to inline alert
+                        browserError.textContent = message || "操作失败，请稍后重试。";
+                        browserError.classList.remove("d-none");
+                        return;
+                    }
+
+                    const id = 'toast-' + Math.random().toString(36).slice(2, 9);
+                    const toastEl = document.createElement('div');
+                    toastEl.className = 'toast align-items-center text-bg-' + (level === 'error' ? 'danger' : 'warning') + ' border-0';
+                    toastEl.role = 'alert';
+                    toastEl.ariaLive = 'assertive';
+                    toastEl.ariaAtomic = 'true';
+                    toastEl.id = id;
+
+                    // allow multi-line content and prefer the server-provided message fully instead of truncating to status
+                    toastEl.innerHTML = `
+                        <div class="d-flex">
+                            <div class="toast-body small" style="max-width:400px;white-space:pre-wrap">${(message || '').replace(/</g,'&lt;')}</div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>`;
+
+                    // Avoid showing duplicate toasts with identical text repeatedly
+                    const key = (message || '').trim();
+                    if (shownMessages.has(key)) {
+                        // Already shown this message once; do not show again
+                        return;
+                    }
+                    shownMessages.add(key);
+
+                    container.appendChild(toastEl);
+                    const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
+                    toast.show();
+                    // remove from DOM after hidden and allow message to be shown again in future
+                    toastEl.addEventListener('hidden.bs.toast', () => {
+                        toastEl.remove();
+                        try { shownMessages.delete(key); } catch { }
+                    });
+                } catch (ex) {
+                    // fallback
+                    browserError.textContent = message || "操作失败，请稍后重试。";
+                    browserError.classList.remove("d-none");
+                }
             }
 
             function clearError() {
@@ -663,9 +746,27 @@
                     showError(data.errorMessage);
                 else
                     clearError();
-                setScreencastAvailability(data.supportsScreencast !== false);
+
+                // 当没有实例时，显示右上角红色胶囊并禁止截图按钮
+                const hasInstance = !!selectedInstanceId;
+                if (!hasInstance) {
+                    if (instanceStatusBadge) {
+                        instanceStatusBadge.classList.remove("d-none");
+                        instanceStatusBadge.className = "badge bg-danger ms-2";
+                        instanceStatusBadge.textContent = "无实例";
+                    }
+                } else {
+                    if (instanceStatusBadge)
+                        instanceStatusBadge.classList.add("d-none");
+                }
+
+                setScreencastAvailability(data.supportsScreencast !== false && hasInstance);
                 if (screencastAvailable)
                     setLiveDisplayEnabled(data.screencastEnabled);
+
+                // 禁用截图按钮，若不支持录屏或无实例
+                if (shotBtn)
+                    shotBtn.disabled = !(data.supportsScreencast && hasInstance);
                 targetFrameIntervalMs = data.screencastFrameIntervalMs;
                 resizeCanvasBuffer(data.screencastMaxWidth, data.screencastMaxHeight);
                 renderFpsDisplay();
@@ -1561,18 +1662,8 @@
                 title.textContent = "TAB 状态";
                 header.appendChild(title);
 
-                const newTabButton = document.createElement("button");
-                newTabButton.type = "button";
-                newTabButton.className = "btn btn-sm btn-primary";
-                newTabButton.innerHTML = '<i class="fa-solid fa-plus me-1"></i>新建 TAB';
-                newTabButton.addEventListener("click", async () => {
-                    try {
-                        applyStatus(await postJson("/Browser/NewTab", {}));
-                    } catch (e) {
-                        showError(e.message || "新建标签页失败。");
-                    }
-                });
-                header.appendChild(newTabButton);
+                // per-instance New TAB buttons are rendered inside each instance group;
+                // remove global "新建 TAB" button from tabs status header to avoid confusion when no instances exist.
 
                 tabsStatusPanel.appendChild(header);
 
@@ -1580,6 +1671,20 @@
                     const empty = document.createElement("div");
                     empty.className = "tabs-status-empty";
                     empty.textContent = "暂无 TAB";
+                    const cta = document.createElement("div");
+                    cta.className = "mt-3";
+                    const ctaBtn = document.createElement("button");
+                    ctaBtn.type = "button";
+                    ctaBtn.className = "btn btn-sm btn-primary";
+                    ctaBtn.innerHTML = '<i class="fa-solid fa-plus me-1"></i> 新建 实例';
+                    ctaBtn.addEventListener('click', () => {
+                        const createModalEl = document.getElementById('createInstanceModal');
+                        if (createModalEl) {
+                            const modal = new bootstrap.Modal(createModalEl);
+                            modal.show();
+                        }
+                    });
+                    empty.appendChild(cta);
                     tabsStatusPanel.appendChild(empty);
                     return;
                 }
@@ -1632,6 +1737,25 @@
                         }
                     });
                     groupActions.appendChild(closeInstanceBtn);
+
+                    // 新建 TAB 按钮（在实例内部创建标签页）
+                    const instanceNewTabBtn = document.createElement("button");
+                    instanceNewTabBtn.type = "button";
+                    instanceNewTabBtn.className = "btn btn-sm btn-outline-primary ms-2";
+                    instanceNewTabBtn.title = "在此实例中新建 TAB";
+                    instanceNewTabBtn.setAttribute("aria-label", "在此实例中新建 TAB");
+                    instanceNewTabBtn.innerHTML = '<i class="fa-solid fa-plus"></i> 新建 TAB';
+                    instanceNewTabBtn.addEventListener("click", async e => {
+                        e.stopPropagation();
+                        clearError();
+                        try {
+                            await postJson('/Browser/NewTab', { instanceId: group.instanceId, url: urlInput.value.trim() || null });
+                            applyStatus(await postJson('/Browser/Status'));
+                        } catch (err) {
+                            showError(err.message || '在实例中新建标签页失败。');
+                        }
+                    });
+                    groupActions.appendChild(instanceNewTabBtn);
 
                     groupHeader.appendChild(groupActions);
 
@@ -1898,6 +2022,42 @@
                 setLiveDisplayEnabled(!liveDisplayEnabled);
                 syncScreencastSettings(true).catch(() => { });
             });
+
+            newInstanceBtn?.addEventListener("click", async () => {
+                clearError();
+                // show create instance modal
+                const createModalEl = document.getElementById('createInstanceModal');
+                if (createModalEl) {
+                    const modal = new bootstrap.Modal(createModalEl);
+                    modal.show();
+                }
+            });
+
+            // Create instance modal submit
+            const createInstanceSubmitBtn = document.getElementById('createInstanceSubmitBtn');
+            createInstanceSubmitBtn?.addEventListener('click', async () => {
+                clearError();
+                const ownerPluginId = document.getElementById('createInstanceOwnerPluginId')?.value || 'ui';
+                const displayName = document.getElementById('createInstanceDisplayName')?.value || null;
+                const userDataDirectory = document.getElementById('createInstanceUserDataDirectory')?.value || null;
+                try {
+                    const res = await postJson('/Browser/CreateInstance', { ownerPluginId, displayName, userDataDirectory });
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('createInstanceModal'));
+                    modal?.hide();
+                    // Refresh status after creating instance; handle transient 405/other unexpected responses gracefully
+                    try {
+                        applyStatus(await postJson('/Browser/Status'));
+                    } catch (e) {
+                        // If creation succeeded but status failed (e.g., returned 405), still try to call Status again after short delay
+                        showError((e && e.message) || '状态获取失败，稍后重试。', 'warning');
+                        setTimeout(async () => {
+                            try { applyStatus(await postJson('/Browser/Status')); } catch (ex) { console.warn('Status retry failed', ex); }
+                        }, 800);
+                    }
+                } catch (e) {
+                    showError(e.message || '创建实例失败。');
+                }
+            });
             tabsBar.addEventListener("scroll", updateTabScrollButtons);
             tabsScrollLeftBtn.addEventListener("click", () => tabsBar.scrollBy({ left: -240, behavior: "smooth" }));
             tabsScrollRightBtn.addEventListener("click", () => tabsBar.scrollBy({ left: 240, behavior: "smooth" }));
@@ -1927,7 +2087,9 @@
             const initialViewport = getCanvasViewportSize();
             resizeCanvasBuffer(initialViewport.width, initialViewport.height);
 
-            document.getElementById("newTabBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/NewTab"), "新建标签页失败。"));
+            const newTabBtnEl = document.getElementById("newTabBtn");
+            if (newTabBtnEl)
+                newTabBtnEl.addEventListener("click", async () => runAction(() => postJson("/Browser/NewTab"), "新建标签页失败。"));
             document.getElementById("backBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/Back"), "后退失败。"));
             document.getElementById("forwardBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/Forward"), "前进失败。"));
             document.getElementById("reloadBtn").addEventListener("click", async () => runAction(() => postJson("/Browser/Reload"), "刷新失败。"));

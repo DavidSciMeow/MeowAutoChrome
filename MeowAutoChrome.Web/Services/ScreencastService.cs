@@ -1,6 +1,6 @@
 ﻿using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Models;
-using MeowAutoChrome.Web.Warpper;
+using MeowAutoChrome.Core;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Playwright;
 using System.Text.Json;
@@ -16,11 +16,12 @@ public class ScreencastService
     /// <summary>
     /// 用于获取当前活动页面和浏览器上下文，以便创建 CDP 会话和订阅帧事件
     /// </summary>
-    private readonly BrowserInstanceManager browserInstances;
+    private readonly BrowserInstanceManagerCore browserInstances;
     /// <summary>
     /// 用于向所有连接的客户端广播帧数据和状态变化（如禁用通知）
     /// </summary>
     private readonly IHubContext<BrowserHub> hub;
+    private readonly ILogger<ScreencastService> _logger;
     /// <summary>
     /// 当前的 CDP 会话实例；null 表示未启动推流
     /// </summary>
@@ -64,9 +65,11 @@ public class ScreencastService
     public bool RequestedEnabled => _enabled;
 
     /// <summary>
-    /// 实际的启用状态，考虑了浏览器模式（只有 headless 时才启用）。
+    /// 实际的启用状态（仅由用户请求决定）。
+    /// 原先实现会在非 headless 模式下禁用 Screencast，导致在显示外部浏览器窗口时画面区域被隐藏。
+    /// 这里改为仅以用户请求的启用状态为准，允许在非 headless 场景下也显示实时画面（如果后端支持推帧）。
     /// </summary>
-    public bool Enabled => _enabled && browserInstances.IsHeadless;
+    public bool Enabled => _enabled;
 
     /// <summary>
     /// 当前推流的最大宽度（像素）。
@@ -89,10 +92,11 @@ public class ScreencastService
     /// <param name="browserInstances">浏览器实例管理器，用于获取活动页面与上下文。</param>
     /// <param name="hub">SignalR Hub 上下文，用于向客户端广播帧数据与状态变化。</param>
     /// <param name="programSettingsService">程序设置服务，用于读取初始 Screencast FPS 配置。</param>
-    public ScreencastService(BrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ProgramSettingsService programSettingsService)
+    public ScreencastService(BrowserInstanceManagerCore browserInstances, IHubContext<BrowserHub> hub, IProgramSettingsProvider programSettingsService, ILogger<ScreencastService> logger)
     {
         this.browserInstances = browserInstances;
         this.hub = hub;
+        _logger = logger;
 
         var settings = programSettingsService.GetAsync().GetAwaiter().GetResult();
         _frameIntervalMs = FpsToInterval(settings.ScreencastFps);
@@ -148,8 +152,17 @@ public class ScreencastService
         _targetPageId = browserInstances.SelectedPageId;
         Interlocked.Exchange(ref _lastFrameSentAtMs, 0);
 
-        _session = await browserInstances.BrowserContext.NewCDPSessionAsync(page);
-        _session.Event("Page.screencastFrame").OnEvent += OnFrame;
+        try
+        {
+            _logger?.LogDebug("Starting screencast for page {PageId} (target={Target})", _targetPageId, _targetPageId);
+            _session = await browserInstances.BrowserContext.NewCDPSessionAsync(page);
+            _session.Event("Page.screencastFrame").OnEvent += OnFrame;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to start CDP screencast session");
+            _session = null;
+        }
 
         await _session.SendAsync("Page.startScreencast", new Dictionary<string, object>
         {
@@ -172,6 +185,7 @@ public class ScreencastService
         _session = null;
         _targetPageId = null;
         Interlocked.Exchange(ref _lastFrameSentAtMs, 0);
+        _logger?.LogDebug("Stopped screencast session");
     }
 
     /// <summary>
@@ -181,7 +195,10 @@ public class ScreencastService
     {
         if (e is not { } frame) return;
         if (_session is { } session)
+        {
+            _logger?.LogTrace("Received screencast frame event");
             _ = PushFrameAsync(frame, session);
+        }
     }
 
     /// <summary>
@@ -308,6 +325,7 @@ public class ScreencastService
                 await StartAsync();
             else
                 await hub.Clients.All.SendAsync("ScreencastDisabled");
+            _logger?.LogInformation("Screencast settings updated: enabled={Enabled} max={W}x{H} interval={I} clients={C}", _enabled, _maxWidth, _maxHeight, _frameIntervalMs, _clientCount);
         }
         finally { _semaphore.Release(); }
     }

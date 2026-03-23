@@ -1,4 +1,4 @@
-﻿using MeowAutoChrome.Web.ProgarmControl;
+﻿using MeowAutoChrome.Core;
 using System.ComponentModel.DataAnnotations;
 
 namespace MeowAutoChrome.Web.Models;

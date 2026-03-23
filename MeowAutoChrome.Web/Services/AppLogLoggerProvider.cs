@@ -1,4 +1,4 @@
-﻿using MeowAutoChrome.Web.Models;
+﻿using MeowAutoChrome.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
@@ -6,7 +6,7 @@ namespace MeowAutoChrome.Web.Services;
 /// <summary>
 /// 将日志写入应用内日志存储的 ILoggerProvider 实现，用于将 Microsoft.Extensions.Logging 的日志重定向到 AppLogService。
 /// </summary>
-public sealed class AppLogLoggerProvider(AppLogService appLogService) : ILoggerProvider
+public sealed class AppLogLoggerProvider(Core.Services.AppLogService appLogService) : ILoggerProvider
 {
 
     /// <summary>
@@ -26,7 +26,7 @@ public sealed class AppLogLoggerProvider(AppLogService appLogService) : ILoggerP
     /// </summary>
     /// <param name="categoryName">日志分类名称。</param>
     /// <param name="appLogService">AppLogService 实例。</param>
-    private sealed class AppLogLogger(string categoryName, AppLogService appLogService) : ILogger
+    private sealed class AppLogLogger(string categoryName, Core.Services.AppLogService appLogService) : ILogger
     {
         /// <summary>
         /// 开始一个日志作用域（不支持，始终返回 null）。
