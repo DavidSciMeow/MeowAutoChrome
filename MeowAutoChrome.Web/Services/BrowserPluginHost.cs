@@ -119,6 +119,11 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
+        // 使用插件实例级别的生命周期 CancellationTokenSource，使 Stop 可以显式取消正在运行的插件任务。
+        var instanceCtn = GetOrCreatePluginInstance(plugin);
+        instanceCtn.EnsureFreshLifecycleToken();
+        var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
+
         var hostContext = new PluginHostContext(
             browserInstances.BrowserContext,
             browserInstances.ActivePage,
@@ -127,21 +132,29 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             normalizedArguments,
             plugin.Id,
             command,
-            cancellationToken,
-            (message, data, openModal) => PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, cancellationToken));
+            combinedCts.Token,
+            (message, data, openModal) => PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token));
 
-        var result = await ExecuteWithHostContextAsync(
-            instance,
-            hostContext,
-            pluginInstance => command.ToLowerInvariant() switch
+            // 如果是 stop 命令，先触发生命周期取消，通知插件内部使用的后台任务尽快退出。
+            if (string.Equals(command, "stop", StringComparison.OrdinalIgnoreCase))
             {
-                "start" => pluginInstance.StartAsync(),
-                "stop" => pluginInstance.StopAsync(),
-                "pause" => pluginInstance.PauseAsync(),
-                "resume" => pluginInstance.ResumeAsync(),
-                _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
-            },
-            cancellationToken);
+                try { instanceCtn.CancelLifecycle(); } catch { }
+            }
+
+            var result = await ExecuteWithHostContextAsync(
+                instance,
+                hostContext,
+                pluginInstance => command.ToLowerInvariant() switch
+                {
+                    "start" => pluginInstance.StartAsync(),
+                    "stop" => pluginInstance.StopAsync(),
+                    "pause" => pluginInstance.PauseAsync(),
+                    "resume" => pluginInstance.ResumeAsync(),
+                    _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
+                },
+                combinedCts.Token);
+
+            combinedCts.Dispose();
 
         return new BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
@@ -169,6 +182,10 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
         var instance = GetOrCreatePluginInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
+
+        instance.EnsureFreshLifecycleToken();
+        using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
+
         var hostContext = new PluginHostContext(
             browserInstances.BrowserContext,
             browserInstances.ActivePage,
@@ -177,8 +194,8 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
             normalizedArguments,
             plugin.Id,
             action.Id,
-            cancellationToken,
-            (message, data, openModal) => PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, cancellationToken));
+            combinedCts.Token,
+            (message, data, openModal) => PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token));
 
         var result = await ExecuteWithHostContextAsync(
             instance,
@@ -191,7 +208,7 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
 
                 return task;
             },
-            cancellationToken);
+            combinedCts.Token);
 
         return new BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
     }
@@ -861,6 +878,9 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
     /// <param name="instance">插件实例。</param>
     private sealed class RuntimeBrowserPluginInstance(Type type, IPlugin instance)
     {
+        private readonly object _lifecycleLock = new();
+        private CancellationTokenSource _lifecycleCts = new();
+
         /// <summary>
         /// 插件类型。
         /// </summary>
@@ -873,6 +893,38 @@ public sealed class BrowserPluginHost(BrowserInstanceManager browserInstances, I
         /// 执行锁，确保同一时间只有一个操作在执行插件实例的方法，避免并发访问导致的状态不一致或竞态条件。
         /// </summary>
         public SemaphoreSlim ExecutionLock { get; } = new(1, 1);
+
+        /// <summary>
+        /// 获取当前用于插件生命周期的取消令牌。
+        /// 该令牌在插件被 Stop 时会被触发，插件应通过 HostContext 提供的 CancellationToken 响应取消。
+        /// </summary>
+        public CancellationToken LifecycleCancellationToken => _lifecycleCts.Token;
+
+        /// <summary>
+        /// 确保如果当前生命周期令牌已被取消，则替换为新的未取消的令牌源（用于再次 Start）。
+        /// </summary>
+        public void EnsureFreshLifecycleToken()
+        {
+            lock (_lifecycleLock)
+            {
+                if (_lifecycleCts.IsCancellationRequested)
+                {
+                    try { _lifecycleCts.Dispose(); } catch { }
+                    _lifecycleCts = new CancellationTokenSource();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 取消当前生命周期令牌，通知插件应停止其后台工作。
+        /// </summary>
+        public void CancelLifecycle()
+        {
+            lock (_lifecycleLock)
+            {
+                try { _lifecycleCts.Cancel(); } catch { }
+            }
+        }
     }
 
 
