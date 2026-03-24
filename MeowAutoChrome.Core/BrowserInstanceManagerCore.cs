@@ -5,6 +5,7 @@ using MeowAutoChrome.Contracts.BrowserContext;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
 
 namespace MeowAutoChrome.Core;
@@ -22,6 +23,20 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
         _logger = logger;
         _loggerFactory = loggerFactory;
         _settingsProvider = settingsProvider;
+    }
+
+    /// <summary>
+    /// Preview a new instance id and the user-data directory that would be used if created.
+    /// This does not create any files or instances.
+    /// </summary>
+    public async Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string ownerId, string? userDataDirRoot = null)
+    {
+        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
+        var root = string.IsNullOrWhiteSpace(userDataDirRoot) ? settings.UserDataDirectory : userDataDirRoot!;
+        var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
+        var id = $"{ownerId}-{shortId}";
+        var instanceUserDataDir = Path.Combine(root, id);
+        return (id, instanceUserDataDir);
     }
 
     public IReadOnlyCollection<PlaywrightInstance> Instances => _instances.Values.ToList().AsReadOnly();
@@ -67,13 +82,27 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
     Task<bool> IBrowserInstanceManager.SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
         => SelectBrowserInstanceAsync(instanceId, cancellationToken);
 
-    public async Task<string> CreateAsync(string ownerId, string displayName, string userDataDir, bool headless = true)
+    public async Task<string> CreateAsync(string ownerId, string displayName, string userDataDir, bool headless = true, string? previewInstanceId = null)
     {
-        var id = $"{ownerId}-{Guid.NewGuid():N}";
+        // use a shorter id to keep per-instance directory names readable
+        string id;
+        if (!string.IsNullOrWhiteSpace(previewInstanceId))
+        {
+            id = previewInstanceId!;
+        }
+        else
+        {
+            var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            id = $"{ownerId}-{shortId}";
+        }
         var inst = new PlaywrightInstance(_loggerFactory?.CreateLogger<PlaywrightInstance>() ?? NullLogger<PlaywrightInstance>.Instance, id, displayName, ownerId);
         if (!_instances.TryAdd(id, inst))
             throw new InvalidOperationException("Failed to add instance");
-        await inst.InitializeAsync(userDataDir, headless);
+        // Create a per-instance user-data directory to avoid Playwright conflicts when multiple
+        // persistent contexts run simultaneously. Use a subfolder under the provided root.
+        var instanceUserDataDir = Path.Combine(userDataDir, id);
+        Directory.CreateDirectory(instanceUserDataDir);
+        await inst.InitializeAsync(instanceUserDataDir, headless);
         _currentInstanceId = id;
         _logger.LogInformation("Created instance {Id}", id);
         return id;

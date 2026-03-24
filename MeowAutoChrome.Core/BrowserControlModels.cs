@@ -9,8 +9,11 @@ public record BrowserCloseInstanceRequest(string InstanceId);
 public record ScreencastSettingsRequest(bool Enabled, int MaxWidth, int MaxHeight, int FrameIntervalMs);
 public record BrowserLayoutSettingsRequest(int PluginPanelWidth);
 public record BrowserViewportSyncRequest(int Width, int Height);
-public record BrowserCreateInstanceRequest(string OwnerPluginId, string? DisplayName, string? UserDataDirectory);
+public record BrowserCreateInstanceRequest(string OwnerPluginId, string? DisplayName, string? UserDataDirectory, string? PreviewInstanceId);
 public record BrowserCreateTabRequest(string? InstanceId, string? Url);
+
+public record ValidateInstanceFolderRequest(string? RootPath, string FolderName);
+public record ValidateInstanceFolderResponse(bool Valid, string? Message, string FullPath);
 
 public record BrowserInstanceViewportSettingsResponse(
     int Width,

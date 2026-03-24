@@ -13,6 +13,8 @@ public class PlaywrightInstance : IScreencastable
     private readonly ILogger<PlaywrightInstance> _logger;
     private IBrowserContext? _context;
     private readonly ConcurrentDictionary<string, IPage> _pagesById = new();
+    private static Task<IPlaywright>? _sharedPlaywrightTask;
+    private static readonly object _sharedPlaywrightLock = new();
     public string OwnerId { get; }
     public string? LastErrorMessage { get; set; }
     public string InstanceId { get; }
@@ -49,13 +51,23 @@ public class PlaywrightInstance : IScreencastable
         // remember the user data path for this instance so callers can read it later
         UserDataDirectoryPath = userDataDir;
         Directory.CreateDirectory(userDataDir);
-        _context = await (await Playwright.CreateAsync()).Chromium.LaunchPersistentContextAsync(userDataDir, new BrowserTypeLaunchPersistentContextOptions
+        try
+        {
+            var playwright = await GetSharedPlaywrightAsync();
+            _context = await playwright.Chromium.LaunchPersistentContextAsync(userDataDir, new BrowserTypeLaunchPersistentContextOptions
         {
             Headless = headless,
             UserAgent = userAgent,
             ViewportSize = null,
             Args = ["--no-first-run", "--disable-blink-features=AutomationControlled"]
         });
+        }
+        catch (Exception ex)
+        {
+            LastErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to initialize Playwright instance {InstanceId}", InstanceId);
+            throw;
+        }
 
         // Map existing pages from context to generated ids
         foreach (var page in _context.Pages)
@@ -66,6 +78,16 @@ public class PlaywrightInstance : IScreencastable
 
         IsHeadless = headless;
         _logger.LogInformation("Playwright instance initialized {InstanceId} headless={Headless}", InstanceId, IsHeadless);
+    }
+
+    private static Task<IPlaywright> GetSharedPlaywrightAsync()
+    {
+        lock (_sharedPlaywrightLock)
+        {
+            if (_sharedPlaywrightTask is null)
+                _sharedPlaywrightTask = Playwright.CreateAsync();
+            return _sharedPlaywrightTask;
+        }
     }
 
     public async Task CloseAsync()

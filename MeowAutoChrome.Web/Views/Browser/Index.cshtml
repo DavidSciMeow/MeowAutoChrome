@@ -125,7 +125,7 @@
 </div>
 
 <div class="modal fade" id="createInstanceModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg" style="max-width:920px;">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">新建实例</h5>
@@ -140,6 +140,16 @@
                     <label class="form-label" for="createInstanceUserDataDirectory">UserData 目录（可选）</label>
                     <input id="createInstanceUserDataDirectory" class="form-control" placeholder="留空使用默认目录" />
                     <div class="form-text">指定用户数据目录可为每个实例指定独立配置。</div>
+                </div>
+                <div id="createInstancePathTooltip" class="small bg-light border rounded p-2" style="display:none; position:relative; z-index:20000; max-width:880px;">
+                    <div class="create-path-text" aria-live="polite"></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary create-path-copy-btn" title="复制路径">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+                <div id="createInstancePreview" class="mb-3 small text-muted" style="display:none">
+                    <div id="createInstancePreviewName">实例显示名：<span class="fw-semibold">（使用默认名）</span></div>
+                    <div id="createInstancePreviewPath">UserData 将使用：<span class="fw-semibold">（占位）</span></div>
                 </div>
                 <input type="hidden" id="createInstanceOwnerPluginId" value="ui" />
             </div>
@@ -485,6 +495,150 @@
 
                 return await response.json();
             }
+
+            // When the create-instance modal is shown, fetch a preview path and fill placeholder.
+            (function() {
+                const createModalEl = document.getElementById('createInstanceModal');
+                if (!createModalEl) return;
+
+                createModalEl.addEventListener('shown.bs.modal', async () => {
+                    try {
+                        const owner = document.getElementById('createInstanceOwnerPluginId')?.value || 'ui';
+                        const resp = await (await fetch('/Browser/PreviewNewInstance?ownerPluginId=' + encodeURIComponent(owner))).json();
+                        const previewPath = resp?.userDataDirectory || '';
+                        const previewId = resp?.instanceId || '';
+
+                        const input = document.getElementById('createInstanceUserDataDirectory');
+                        const previewDiv = document.getElementById('createInstancePreview');
+                        const previewNameEl = document.getElementById('createInstancePreviewName');
+                        const previewPathEl = document.getElementById('createInstancePreviewPath');
+                        const displayNameInput = document.getElementById('createInstanceDisplayName');
+
+                        if (input) {
+                            input.placeholder = previewPath;
+                            input.dataset.previewPath = previewPath;
+                            input.dataset.previewId = previewId;
+                            input.classList.add('placeholder-italic');
+
+                            // hover tooltip for full path with copy button
+                            const tip = document.getElementById('createInstancePathTooltip');
+                            if (tip) {
+                                const tipText = tip.querySelector('.create-path-text');
+                                const copyBtn = tip.querySelector('.create-path-copy-btn');
+
+                                function showTip() {
+                                    if (!input.value) {
+                                        if (tipText) tipText.textContent = previewPath || '';
+                                        tip.style.display = previewPath ? '' : 'none';
+                                    }
+                                }
+
+                                input.addEventListener('mouseenter', showTip);
+                                input.addEventListener('focus', showTip);
+                                input.addEventListener('mouseleave', () => { if (tip) tip.style.display = 'none'; });
+                                input.addEventListener('blur', () => { if (tip) tip.style.display = 'none'; });
+
+                                if (copyBtn) {
+                                    copyBtn.addEventListener('click', async () => {
+                                        try {
+                                            const text = (previewPath || '') || (input.value || '');
+                                            await navigator.clipboard.writeText(text);
+                                            showError('已复制到剪贴板', 'info');
+                                        } catch (e) {
+                                            showError('复制失败: ' + (e?.message || e), 'warning');
+                                        }
+                                    });
+                                }
+                            }
+
+                            // validation: ensure folder name can be created when user relies on display name
+                            async function validateFolderName(rootPath, folderName) {
+                                try {
+                                    const payload = { rootPath: rootPath, folderName: folderName };
+                                    const res = await postJson('/Browser/ValidateInstanceFolder', payload);
+                                    return res;
+                                } catch (e) {
+                                    return { valid: false, message: e.message };
+                                }
+                            }
+
+                            const displayNameInput = document.getElementById('createInstanceDisplayName');
+                            const submitBtn = document.getElementById('createInstanceSubmitBtn');
+                            // when display name changes, if userData left empty, validate folder name
+                            if (displayNameInput) {
+                                displayNameInput.addEventListener('input', () => {
+                                    // optimistic: enable submit until validation completes
+                                    if (submitBtn) submitBtn.disabled = false;
+                                });
+
+                                displayNameInput.addEventListener('blur', async () => {
+                                    const val = (displayNameInput.value || '').trim();
+                                    const userPath = (input.value || '').trim();
+                                    if (!val) return;
+                                    if (userPath) return; // user provided explicit path; skip
+
+                                    const root = previewPath ? previewPath.replace(/\\[^\\]+$/, '') : '';
+                                    if (!root) return;
+
+                                    const r = await validateFolderName(root, val);
+                                    if (!r || !r.valid) {
+                                        if (submitBtn) submitBtn.disabled = true;
+                                        showError(r?.message || '实例名不可用');
+                                    } else {
+                                        if (submitBtn) submitBtn.disabled = false;
+                                        // update preview name and path display
+                                        const previewNameEl = document.getElementById('createInstancePreviewName');
+                                        const previewPathEl = document.getElementById('createInstancePreviewPath');
+                                        if (previewNameEl) previewNameEl.querySelector('span').textContent = val;
+                                        if (previewPathEl) previewPathEl.querySelector('span').textContent = r.fullPath || (root + '/' + val);
+                                        // store previewId as the folder name so creation uses it
+                                        input.dataset.previewId = val;
+                                    }
+                                });
+                            }
+
+                            // when user manually types a path, validate it as full path
+                            input.addEventListener('blur', async () => {
+                                const val = (input.value || '').trim();
+                                if (!val) return;
+                                // if val is a full path, try validating the folder portion
+                                let root = val.replace(/\\[^\\]+$/, '');
+                                let folder = val.split('\\').pop();
+                                const r = await validateFolderName(root, folder);
+                                if (!r || !r.valid) {
+                                    if (submitBtn) submitBtn.disabled = true;
+                                    showError(r?.message || '指定的 UserData 目录不可创建');
+                                } else {
+                                    if (submitBtn) submitBtn.disabled = false;
+                                }
+                            });
+                        }
+
+                        if (previewDiv && previewPathEl && previewNameEl) {
+                            previewDiv.style.display = '';
+                            const displayText = (displayNameInput && displayNameInput.value.trim()) || previewId || 'Browser';
+                            const nameSpan = previewNameEl.querySelector('span');
+                            const pathSpan = previewPathEl.querySelector('span');
+                            if (nameSpan) nameSpan.textContent = displayText || '(使用默认名)';
+                            if (pathSpan) pathSpan.textContent = previewPath || '(默认)';
+                        }
+
+                        if (displayNameInput && previewNameEl) {
+                            displayNameInput.addEventListener('input', () => {
+                                const s = previewNameEl.querySelector('span');
+                                if (s) s.textContent = displayNameInput.value.trim() || 'Browser';
+                            });
+                        }
+                    } catch (e) {
+                        // ignore preview errors
+                    }
+                });
+
+                createModalEl.addEventListener('hidden.bs.modal', () => {
+                    const previewDiv = document.getElementById('createInstancePreview');
+                    if (previewDiv) previewDiv.style.display = 'none';
+                });
+            })();
 
             function showError(message, level = 'warning') {
                 // Create a Bootstrap toast in the top-right toast container
@@ -1682,6 +1836,30 @@
                         if (createModalEl) {
                             const modal = new bootstrap.Modal(createModalEl);
                             modal.show();
+                    // fetch preview path and show as placeholder in input
+                    (async () => {
+                        try {
+                            const owner = document.getElementById('createInstanceOwnerPluginId')?.value || 'ui';
+                            const resp = await (await fetch('/Browser/PreviewNewInstance?ownerPluginId=' + encodeURIComponent(owner))).json();
+                            const previewPath = resp?.userDataDirectory || '';
+                            const previewId = resp?.instanceId || '';
+                            const input = document.getElementById('createInstanceUserDataDirectory');
+                            const previewDiv = document.getElementById('createInstancePreview');
+                            const previewNameEl = document.getElementById('createInstancePreviewName');
+                            const previewPathEl = document.getElementById('createInstancePreviewPath');
+                            if (input) {
+                                input.placeholder = previewPath;
+                                input.dataset.previewPath = previewPath; // keep for later
+                                input.dataset.previewId = previewId;
+                                input.classList.add('placeholder-italic');
+                            }
+                            if (previewDiv && previewPathEl && previewNameEl) {
+                                previewDiv.style.display = '';
+                                previewNameEl.querySelector('span').textContent = resp?.instanceId || '(生成中)';
+                                previewPathEl.querySelector('span').textContent = previewPath || '(默认)';
+                            }
+                        } catch (e) { /* ignore preview errors */ }
+                    })();
                         }
                     });
                     empty.appendChild(cta);
@@ -1750,7 +1928,7 @@
                         clearError();
                         try {
                             await postJson('/Browser/NewTab', { instanceId: group.instanceId, url: urlInput.value.trim() || null });
-                            applyStatus(await postJson('/Browser/Status'));
+                            await refreshStatus();
                         } catch (err) {
                             showError(err.message || '在实例中新建标签页失败。');
                         }
@@ -2039,19 +2217,29 @@
                 clearError();
                 const ownerPluginId = document.getElementById('createInstanceOwnerPluginId')?.value || 'ui';
                 const displayName = document.getElementById('createInstanceDisplayName')?.value || null;
-                const userDataDirectory = document.getElementById('createInstanceUserDataDirectory')?.value || null;
+                const userDataInput = document.getElementById('createInstanceUserDataDirectory');
+                const userDataDirectory = (userDataInput && (userDataInput.value || '').trim()) || null;
+
+                const payload = { ownerPluginId, displayName, userDataDirectory };
+                // if user left the directory empty and a preview id is available, send it so backend can honor the preview id
+                if (!userDataDirectory && userDataInput && userDataInput.dataset && userDataInput.dataset.previewId)
+                    payload.previewInstanceId = userDataInput.dataset.previewId;
+
                 try {
-                    const res = await postJson('/Browser/CreateInstance', { ownerPluginId, displayName, userDataDirectory });
+                    const res = await postJson('/Browser/CreateInstance', payload);
                     const modal = bootstrap.Modal.getInstance(document.getElementById('createInstanceModal'));
                     modal?.hide();
+                    const previewDiv = document.getElementById('createInstancePreview');
+                    if (previewDiv) previewDiv.style.display = 'none';
+
                     // Refresh status after creating instance; handle transient 405/other unexpected responses gracefully
                     try {
-                        applyStatus(await postJson('/Browser/Status'));
+                        await refreshStatus();
                     } catch (e) {
-                        // If creation succeeded but status failed (e.g., returned 405), still try to call Status again after short delay
+                        // If creation succeeded but status failed, still try to call Status again after short delay
                         showError((e && e.message) || '状态获取失败，稍后重试。', 'warning');
                         setTimeout(async () => {
-                            try { applyStatus(await postJson('/Browser/Status')); } catch (ex) { console.warn('Status retry failed', ex); }
+                            try { await refreshStatus(); } catch (ex) { console.warn('Status retry failed', ex); }
                         }, 800);
                     }
                 } catch (e) {

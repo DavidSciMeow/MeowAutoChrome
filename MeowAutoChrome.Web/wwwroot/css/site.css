@@ -260,6 +260,43 @@ body {
     align-items: flex-start;
 }
 
+/* Tooltip / preview path styles for create-instance modal */
+#createInstancePathTooltip {
+    display: none; /* shown dynamically */
+    background: #f8fafc; /* light neutral background */
+    border: 1px solid #e6edf6;
+    color: #6b7280; /* gray */
+    font-style: italic;
+    font-size: 0.875rem;
+    padding: 0.45rem 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#createInstancePathTooltip .create-path-text {
+    color: #6b7280;
+    font-style: italic;
+    line-height: 1.2;
+    word-break: break-all;
+    flex: 1 1 auto;
+}
+
+#createInstancePathTooltip .create-path-copy-btn {
+    flex: 0 0 auto;
+}
+
+.placeholder-italic::placeholder {
+    font-style: italic;
+    color: #9ca3af; /* slightly lighter placeholder */
+}
+
+.placeholder-italic {
+    font-style: italic;
+    color: #6b7280;
+}
+
 .settings-page-shell {
     flex: 1 1 auto;
     min-height: 0;

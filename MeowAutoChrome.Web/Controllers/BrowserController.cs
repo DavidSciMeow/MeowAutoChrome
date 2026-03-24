@@ -263,9 +263,72 @@ public class BrowserController(BrowserInstanceManagerCore browserInstances, IHub
         public async Task<IActionResult> CreateInstance([FromBody] BrowserCreateInstanceRequest request)
         {
             var ownerPluginId = string.IsNullOrWhiteSpace(request.OwnerPluginId) ? "ui" : request.OwnerPluginId;
-            var instanceId = await browserInstances.CreateBrowserInstanceAsync(ownerPluginId, request.DisplayName, request.UserDataDirectory);
+            // determine userData root and instance id
+            var settings = await programSettingsService.GetAsync();
+            var userDataRoot = string.IsNullOrWhiteSpace(request.UserDataDirectory) ? settings.UserDataDirectory : request.UserDataDirectory!;
+
+            string instanceId;
+            // if user provided a display name but not a path, treat display name as folder name
+            if (!string.IsNullOrWhiteSpace(request.DisplayName) && string.IsNullOrWhiteSpace(request.UserDataDirectory))
+            {
+                // create instance using DisplayName as id suffix
+                var previewId = request.DisplayName.Trim();
+                instanceId = await browserInstances.CreateAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, settings.Headless, previewId);
+            }
+            else if (!string.IsNullOrWhiteSpace(request.PreviewInstanceId))
+            {
+                instanceId = await browserInstances.CreateAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, settings.Headless, request.PreviewInstanceId);
+            }
+            else
+            {
+                instanceId = await browserInstances.CreateAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, settings.Headless);
+            }
+            // fetch instance settings so caller can show the exact user-data directory used
+            var instSettings = await browserInstances.GetInstanceSettingsAsync(instanceId);
             await screencastService.RefreshTargetAsync();
-            return Ok(await BuildStatusAsync());
+            var status = await BuildStatusAsync();
+            return Ok(new { instanceId, userDataDirectory = instSettings?.UserDataDirectory, status });
+        }
+
+        /// <summary>
+        /// 预览将要创建的实例 ID 与 user-data 目录（不实际创建）。
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> PreviewNewInstance([FromQuery] string? ownerPluginId, [FromQuery] string? userDataDirectoryRoot)
+        {
+            var owner = string.IsNullOrWhiteSpace(ownerPluginId) ? "ui" : ownerPluginId!;
+            var preview = await browserInstances.PreviewNewInstanceAsync(owner, userDataDirectoryRoot);
+            return Ok(new { instanceId = preview.InstanceId, userDataDirectory = preview.UserDataDirectory });
+        }
+
+        /// <summary>
+        /// Validate whether a folder name can be created under a root path.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> ValidateInstanceFolder([FromBody] ValidateInstanceFolderRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.FolderName) || string.IsNullOrWhiteSpace(request.RootPath))
+                return BadRequest(new ValidateInstanceFolderResponse(false, "Invalid input", null));
+
+            try
+            {
+                var combined = Path.Combine(request.RootPath, request.FolderName);
+                // try to create and delete directory as check
+                if (!Directory.Exists(request.RootPath))
+                    Directory.CreateDirectory(request.RootPath);
+
+                if (!Directory.Exists(combined))
+                {
+                    Directory.CreateDirectory(combined);
+                    Directory.Delete(combined);
+                }
+
+                return Ok(new ValidateInstanceFolderResponse(true, null, combined));
+            }
+            catch (Exception ex)
+            {
+                return Ok(new ValidateInstanceFolderResponse(false, ex.Message, null));
+            }
         }
         /// <summary>
         /// 选择指定标签页为活动页。
