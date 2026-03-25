@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Contracts.Interface;
 using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core;
+using MeowAutoChrome.Core.Interface;
 
 var appLogService = new AppLogService();
 var originalConsoleOut = Console.Out;
@@ -25,12 +26,12 @@ builder.Services.AddSingleton(appLogService);
 builder.Services.AddSingleton<BrowserInstanceManagerCore>();
 builder.Services.AddSingleton(sp => new BrowserInstanceManager(sp.GetRequiredService<BrowserInstanceManagerCore>(), sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>() ));
 builder.Services.AddSingleton(sp => sp.GetRequiredService<BrowserInstanceManager>() as IBrowserInstanceManager ?? throw new InvalidOperationException("Failed to resolve IBrowserInstanceManager"));
-builder.Services.AddSingleton<IProgramSettingsProvider, FileProgramSettingsProvider>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IProgramSettingsProvider, MeowAutoChrome.Core.Interface.FileProgramSettingsProvider>();
 builder.Services.AddSingleton<AppLogService>();
-builder.Services.AddSingleton<PluginDiscoveryService>();
-builder.Services.AddSingleton<IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>())); 
+builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginDiscovery.PluginDiscoveryService>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>())); 
 builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>();
-builder.Services.AddSingleton<BrowserPluginHost>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IPluginHostCore>(sp => sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>());
 builder.Services.AddSingleton<ScreencastService>();
 builder.Services.AddSingleton<ScreenshotService>();
 builder.Services.AddSingleton<IScreencastFrameSink>(sp => new SignalRScreencastFrameSink(sp.GetRequiredService<IHubContext<BrowserHub>>()));
@@ -56,11 +57,27 @@ app.MapControllerRoute("default", "{controller=Browser}/{action=Index}/{id?}").W
 
 try
 {
-    app.Services.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>().EnsurePluginDirectoryExists();
+    app.Services.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginHostCore>().EnsurePluginDirectoryExists();
 }
 catch (Exception ex)
 {
     appLogService.WriteEntry(LogLevel.Error, ex.ToString(), "Startup");
+}
+// Inject Web-level custom settings into Core program settings provider at startup if configured
+try
+{
+    var provider = app.Services.GetRequiredService<MeowAutoChrome.Core.Interface.IProgramSettingsProvider>();
+    var configSection = builder.Configuration.GetSection("Web:CustomSettings");
+    if (configSection.Exists())
+    {
+        var dict = configSection.Get<System.Collections.Generic.Dictionary<string, string?>>() ?? new();
+        provider.InjectCustomSettingsAsync(dict).GetAwaiter().GetResult();
+        appLogService.WriteEntry(LogLevel.Information, "Injected Web custom settings into Core.", "Startup");
+    }
+}
+catch (Exception ex)
+{
+    appLogService.WriteEntry(LogLevel.Warning, ex.ToString(), "Startup.InjectCustomSettings");
 }
 
 app.Run();

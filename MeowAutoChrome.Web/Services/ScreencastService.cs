@@ -1,6 +1,7 @@
 ﻿using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Core;
+using MeowAutoChrome.Core.Interface;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Playwright;
 using System.Text.Json;

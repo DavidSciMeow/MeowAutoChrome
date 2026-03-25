@@ -1,7 +1,13 @@
-﻿using MeowAutoChrome.Contracts.BrowserContext;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using MeowAutoChrome.Contracts.BrowserContext;
 using MeowAutoChrome.Contracts.Interface;
 using MeowAutoChrome.Core;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Core.Interface;
 using Microsoft.Playwright;
 using Microsoft.Extensions.Logging;
 
@@ -55,9 +61,9 @@ public class BrowserInstanceManager : IBrowserInstanceManager
         return new BrowserInstanceSettingsResponse(inst.InstanceId, inst.DisplayName, string.Empty, string.Equals(inst.InstanceId, CurrentInstanceId, StringComparison.OrdinalIgnoreCase), new BrowserInstanceViewportSettingsResponse(1280, 800, false, false), new BrowserInstanceUserAgentSettingsResponse(null, false, true, null, null, false));
     }
 
-    public BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
+    public MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
     {
-        return new BrowserInstanceViewportSettingsResponse(1280, 800, false, false);
+        return new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse(1280, 800, false, false);
     }
 
     public IReadOnlyList<string> GetPluginInstanceIds(string pluginId)
@@ -71,11 +77,11 @@ public class BrowserInstanceManager : IBrowserInstanceManager
     public IPage? GetActivePage(string instanceId)
         => _core.Instances.FirstOrDefault(i => i.InstanceId == instanceId)?.BrowserContext?.Pages.FirstOrDefault();
 
-    public Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, CancellationToken cancellationToken = default)
+    public Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default)
     {
         var name = string.IsNullOrWhiteSpace(displayName) ? ownerPluginId : displayName;
-        var dir = string.IsNullOrWhiteSpace(userDataDirectory) ? MeowAutoChrome.Core.ProgramSettings.GetDefaultUserDataDirectoryPath() : Path.GetFullPath(userDataDirectory);
-        return _core.CreateAsync(ownerPluginId, name, dir, headless: true);
+        var dir = string.IsNullOrWhiteSpace(userDataDirectory) ? MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultUserDataDirectoryPath() : Path.GetFullPath(userDataDirectory);
+        return _core.CreateAsync(ownerPluginId, name, dir, headless: true, previewInstanceId);
     }
 
     public Task<bool> RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
@@ -87,15 +93,18 @@ public class BrowserInstanceManager : IBrowserInstanceManager
         return Task.FromResult(ok);
     }
 
-    public async Task<IReadOnlyList<BrowserTabInfo>> GetTabsAsync()
+    public Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot)
+        => _core.PreviewNewInstanceAsync(ownerPluginId ?? "ui", userDataDirectoryRoot);
+
+    public async Task<IReadOnlyList<MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo>> GetTabsAsync()
     {
-        var tabs = new List<BrowserTabInfo>();
+        var tabs = new List<MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo>();
         foreach (var inst in _core.Instances)
         {
             var pages = inst.BrowserContext?.Pages ?? new List<IPage>();
             foreach (var page in pages)
             {
-                tabs.Add(new BrowserTabInfo(Guid.NewGuid().ToString("N"), await SafeTitleAsync(page), page.Url, false, inst.InstanceId, inst.DisplayName, "#000000", null, false));
+                tabs.Add(new MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo(Guid.NewGuid().ToString("N"), await SafeTitleAsync(page), page.Url, false, inst.InstanceId, inst.DisplayName, "#000000", null, false));
             }
         }
 
@@ -119,8 +128,8 @@ public class BrowserInstanceManager : IBrowserInstanceManager
     public Task CreateTabAsync(string? url = null) => Task.CompletedTask;
     public Task<string?> GetTitleAsync() => Task.FromResult<string?>(null);
     public Task NavigateAsync(string url) => Task.CompletedTask;
-    public Task<bool> GoBackAsync() => Task.FromResult(false);
-    public Task<bool> GoForwardAsync() => Task.FromResult(false);
+    public Task GoBackAsync() => Task.CompletedTask;
+    public Task GoForwardAsync() => Task.CompletedTask;
     public Task ReloadAsync() => Task.CompletedTask;
     public Task<byte[]?> CaptureScreenshotAsync() => Task.FromResult<byte[]?>(null);
     public Task SetViewportSizeAsync(int width, int height) => Task.CompletedTask;

@@ -14,6 +14,7 @@ public interface IBrowserInstanceManager
     /// <summary>
     /// 当前浏览器实例ID，唯一标识当前插件所在的浏览器实例，插件可以通过这个ID与宿主进行交互或区分不同的浏览器实例
     /// </summary>
+    // CurrentInstanceId already defined earlier in concrete implementations; keep in interface but avoid duplicate declarations.
     string CurrentInstanceId { get; }
     /// <summary>
     /// 获取所有浏览器实例的信息，返回一个只读列表，包含每个实例的ID、名称、所属插件ID、颜色、是否选中和页面数量等基本信息，插件可以通过这些信息了解当前浏览器实例的状态和分布情况，并进行相应的操作或展示
@@ -45,6 +46,71 @@ public interface IBrowserInstanceManager
     /// <returns></returns>
     IPage? GetActivePage(string instanceId);
     /// <summary>
+    /// 获取当前所有标签页的列表（用于前端展示）。
+    /// </summary>
+    Task<IReadOnlyList<BrowserTabInfo>> GetTabsAsync();
+
+    /// <summary>
+    /// 获取当前实例视口设置（宽高与自动调整选项）。
+    /// </summary>
+    BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings();
+    /// <summary>
+    /// 当前实例的 URL（若存在活动页）。
+    /// </summary>
+    string? CurrentUrl { get; }
+
+    /// <summary>
+    /// 当前总页面数。
+    /// </summary>
+    int TotalPageCount { get; }
+
+    Task CreateTabAsync(string? url = null);
+
+    Task<string?> GetTitleAsync();
+
+    Task NavigateAsync(string url);
+
+    Task GoBackAsync();
+
+    Task GoForwardAsync();
+
+    Task ReloadAsync();
+
+    Task<byte[]?> CaptureScreenshotAsync();
+
+    Task SetViewportSizeAsync(int width, int height);
+
+    Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false);
+    /// <summary>
+    /// 获取指定实例的设置。
+    /// </summary>
+    Task<MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId);
+
+    /// <summary>
+    /// 更新实例设置。
+    /// </summary>
+    Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth = null, int? displayHeight = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 同步当前实例视口大小。
+    /// </summary>
+    Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 关闭指定标签页。
+    /// </summary>
+    Task<bool> CloseTabAsync(string tabId);
+
+    /// <summary>
+    /// 关闭并移除指定浏览器实例。
+    /// </summary>
+    Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 选择指定标签页为活动页。
+    /// </summary>
+    Task<bool> SelectPageAsync(string tabId);
+    /// <summary>
     /// 创建一个新的浏览器实例，返回新实例的ID，插件可以通过这个方法创建一个新的浏览器实例，并指定所属插件ID、显示名称、用户数据目录等参数，以便在该实例中执行浏览器相关的操作或获取相关的信息，如果创建失败，则抛出异常或返回null
     /// </summary>
     /// <param name="ownerPluginId">插件ID</param>
@@ -52,7 +118,7 @@ public interface IBrowserInstanceManager
     /// <param name="userDataDirectory">用户数据目录</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns></returns>
-    Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, CancellationToken cancellationToken = default);
+    Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// 删除指定浏览器实例，返回一个布尔值，表示删除是否成功，插件可以通过这个方法删除一个浏览器实例，并指定实例ID，如果删除成功，则返回true，否则返回false，如果没有找到该实例，则返回false
     /// </summary>
@@ -67,4 +133,9 @@ public interface IBrowserInstanceManager
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns></returns>
     Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 预览将要创建的实例 ID 与 user-data 目录（不实际创建）。
+    /// </summary>
+    Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot);
 }

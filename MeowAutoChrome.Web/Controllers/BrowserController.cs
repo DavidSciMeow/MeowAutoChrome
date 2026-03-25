@@ -1,6 +1,9 @@
 ﻿using MeowAutoChrome.Web.Hubs;
+using MeowAutoChrome.Contracts.BrowserContext;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
+using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Core.Services.PluginHost;
 using MeowAutoChrome.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -16,7 +19,7 @@ namespace MeowAutoChrome.Web.Controllers
     /// <param name="pluginHost">插件宿主</param>
     /// <param name="resourceMetricsService">资源监控服务</param>
     /// <param name="programSettingsService">程序设置服务</param>
-public class BrowserController(BrowserInstanceManagerCore browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, BrowserPluginHost pluginHost, Core.Services.ResourceMetricsService resourceMetricsService, IProgramSettingsProvider programSettingsService) : Controller
+public class BrowserController(IBrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, MeowAutoChrome.Core.Interface.IPluginHostCore pluginHost, Core.Services.ResourceMetricsService resourceMetricsService, MeowAutoChrome.Core.Interface.IProgramSettingsProvider programSettingsService) : Controller
     {
         /// <summary>
         /// 用于从请求头中传递 BrowserHub 连接 ID 的自定义 header 名称，允许插件输出定向发送到特定客户端（例如仅发送给发起控制请求的页面）。如果未提供该 header，则插件输出将发送给所有连接的客户端。
@@ -242,7 +245,7 @@ public class BrowserController(BrowserInstanceManagerCore browserInstances, IHub
                     return Problem(detail: "实例不存在", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
             }
 
-            if (browserInstances.CurrentInstance is null)
+            if (browserInstances.GetInstances().Count == 0)
             {
                 // 没有当前实例，创建一个新的实例然后返回状态
                 var ownerPluginId = "ui";
@@ -273,15 +276,15 @@ public class BrowserController(BrowserInstanceManagerCore browserInstances, IHub
             {
                 // create instance using DisplayName as id suffix
                 var previewId = request.DisplayName.Trim();
-                instanceId = await browserInstances.CreateAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, settings.Headless, previewId);
+                instanceId = await browserInstances.CreateBrowserInstanceAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, previewId);
             }
             else if (!string.IsNullOrWhiteSpace(request.PreviewInstanceId))
             {
-                instanceId = await browserInstances.CreateAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, settings.Headless, request.PreviewInstanceId);
+                instanceId = await browserInstances.CreateBrowserInstanceAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, request.PreviewInstanceId);
             }
             else
             {
-                instanceId = await browserInstances.CreateAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot, settings.Headless);
+                instanceId = await browserInstances.CreateBrowserInstanceAsync(ownerPluginId, request.DisplayName ?? "Browser", userDataRoot);
             }
             // fetch instance settings so caller can show the exact user-data directory used
             var instSettings = await browserInstances.GetInstanceSettingsAsync(instanceId);
@@ -375,7 +378,7 @@ public class BrowserController(BrowserInstanceManagerCore browserInstances, IHub
         [HttpGet]
         public async Task<IActionResult> Screenshot()
         {
-        if (browserInstances.Instances.Count == 0)
+        if (browserInstances.GetInstances().Count == 0)
                 return Problem(detail: "无实例", title: "NoInstance", statusCode: StatusCodes.Status400BadRequest);
 
             var screenshot = await HttpContext.RequestServices.GetRequiredService<Core.Services.ScreenshotService>().CaptureScreenshotAsync();
@@ -392,18 +395,17 @@ public class BrowserController(BrowserInstanceManagerCore browserInstances, IHub
             var metrics = resourceMetricsService.GetSnapshot();
             var settings = await programSettingsService.GetAsync();
 
-            var hasInstance = browserInstances.CurrentInstance is not null;
-            // Only expose an error message when an instance exists and reports one. Avoid returning a
-            // generic "无实例" string as an error, so the UI won't repeatedly notify the user when
-            // there simply is no instance.
-            var errorMessage = hasInstance ? browserInstances.CurrentInstance?.LastErrorMessage : null;
+            var hasInstance = browserInstances.GetInstances().Count > 0;
+            // Only expose an error message when an instance exists and reports one. Currently
+            // the contract does not expose a LastErrorMessage; keep null for now.
+            var errorMessage = (string?)null;
 
             // supportsScreencast should reflect whether the backend/browser can produce screencast frames.
             // Use presence of a BrowserContext (Playwright-managed) as capability indicator rather than
             // the headless flag. A Playwright-launched headful (non-headless) context can still provide
             // CDP screencast frames when launched by Playwright, so checking BrowserContext is more
             // accurate for front-end UI decisions.
-            var supportsScreencast = hasInstance && browserInstances.BrowserContext != null;
+            var supportsScreencast = hasInstance;
             var screencastEnabled = supportsScreencast && screencastService.Enabled;
 
             return new(

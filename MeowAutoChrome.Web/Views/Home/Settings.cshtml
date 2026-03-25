@@ -24,6 +24,7 @@
                     <div class="text-muted small">设置文件位置：<code>@ProgramSettings.GetSettingsFilePath()</code></div>
                 </div>
                 <div id="settingsAutoSaveStatus" class="settings-autosave-status settings-autosave-status-success">已加载设置</div>
+                <div id="pageNotifications" class="toast-container p-3 position-fixed top-0 end-0" style="z-index:1050"></div>
             </div>
 
             <form id="settingsForm" asp-action="AutoSaveSettings" method="post" class="settings-card-stack">
@@ -42,6 +43,39 @@
                         <div><code>https://www.baidu.com/s?wd={query}</code></div>
                         <div><code>https://www.google.com/search?q={query}</code></div>
                         <div><code>https://www.bing.com/search?q={query}</code></div>
+                    </div>
+                </section>
+
+                <section id="customSettingsCard" class="card shadow-sm settings-card">
+                    <div class="card-header fw-semibold">自定义设置（高级）</div>
+                    <div class="card-body">
+                        <p class="form-text">这里可以添加任意键值对，作为 Web 层自定义的运行时设置。值会作为字符串保存并注入到 Core 的 CustomSettings 中。</p>
+                        <div class="mb-2 small text-muted">键名只能包含字母、数字、下划线、破折号和点；重复键会被拒绝。</div>
+
+                        <div class="mb-2 d-flex gap-2">
+                            <input id="filterKey" class="form-control form-control-sm" placeholder="按键名过滤" />
+                            <input id="filterValue" class="form-control form-control-sm" placeholder="按值过滤" />
+                            <button type="button" id="addCustomSetting" class="btn btn-sm btn-outline-primary">添加</button>
+                            <button type="button" id="sortCustomSettings" class="btn btn-sm btn-outline-secondary">按键名排序</button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table id="customSettingsTable" class="table table-sm table-borderless align-middle">
+                                <thead class="small text-muted">
+                                    <tr>
+                                        <th style="width:34px"></th>
+                                        <th>键名</th>
+                                        <th>值</th>
+                                        <th style="width:90px">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customSettingsContainer">
+                                    <!-- rows injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="form-text small text-muted">拖拽左侧把手可调整显示顺序；过滤框可按键名/值筛选列表。</div>
                     </div>
                 </section>
 
@@ -175,16 +209,19 @@
                     const payload = await response.json().catch(() => ({ message: "设置保存失败。" }));
                     if (!response.ok) {
                         setStatus(payload.message || "设置保存失败。", "error");
+                        showNotification(payload.message || "设置保存失败。", 'danger');
                         return;
                     }
 
                     lastSavedState = state;
                     setStatus(payload.message || "设置已自动保存。", "success");
+                    showNotification(payload.message || "设置已自动保存。", 'success');
                 } catch (error) {
                     if (error.name === "AbortError")
                         return;
 
                     setStatus("设置保存失败。", "error");
+                    showNotification('设置保存失败。', 'danger');
                 }
             }
 
@@ -211,6 +248,146 @@
 
             buildSettingsNav();
             renderPluginPanelWidth();
+            renderCustomSettings();
+
+                function renderCustomSettings() {
+                const container = document.getElementById("customSettingsContainer");
+                const existing = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.CustomSettings ?? new System.Collections.Generic.Dictionary<string, string?>()));
+                container.replaceChildren();
+
+                function addRow(key = '', value = '') {
+                    const tr = document.createElement('tr');
+                    tr.className = 'align-middle';
+
+                    const handleTd = document.createElement('td');
+                    handleTd.className = 'text-muted drag-handle';
+                    handleTd.style.cursor = 'grab';
+                    handleTd.innerHTML = '☰';
+
+                    const keyTd = document.createElement('td');
+                    const keyInput = document.createElement('input');
+                    keyInput.name = 'CustomSettings.Keys';
+                    keyInput.className = 'form-control form-control-sm';
+                    keyInput.placeholder = 'Key';
+                    keyInput.value = key;
+                    keyTd.appendChild(keyInput);
+
+                    const valTd = document.createElement('td');
+                    const valInput = document.createElement('input');
+                    valInput.name = 'CustomSettings.Values';
+                    valInput.className = 'form-control form-control-sm';
+                    valInput.placeholder = 'Value';
+                    valInput.value = value;
+                    valTd.appendChild(valInput);
+
+                    const opTd = document.createElement('td');
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'btn btn-sm btn-outline-danger';
+                    del.textContent = '删除';
+                    del.addEventListener('click', () => tr.remove());
+                    opTd.appendChild(del);
+
+                    tr.appendChild(handleTd);
+                    tr.appendChild(keyTd);
+                    tr.appendChild(valTd);
+                    tr.appendChild(opTd);
+                    container.appendChild(tr);
+                }
+
+                for (const [k, v] of Object.entries(existing)) {
+                    addRow(k, v ?? '');
+                }
+
+                const addBtn = document.getElementById('addCustomSetting');
+                addBtn?.addEventListener('click', () => addRow());
+
+                const sortBtn = document.getElementById('sortCustomSettings');
+                sortBtn?.addEventListener('click', () => {
+                    const rows = Array.from(container.querySelectorAll('tr'));
+                    rows.sort((a, b) => {
+                        const ak = a.querySelector('input[name="CustomSettings.Keys"]')?.value ?? '';
+                        const bk = b.querySelector('input[name="CustomSettings.Keys"]')?.value ?? '';
+                        return ak.localeCompare(bk, undefined, { sensitivity: 'base' });
+                    });
+                    container.replaceChildren(...rows);
+                });
+
+                // Filtering
+                const filterKey = document.getElementById('filterKey');
+                const filterValue = document.getElementById('filterValue');
+                function applyFilter() {
+                    const k = (filterKey?.value || '').toLowerCase();
+                    const v = (filterValue?.value || '').toLowerCase();
+                    for (const row of container.querySelectorAll('tr')) {
+                        const key = (row.querySelector('input[name="CustomSettings.Keys"]')?.value || '').toLowerCase();
+                        const val = (row.querySelector('input[name="CustomSettings.Values"]')?.value || '').toLowerCase();
+                        const matches = (k === '' || key.includes(k)) && (v === '' || val.includes(v));
+                        (row as HTMLElement).style.display = matches ? '' : 'none';
+                    }
+                }
+                filterKey?.addEventListener('input', applyFilter);
+                filterValue?.addEventListener('input', applyFilter);
+
+                // Simple drag-and-drop reordering for rows
+                let dragSrc = null;
+                container.addEventListener('dragstart', (e) => { if ((e.target as HTMLElement).closest('tr')) { dragSrc = (e.target as HTMLElement).closest('tr'); e.dataTransfer!.effectAllowed = 'move'; } });
+                container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer!.dropEffect = 'move'; });
+                container.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const tr = (e.target as HTMLElement).closest('tr');
+                    if (!tr || !dragSrc || tr === dragSrc) return;
+                    container.insertBefore(dragSrc, tr.nextSibling);
+                });
+
+                // make handle draggable
+                container.querySelectorAll('.drag-handle').forEach(h => { const el = h as HTMLElement; el.setAttribute('draggable', 'true'); });
+
+                // client-side validation before form submit
+                const formEl = document.getElementById('settingsForm');
+                formEl.addEventListener('submit', (e) => {
+                    const keyInputs = container.querySelectorAll('input[name="CustomSettings.Keys"]');
+                    const seen = new Set();
+                    const invalidPattern = /[^A-Za-z0-9_.-]/;
+                    for (const ki of keyInputs) {
+                        const val = (ki.value || '').trim();
+                        if (!val) { e.preventDefault(); showNotification('自定义设置的键不能为空。', 'danger'); return; }
+                        if (invalidPattern.test(val)) { e.preventDefault(); showNotification('自定义键包含非法字符。', 'danger'); return; }
+                        const lower = val.toLowerCase();
+                        if (seen.has(lower)) { e.preventDefault(); showNotification('发现重复的自定义键：' + val, 'danger'); return; }
+                        seen.add(lower);
+                    }
+                });
+
+                function showNotification(message, kind = 'info', timeoutMs = 5000) {
+                    const container = document.getElementById('pageNotifications');
+                    // Map kinds to bootstrap contextual classes for toasts
+                    const bg = kind === 'danger' ? 'danger' : (kind === 'success' ? 'success' : 'primary');
+
+                    const toast = document.createElement('div');
+                    toast.className = `toast align-items-center text-bg-${bg} border-0`;
+                    toast.setAttribute('role', 'alert');
+                    toast.setAttribute('aria-live', 'assertive');
+                    toast.setAttribute('aria-atomic', 'true');
+
+                    toast.innerHTML = `
+                        <div class="d-flex">
+                            <div class="toast-body">${message}</div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>`;
+
+                    container.appendChild(toast);
+                    // Use Bootstrap's Toast JS to show and auto-hide
+                    try {
+                        const bsToast = bootstrap.Toast.getOrCreateInstance(toast, { delay: timeoutMs });
+                        bsToast.show();
+                        toast.addEventListener('hidden.bs.toast', () => toast.remove());
+                    } catch (e) {
+                        // Fallback: remove after timeout
+                        setTimeout(() => toast.remove(), timeoutMs);
+                    }
+                }
+            }
         })();
     </script>
 }

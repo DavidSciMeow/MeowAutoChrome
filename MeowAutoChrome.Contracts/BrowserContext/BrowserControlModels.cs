@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace MeowAutoChrome.Core;
+namespace MeowAutoChrome.Contracts.BrowserContext;
 
 public record BrowserNavigateRequest(string Url);
 public record BrowserSelectTabRequest(string TabId);

@@ -18,7 +18,7 @@ public sealed class MultiInstanceExamplePlugin : PluginBase
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
-        var instanceId = await CurrentBrowserInstanceManager.CreateBrowserInstanceAsync(PluginId, displayName, userDataDirectory, CurrentCancellationToken);
+        var instanceId = await CurrentBrowserInstanceManager.CreateBrowserInstanceAsync(PluginId, displayName, userDataDirectory, previewInstanceId: null, CurrentCancellationToken);
         var color = CurrentBrowserInstanceManager.GetInstanceColor(instanceId) ?? "#2563eb";
         var context = CurrentBrowserInstanceManager.GetBrowserContext(instanceId);
         if (context is not null)

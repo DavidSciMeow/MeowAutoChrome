@@ -1,5 +1,7 @@
 ﻿using Microsoft.Playwright;
 using MeowAutoChrome.Core;
+using MeowAutoChrome.Core.Struct;
+using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Contracts.Interface;
 using MeowAutoChrome.Contracts.BrowserContext;
 using Microsoft.Extensions.Logging;
@@ -10,7 +12,7 @@ using System.Linq;
 
 namespace MeowAutoChrome.Core;
 
-public class BrowserInstanceManagerCore : IBrowserInstanceManager
+public class BrowserInstanceManagerCore : MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager
 {
     private readonly ILogger<BrowserInstanceManagerCore> _logger;
     private readonly ILoggerFactory? _loggerFactory;
@@ -25,13 +27,28 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
         _settingsProvider = settingsProvider;
     }
 
+    // Explicit interface implementations to satisfy IBrowserInstanceManager
+    Task<string> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.CreateBrowserInstanceAsync(string ownerPluginId, string? displayName, string? userDataDirectory, string? previewInstanceId, CancellationToken cancellationToken)
+        => CreateBrowserInstanceAsync(ownerPluginId, displayName, userDataDirectory, previewInstanceId);
+
+    Task<bool> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
+        => RemoveAsync(instanceId);
+
+    Task<bool> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
+        => SelectBrowserInstanceAsync(instanceId, cancellationToken);
+
+    Task<(string InstanceId, string UserDataDirectory)> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot)
+        => PreviewNewInstanceAsync(ownerPluginId ?? "ui", userDataDirectoryRoot);
+
+    // PreviewNewInstanceAsync is provided as a public method for wrappers to call.
+
     /// <summary>
     /// Preview a new instance id and the user-data directory that would be used if created.
     /// This does not create any files or instances.
     /// </summary>
     public async Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string ownerId, string? userDataDirRoot = null)
     {
-        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = _settingsProvider is null ? new MeowAutoChrome.Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
         var root = string.IsNullOrWhiteSpace(userDataDirRoot) ? settings.UserDataDirectory : userDataDirRoot!;
         var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
         var id = $"{ownerId}-{shortId}";
@@ -71,16 +88,9 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
 
     public IPage? GetActivePage(string instanceId) => _instances.TryGetValue(instanceId, out var inst2) ? inst2.GetSelectedPage() : null;
 
-    // Explicit interface implementations to avoid overload ambiguity with the
-    // public helpers on this class.
-    Task<string> IBrowserInstanceManager.CreateBrowserInstanceAsync(string ownerPluginId, string? displayName, string? userDataDirectory, CancellationToken cancellationToken)
-        => CreateBrowserInstanceAsync(ownerPluginId, displayName, userDataDirectory);
-
-    Task<bool> IBrowserInstanceManager.RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
-        => RemoveAsync(instanceId);
-
-    Task<bool> IBrowserInstanceManager.SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
-        => SelectBrowserInstanceAsync(instanceId, cancellationToken);
+    // Note: this core class does not implement IBrowserInstanceManager directly.
+    // The Web-level adapter `MeowAutoChrome.Web.Services.BrowserInstanceManager` implements
+    // IBrowserInstanceManager and delegates to this core class.
 
     public async Task<string> CreateAsync(string ownerId, string displayName, string userDataDir, bool headless = true, string? previewInstanceId = null)
     {
@@ -109,12 +119,12 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
     }
 
     // High-level helpers used by Web controllers
-    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null)
+    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null)
     {
-        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = _settingsProvider is null ? new MeowAutoChrome.Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
         var userData = string.IsNullOrWhiteSpace(userDataDirectory) ? settings.UserDataDirectory : userDataDirectory!;
         var name = string.IsNullOrWhiteSpace(displayName) ? "Browser" : displayName!;
-        return await CreateAsync(ownerPluginId, name, userData, settings.Headless);
+        return await CreateAsync(ownerPluginId, name, userData, settings.Headless, previewInstanceId);
     }
 
     public async Task CreateTabAsync(string? url = null)
@@ -151,6 +161,12 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
     {
         return await RemoveAsync(instanceId);
     }
+
+    public Task<byte[]?> CaptureScreenshotAsync() => Task.FromResult<byte[]?>(null);
+
+    public Task SetViewportSizeAsync(int width, int height) => Task.CompletedTask;
+
+    public Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false) => Task.CompletedTask;
 
     public async Task<bool> CloseTabAsync(string tabId)
     {
@@ -210,30 +226,30 @@ public class BrowserInstanceManagerCore : IBrowserInstanceManager
         return null;
     }
 
-    public async Task<IReadOnlyList<BrowserTabInfo>> GetTabsAsync()
+    public async Task<IReadOnlyList<MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo>> GetTabsAsync()
     {
-        var tabs = new List<BrowserTabInfo>();
+        var tabs = new List<MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo>();
         foreach (var inst in _instances.Values)
         {
             foreach (var id in inst.TabIds)
             {
                 var page = inst.GetPageById(id);
-                tabs.Add(new BrowserTabInfo(id, page?.TitleAsync().GetAwaiter().GetResult(), page?.Url, inst.SelectedPageId == id, inst.InstanceId, inst.DisplayName, "#ccc", inst.OwnerId, inst.SelectedPageId == id));
+                tabs.Add(new MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo(id, page?.TitleAsync().GetAwaiter().GetResult(), page?.Url, inst.SelectedPageId == id, inst.InstanceId, inst.DisplayName, "#ccc", inst.OwnerId, inst.SelectedPageId == id));
             }
         }
 
         return tabs;
     }
 
-    public BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
+    public MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
     {
-        return new BrowserInstanceViewportSettingsResponse(1280, 800, true, true);
+        return new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse(1280, 800, true, true);
     }
 
-    public async Task<BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId)
+    public async Task<MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId)
     {
         if (!_instances.TryGetValue(instanceId, out var inst)) return null;
-        return new BrowserInstanceSettingsResponse(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.SelectedPageId == inst.SelectedPageId, new BrowserInstanceViewportSettingsResponse(1280,800,true,true), new BrowserInstanceUserAgentSettingsResponse(null, false, false, null, null, false));
+        return new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsResponse(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.SelectedPageId == inst.SelectedPageId, new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse(1280,800,true,true), new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceUserAgentSettingsResponse(null, false, false, null, null, false));
     }
 
     public bool TryGet(string id, out PlaywrightInstance inst) => _instances.TryGetValue(id, out inst);

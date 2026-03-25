@@ -1,4 +1,4 @@
-﻿using MeowAutoChrome.Core;
+﻿using MeowAutoChrome.Core.Struct;
 using System.ComponentModel.DataAnnotations;
 
 namespace MeowAutoChrome.Web.Models;
@@ -51,4 +51,8 @@ public sealed class ProgramSettingsViewModel
     /// </summary>
     [Display(Name = "Headless 模式")]
     public bool Headless { get; set; } = true;
+    /// <summary>
+    /// 可选的自定义键值设置，由 Web UI 提供，注入到 Core 的 ProgramSettings.CustomSettings 中。
+    /// </summary>
+    public System.Collections.Generic.Dictionary<string, string?>? CustomSettings { get; set; }
 }

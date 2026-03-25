@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace MeowAutoChrome.Core;
+namespace MeowAutoChrome.Core.Struct;
 
 /// <summary>
 /// 程序设置类，包含应用的全局配置项和相关路径获取方法。
@@ -47,4 +47,9 @@ public sealed class ProgramSettings
     public string? UserAgent { get; set; }
     public bool AllowInstanceUserAgentOverride { get; set; }
     public bool Headless { get; set; } = true;
+    /// <summary>
+    /// 可供程序自定义扩展的键值配置集合，Web 或宿主可以通过 Contributor 注入自定义设置到此字典中。
+    /// 字典中的值最好以字符串形式表示以保证序列化兼容性。
+    /// </summary>
+    public System.Collections.Generic.Dictionary<string, string?> CustomSettings { get; set; } = new();
 }

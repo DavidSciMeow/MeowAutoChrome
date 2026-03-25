@@ -1,5 +1,7 @@
 ﻿using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Core;
+using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Struct;
 using MeowAutoChrome.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -10,7 +12,7 @@ namespace MeowAutoChrome.Web.Controllers
     /// <summary>
     /// 主页控制器（用于设置、日志和隐私页面），负责处理程序设置的保存与验证，以及日志的展示与清理。
     /// </summary>
-public class HomeController(IProgramSettingsProvider programSettingsService, ScreencastService screencastService, Core.Services.AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
+public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvider programSettingsService, ScreencastService screencastService, Core.Services.AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
     {
         /// <summary>
         /// 将 FPS 值转换为帧间隔（毫秒），最小支持 16ms。
@@ -60,6 +62,33 @@ public class HomeController(IProgramSettingsProvider programSettingsService, Scr
                     if (IsNestedDirectory(currentUserDataDirectory, targetUserDataDirectory) || IsNestedDirectory(targetUserDataDirectory, currentUserDataDirectory))
                         ModelState.AddModelError(nameof(model.UserDataDirectory), "浏览器用户数据目录不能设置为当前目录的子目录或父目录。");
                 }
+            // Validate custom settings keys: must match allowed pattern and have no duplicates
+            if (model.CustomSettings is not null && model.CustomSettings.Count > 0)
+            {
+                var keyPattern = new System.Text.RegularExpressions.Regex("^[A-Za-z0-9_.-]+$");
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in model.CustomSettings)
+                {
+                    var key = kv.Key?.Trim() ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        ModelState.AddModelError(nameof(model.CustomSettings), "自定义设置的键不能为空。请删除空行或填写键名。");
+                        break;
+                    }
+
+                    if (!keyPattern.IsMatch(key))
+                    {
+                        ModelState.AddModelError(nameof(model.CustomSettings), $"自定义键 '{key}' 包含非法字符。允许的字符为字母、数字、下划线、破折号和点（A-Z a-z 0-9 _ - .）。");
+                        break;
+                    }
+
+                    if (!seen.Add(key))
+                    {
+                        ModelState.AddModelError(nameof(model.CustomSettings), $"自定义键 '{key}' 重复。请删除或合并重复项。");
+                        break;
+                    }
+                }
+            }
             }
             catch (Exception)
             {
@@ -101,6 +130,21 @@ public class HomeController(IProgramSettingsProvider programSettingsService, Scr
             };
 
             await programSettingsService.SaveAsync(settings);
+
+            // Inject any web-specific custom settings (exposed via UI) into Core provider
+            try
+            {
+                // Example: UI exposes a small set of web-specific flags in viewmodel.CustomSettings
+                // Map them into provider's custom settings. If viewmodel has none, skip.
+                if (model.CustomSettings != null && model.CustomSettings.Count > 0)
+                {
+                    await programSettingsService.InjectCustomSettingsAsync(model.CustomSettings);
+                }
+            }
+            catch
+            {
+                // non-fatal: do not fail saving main settings if injection fails
+            }
 
             var userDataDirectoryChanged = !string.Equals(previousSettings.UserDataDirectory, settings.UserDataDirectory, StringComparison.OrdinalIgnoreCase);
             var headlessChanged = previousSettings.Headless != settings.Headless;
@@ -154,7 +198,8 @@ public class HomeController(IProgramSettingsProvider programSettingsService, Scr
                 UserDataDirectory = settings.UserDataDirectory,
                 UserAgent = settings.UserAgent,
                 AllowInstanceUserAgentOverride = settings.AllowInstanceUserAgentOverride,
-                Headless = settings.Headless
+                Headless = settings.Headless,
+                CustomSettings = settings.CustomSettings ?? new System.Collections.Generic.Dictionary<string, string?>()
             });
         }
 
