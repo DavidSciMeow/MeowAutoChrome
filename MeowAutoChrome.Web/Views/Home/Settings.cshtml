@@ -11,6 +11,7 @@
                 <div class="card-header fw-semibold">设置导航</div>
                 <div class="card-body vstack gap-2">
                     <a class="settings-nav-link settings-nav-link-primary" asp-action="Settings">程序设置</a>
+                    <a class="settings-nav-link" asp-action="CustomSettings">自定义设置（高级）</a>
                     <div id="settingsNavLinks" class="vstack gap-2"></div>
                 </div>
             </div>
@@ -46,38 +47,7 @@
                     </div>
                 </section>
 
-                <section id="customSettingsCard" class="card shadow-sm settings-card">
-                    <div class="card-header fw-semibold">自定义设置（高级）</div>
-                    <div class="card-body">
-                        <p class="form-text">这里可以添加任意键值对，作为 Web 层自定义的运行时设置。值会作为字符串保存并注入到 Core 的 CustomSettings 中。</p>
-                        <div class="mb-2 small text-muted">键名只能包含字母、数字、下划线、破折号和点；重复键会被拒绝。</div>
-
-                        <div class="mb-2 d-flex gap-2">
-                            <input id="filterKey" class="form-control form-control-sm" placeholder="按键名过滤" />
-                            <input id="filterValue" class="form-control form-control-sm" placeholder="按值过滤" />
-                            <button type="button" id="addCustomSetting" class="btn btn-sm btn-outline-primary">添加</button>
-                            <button type="button" id="sortCustomSettings" class="btn btn-sm btn-outline-secondary">按键名排序</button>
-                        </div>
-
-                        <div class="table-responsive">
-                            <table id="customSettingsTable" class="table table-sm table-borderless align-middle">
-                                <thead class="small text-muted">
-                                    <tr>
-                                        <th style="width:34px"></th>
-                                        <th>键名</th>
-                                        <th>值</th>
-                                        <th style="width:90px">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="customSettingsContainer">
-                                    <!-- rows injected by JS -->
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="form-text small text-muted">拖拽左侧把手可调整显示顺序；过滤框可按键名/值筛选列表。</div>
-                    </div>
-                </section>
+                <!-- 自定义设置已移至单独页面：Home/CustomSettings -->
 
                 <section id="screencastSettingsCard" class="card shadow-sm settings-card">
                     <div class="card-header fw-semibold">实时画面</div>

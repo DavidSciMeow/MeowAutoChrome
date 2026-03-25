@@ -41,6 +41,32 @@ public class BrowserController(IBrowserInstanceManager browserInstances, IHubCon
         [HttpGet]
         public IActionResult Plugins()
             => Ok(pluginHost.GetPluginCatalog());
+
+        /// <summary>
+        /// Force scan for plugins (hot load) by path. Web uploads or points to a file path that Core will try to load.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> LoadPlugin([FromBody] string pluginPath)
+        {
+            if (string.IsNullOrWhiteSpace(pluginPath))
+                return Problem(detail: "插件路径无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+            var result = await pluginHost.LoadPluginAssemblyAsync(pluginPath);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Unload a plugin by plugin id.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> UnloadPlugin([FromBody] string pluginId)
+        {
+            if (string.IsNullOrWhiteSpace(pluginId))
+                return Problem(detail: "插件 ID 无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+            var (success, errors) = await pluginHost.UnloadPluginAsync(pluginId);
+            return success ? Ok(new { success = true }) : Problem(detail: string.Join("; ", errors), title: "UnloadFailed", statusCode: StatusCodes.Status500InternalServerError);
+        }
         /// <summary>
         /// 控制插件（start/stop/pause/resume）。
         /// </summary>
@@ -119,7 +145,7 @@ public class BrowserController(IBrowserInstanceManager browserInstances, IHubCon
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns></returns>
         [HttpPost]
-        public async Task<IActionResult> InstanceSettings([FromBody] BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> InstanceSettings([FromBody] MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.InstanceId)
                 || string.IsNullOrWhiteSpace(request.UserDataDirectory)
@@ -132,19 +158,7 @@ public class BrowserController(IBrowserInstanceManager browserInstances, IHubCon
             bool updated;
             try
             {
-                updated = await browserInstances.UpdateInstanceSettingsAsync(
-                    request.InstanceId,
-                    request.UserDataDirectory,
-                    request.ViewportWidth,
-                    request.ViewportHeight,
-                    request.AutoResizeViewport,
-                    request.PreserveAspectRatio,
-                    request.UseProgramUserAgent,
-                    request.UserAgent,
-                    request.MigrateExistingUserData,
-                    request.DisplayWidth,
-                    request.DisplayHeight,
-                    cancellationToken);
+                updated = await browserInstances.UpdateInstanceSettingsAsync(request, cancellationToken);
             }
             catch (InvalidOperationException ex)
             {

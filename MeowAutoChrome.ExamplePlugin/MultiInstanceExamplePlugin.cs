@@ -1,5 +1,6 @@
 ﻿using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Contracts.BrowserPlugin;
+using MeowAutoChrome.Contracts.Abstractions;
 
 namespace MeowAutoChrome.ExamplePlugin;
 

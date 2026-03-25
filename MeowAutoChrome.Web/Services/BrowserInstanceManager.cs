@@ -134,6 +134,9 @@ public class BrowserInstanceManager : IBrowserInstanceManager
     public Task<byte[]?> CaptureScreenshotAsync() => Task.FromResult<byte[]?>(null);
     public Task SetViewportSizeAsync(int width, int height) => Task.CompletedTask;
     public Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false) => Task.CompletedTask;
+    public Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
+        => Task.FromResult(false);
+
     public Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth = null, int? displayHeight = null, CancellationToken cancellationToken = default)
         => Task.FromResult(false);
     public Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default) => Task.CompletedTask;

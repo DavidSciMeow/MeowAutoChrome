@@ -1,4 +1,5 @@
 ﻿using MeowAutoChrome.Contracts.BrowserPlugin;
+using MeowAutoChrome.Contracts.Abstractions;
 using System.Threading.Tasks;
 
 namespace MeowAutoChrome.Contracts.Interface;

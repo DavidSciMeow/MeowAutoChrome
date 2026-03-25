@@ -12,7 +12,7 @@ namespace MeowAutoChrome.Web.Services;
 /// - 第一个客户端连接时自动开始推帧
 /// - 最后一个客户端断开时自动停止推帧
 /// </summary>
-public class ScreencastService
+public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastService
 {
     /// <summary>
     /// 用于获取当前活动页面和浏览器上下文，以便创建 CDP 会话和订阅帧事件

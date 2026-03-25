@@ -179,12 +179,31 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Contracts.Interface.IBr
         return false;
     }
 
-    public async Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth, int? displayHeight, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
     {
-        if (!_instances.TryGetValue(instanceId, out var inst)) return false;
-        inst.UserDataDirectoryPath = userDataDirectory;
+        if (!_instances.TryGetValue(request.InstanceId, out var inst)) return false;
+        inst.UserDataDirectoryPath = request.UserDataDirectory;
         // Note: real migration/viewport handling omitted for brevity
         return true;
+    }
+
+    // Backward-compatible overload with many parameters. Builds DTO and delegates to new API.
+    public Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth = null, int? displayHeight = null, CancellationToken cancellationToken = default)
+    {
+        var req = new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest(
+            instanceId,
+            userDataDirectory,
+            viewportWidth,
+            viewportHeight,
+            autoResizeViewport,
+            preserveAspectRatio,
+            useProgramUserAgent,
+            userAgent,
+            migrateExistingUserData,
+            displayWidth,
+            displayHeight);
+
+        return UpdateInstanceSettingsAsync(req, cancellationToken);
     }
 
     public async Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default)

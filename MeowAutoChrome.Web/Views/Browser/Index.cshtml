@@ -21,6 +21,24 @@
                         </button>
                         <!-- newInstanceBtn moved into toolbar for clearer placement -->
                     </div>
+
+<div class="modal fade" id="pluginOperationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pluginOperationModalTitle">操作结果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pluginOperationModalMessage" class="mb-2"></div>
+                <div id="pluginOperationModalErrors" class="small text-muted"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
                     <button type="button" class="btn btn-sm btn-primary browser-live-toggle" id="liveToggleBtn">实时画面</button>
                     <small class="browser-tabstrip-metric" id="cpuDisplay">CPU --</small>
                     <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
@@ -455,6 +473,43 @@
                     scheduleScreencastSync(true);
                 })
                 .catch(e  => { status.textContent = "连接失败"; status.className = "badge bg-danger"; console.error(e); });
+
+            // toast helper
+            function showToast(title, message, isError) {
+                const container = document.getElementById('toastContainer');
+                if (!container) return;
+                const toastEl = document.createElement('div');
+                toastEl.className = 'toast align-items-center text-bg-' + (isError ? 'danger' : 'success') + ' border-0';
+                toastEl.setAttribute('role', 'status');
+                toastEl.setAttribute('aria-live', 'polite');
+                toastEl.setAttribute('aria-atomic', 'true');
+                toastEl.innerHTML = `<div class="d-flex"><div class="toast-body"><strong>${title}</strong><div>${message}</div></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+                container.appendChild(toastEl);
+                const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
+                toast.show();
+            }
+
+            function showOperationModal(title, message, errors) {
+                const modal = document.getElementById('pluginOperationModal');
+                const modalTitle = document.getElementById('pluginOperationModalTitle');
+                const modalMessage = document.getElementById('pluginOperationModalMessage');
+                const modalErrors = document.getElementById('pluginOperationModalErrors');
+                if (!modal || !modalTitle || !modalMessage || !modalErrors) return;
+                modalTitle.textContent = title || '操作结果';
+                modalMessage.textContent = message || '';
+                modalErrors.innerHTML = '';
+                if (errors && errors.length) {
+                    const ul = document.createElement('ul');
+                    for (const e of errors) {
+                        const li = document.createElement('li');
+                        li.textContent = e;
+                        ul.appendChild(li);
+                    }
+                    modalErrors.appendChild(ul);
+                }
+                const bsModal = new bootstrap.Modal(modal);
+                bsModal.show();
+            }
 
             async function postJson(url, body) {
                 const headers = { "Content-Type": "application/json" };
@@ -1555,6 +1610,37 @@
                 pluginCatalog.clear();
                 pluginOutputUi.clear();
 
+                // plugin management UI (load plugin by path)
+                const management = document.createElement("div");
+                management.className = "d-flex gap-2 mb-3 align-items-center";
+                const pluginPathInput = document.createElement("input");
+                pluginPathInput.type = "text";
+                pluginPathInput.placeholder = "插件 DLL 路径（例如 C:\\\\path\\\\to\\\\plugin.dll）";
+                pluginPathInput.className = "form-control form-control-sm";
+                const loadBtn = document.createElement("button");
+                loadBtn.type = "button";
+                loadBtn.className = "btn btn-sm btn-primary";
+                loadBtn.textContent = "加载插件";
+                loadBtn.addEventListener("click", async () => {
+                    try {
+                        loadBtn.disabled = true;
+                        const res = await postJson('/Browser/LoadPlugin', pluginPathInput.value.trim());
+                        await loadPlugins();
+                        if (res.errors && res.errors.length) {
+                            showToast('加载完成（有错误）', '请查看详细信息', true);
+                            showOperationModal('加载结果（有错误）', '部分插件加载失败，详情如下：', res.errors);
+                        } else {
+                            showToast('加载完成', '插件已加载', false);
+                        }
+                    } catch (e) {
+                        showToast('加载失败', e.message || String(e), true);
+                        showOperationModal('加载失败', '加载插件时发生异常：', [e.message || String(e)]);
+                    } finally { loadBtn.disabled = false; }
+                });
+                management.appendChild(pluginPathInput);
+                management.appendChild(loadBtn);
+                pluginHost.appendChild(management);
+
                 if (!plugins.length) {
                     const empty = document.createElement("div");
                     empty.textContent = "未发现可用插件。";
@@ -1599,6 +1685,31 @@
                     outputButton.appendChild(outputBadge);
                     headerActions.appendChild(outputButton);
                     headerActions.appendChild(state);
+
+                    // unload button
+                    const unloadBtn = document.createElement("button");
+                    unloadBtn.type = "button";
+                    unloadBtn.className = "btn btn-sm btn-outline-danger";
+                    unloadBtn.textContent = "卸载";
+                    unloadBtn.title = "卸载此插件（如果可能会卸载整个程序集）";
+                    unloadBtn.addEventListener("click", async () => {
+                        if (!confirm('确认卸载插件：' + plugin.name + '？')) return;
+                        try {
+                            unloadBtn.disabled = true;
+                            const res = await postJson('/Browser/UnloadPlugin', plugin.id);
+                            await loadPlugins();
+                            if (res?.success) {
+                                showToast('卸载成功', plugin.name + ' 已卸载', false);
+                            } else {
+                                showToast('卸载失败', '请查看详细信息', true);
+                                showOperationModal('卸载失败', '卸载插件时发生错误：', [res?.detail || '未知错误']);
+                            }
+                        } catch (e) {
+                            showToast('卸载失败', e.message || String(e), true);
+                            showOperationModal('卸载失败', '卸载插件时发生异常：', [e.message || String(e)]);
+                        } finally { unloadBtn.disabled = false; }
+                    });
+                    headerActions.appendChild(unloadBtn);
 
                     header.appendChild(headerActions);
 

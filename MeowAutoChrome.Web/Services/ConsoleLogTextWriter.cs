@@ -7,7 +7,7 @@ namespace MeowAutoChrome.Web.Services;
 /// 将控制台输出捕获并写入 AppLogService 的 TextWriter 实现，通常用于将控制台日志也写入应用日志文件。
 /// 它会在行结束时将缓冲的一行写入 AppLogService。
 /// </summary>
-public sealed class ConsoleLogTextWriter(TextWriter innerWriter, Core.Services.AppLogService appLogService, LogLevel logLevel, string category) : TextWriter
+public sealed class WebConsoleLogTextWriter(TextWriter innerWriter, Core.Services.AppLogService appLogService, LogLevel logLevel, string category) : TextWriter
 {
     private readonly Lock _syncRoot = new();
     private readonly StringBuilder _lineBuffer = new();

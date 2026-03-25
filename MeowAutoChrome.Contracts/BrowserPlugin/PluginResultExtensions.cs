@@ -1,4 +1,5 @@
 ﻿using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

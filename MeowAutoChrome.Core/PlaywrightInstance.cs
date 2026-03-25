@@ -13,8 +13,7 @@ public class PlaywrightInstance : IScreencastable
     private readonly ILogger<PlaywrightInstance> _logger;
     private IBrowserContext? _context;
     private readonly ConcurrentDictionary<string, IPage> _pagesById = new();
-    private static Task<IPlaywright>? _sharedPlaywrightTask;
-    private static readonly object _sharedPlaywrightLock = new();
+    private static readonly Lazy<Task<IPlaywright>> _sharedPlaywrightLazy = new(() => Playwright.CreateAsync());
     public string OwnerId { get; }
     public string? LastErrorMessage { get; set; }
     public string InstanceId { get; }
@@ -80,15 +79,7 @@ public class PlaywrightInstance : IScreencastable
         _logger.LogInformation("Playwright instance initialized {InstanceId} headless={Headless}", InstanceId, IsHeadless);
     }
 
-    private static Task<IPlaywright> GetSharedPlaywrightAsync()
-    {
-        lock (_sharedPlaywrightLock)
-        {
-            if (_sharedPlaywrightTask is null)
-                _sharedPlaywrightTask = Playwright.CreateAsync();
-            return _sharedPlaywrightTask;
-        }
-    }
+    private static Task<IPlaywright> GetSharedPlaywrightAsync() => _sharedPlaywrightLazy.Value;
 
     public async Task CloseAsync()
     {

@@ -1,4 +1,5 @@
 ﻿using MeowAutoChrome.Contracts.BrowserPlugin;
+using MeowAutoChrome.Contracts.Abstractions;
 using System.Linq;
 using MeowAutoChrome.Contracts.Interface;
 using MeowAutoChrome.Core.Services;
@@ -27,21 +28,65 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPluginHostCore
 {
     private readonly BrowserInstanceManagerCore _browserInstances;
-    private readonly PluginDiscoveryService _discovery;
+    private readonly MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService _discovery;
     private readonly IPluginOutputPublisher _publisher;
     private readonly ILogger<BrowserPluginHostCore> _logger;
 
     // runtime caches
-    private readonly Dictionary<string, RuntimeBrowserPluginInstance> _instances = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Assembly> _pluginAssemblies = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, PluginLoadContext> _pluginLoadContexts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IPluginInstanceManager _instanceManager;
+    // assembly loader/executor injected via DI to allow testing and replacement
+    private readonly IPluginAssemblyLoader _assemblyLoader;
+    private readonly IPluginExecutor _executor;
+    // cached discovery snapshot maintained by background scanner
+    private PluginDiscoverySnapshot _latestSnapshot = new PluginDiscoverySnapshot(Array.Empty<RuntimeBrowserPlugin>(), Array.Empty<string>(), Array.Empty<BrowserPluginErrorDescriptor>());
+    private readonly object _snapshotLock = new();
+    private readonly CancellationTokenSource _scanCts = new();
+    private readonly TimeSpan _scanInterval = TimeSpan.FromSeconds(30);
+    private Task? _scanTask;
 
-    public BrowserPluginHostCore(BrowserInstanceManagerCore browserInstances, PluginDiscoveryService discovery, IPluginOutputPublisher publisher, ILogger<BrowserPluginHostCore> logger)
+    public BrowserPluginHostCore(
+        BrowserInstanceManagerCore browserInstances,
+        MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService discovery,
+        IPluginOutputPublisher publisher,
+        ILogger<BrowserPluginHostCore> logger,
+        IPluginInstanceManager instanceManager,
+        IPluginAssemblyLoader assemblyLoader,
+        IPluginExecutor executor)
     {
         _browserInstances = browserInstances;
         _discovery = discovery;
         _publisher = publisher;
         _logger = logger;
+        _instanceManager = instanceManager;
+        _assemblyLoader = assemblyLoader;
+        _executor = executor;
+
+        // initial scan and start background scanning loop
+        try
+        {
+            _latestSnapshot = _discovery.DiscoverAll(_assemblyLoader);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Initial plugin discovery failed.");
+            _latestSnapshot = new PluginDiscoverySnapshot(Array.Empty<RuntimeBrowserPlugin>(), Array.Empty<string>(), Array.Empty<BrowserPluginErrorDescriptor>());
+        }
+
+        _scanTask = Task.Run(() => ScanLoopAsync(_scanCts.Token));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            _scanCts.Cancel();
+        }
+        catch { }
+
+        if (_scanTask is not null)
+        {
+            try { await _scanTask.ConfigureAwait(false); } catch { }
+        }
     }
 
     public string PluginRootPath => _discovery.PluginRootPath;
@@ -54,13 +99,37 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
     // 插件目录下可用插件描述及错误
     public BrowserPluginCatalogResponse GetPluginCatalog()
     {
-        var discovery = DiscoverPluginsCore();
+        var discovery = GetLatestSnapshot();
         var errors = new List<string>(discovery.Errors);
         var plugins = discovery.Plugins
-            .Select(plugin => CreatePluginDescriptor(plugin, errors))
+            .Select(plugin => BrowserPluginHostCoreHelpers.CreatePluginDescriptor(plugin, errors, _instanceManager))
             .Where(plugin => plugin is not null)
             .ToArray()!;
         var errorsDetailed = discovery.ErrorsDetailed ?? Array.Empty<BrowserPluginErrorDescriptor>();
+        return new BrowserPluginCatalogResponse(plugins, errors, errorsDetailed);
+    }
+
+    public Task<BrowserPluginCatalogResponse> LoadPluginAssemblyAsync(string pluginPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(LoadPluginAssembly(pluginPath));
+
+    public Task<(bool Success, IReadOnlyList<string> Errors)> UnloadPluginAsync(string pluginId, CancellationToken cancellationToken = default)
+        => Task.FromResult(UnloadPlugin(pluginId));
+
+    public async Task<BrowserPluginCatalogResponse> ScanPluginsAsync(CancellationToken cancellationToken = default)
+    {
+        var snapshot = _discovery.DiscoverAll(_assemblyLoader);
+
+        lock (_snapshotLock)
+        {
+            _latestSnapshot = snapshot;
+        }
+
+        var errors = new List<string>(snapshot.Errors);
+        var plugins = snapshot.Plugins
+            .Select(plugin => BrowserPluginHostCoreHelpers.CreatePluginDescriptor(plugin, errors, _instanceManager))
+            .Where(plugin => plugin is not null)
+            .ToArray()!;
+        var errorsDetailed = snapshot.ErrorsDetailed ?? Array.Empty<BrowserPluginErrorDescriptor>();
         return new BrowserPluginCatalogResponse(plugins, errors, errorsDetailed);
     }
 
@@ -72,10 +141,10 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         var plugin = plugins.FirstOrDefault(item => string.Equals(item.Id, pluginId, StringComparison.OrdinalIgnoreCase));
         if (plugin is null)
             return null;
-        var instance = GetOrCreatePluginInstance(plugin);
+        var instance = _instanceManager.GetOrCreateInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        var instanceCtn = GetOrCreatePluginInstance(plugin);
-        instanceCtn.EnsureFreshLifecycleToken();
+        _instanceManager.EnsureFreshLifecycleToken(plugin);
+        var instanceCtn = _instanceManager.GetOrCreateInstance(plugin);
         var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
             var hostContext = new PluginHostContext(
             _browserInstances.BrowserContext,
@@ -89,9 +158,9 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
             (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token));
         if (string.Equals(command, "stop", StringComparison.OrdinalIgnoreCase))
         {
-            try { instanceCtn.CancelLifecycle(); } catch { }
+            try { _instanceManager.CancelLifecycle(plugin); } catch { }
         }
-        var result = await ExecuteWithHostContextAsync(
+        var result = await _executor.ExecuteAsync(
             instance,
             hostContext,
             pluginInstance => command.ToLowerInvariant() switch
@@ -100,7 +169,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
                 "stop" => pluginInstance.StopAsync(),
                 "pause" => pluginInstance.PauseAsync(),
                 "resume" => pluginInstance.ResumeAsync(),
-                _ => throw new InvalidOperationException($"不支持的插件控制命令：{command}")
+                _ => Task.FromResult(new MeowAutoChrome.Contracts.Abstractions.PluginActionResult($"不支持的插件控制命令：{command}", null))
             },
             combinedCts.Token);
         combinedCts.Dispose();
@@ -116,9 +185,9 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         var action = plugin.Actions.FirstOrDefault(item => string.Equals(item.Id, functionId, StringComparison.OrdinalIgnoreCase));
         if (action is null)
             return null;
-        var instance = GetOrCreatePluginInstance(plugin);
+        var instance = _instanceManager.GetOrCreateInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        instance.EnsureFreshLifecycleToken();
+        _instanceManager.EnsureFreshLifecycleToken(plugin);
         using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
         var hostContext = new PluginHostContext(
             _browserInstances.BrowserContext,
@@ -130,15 +199,26 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
             action.Id,
             combinedCts.Token,
             (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token));
-        var result = await ExecuteWithHostContextAsync(
+        var result = await _executor.ExecuteAsync(
             instance,
             hostContext,
-            pluginInstance =>
+            async pluginInstance =>
             {
-                var invocation = action.Method.Invoke(pluginInstance, BuildInvocationArguments(action.Method, hostContext));
-                if (invocation is not Task<PluginActionResult> task)
-                    throw new InvalidOperationException($"插件动作返回类型无效：{plugin.Type.FullName}.{action.Method.Name}");
-                return task;
+                var invocation = action.Method.Invoke(pluginInstance, PluginParameterBinder.BuildInvocationArguments(action.Method, hostContext));
+                if (invocation is Task<MeowAutoChrome.Contracts.Abstractions.PluginActionResult> task)
+                    return await task.ConfigureAwait(false);
+                if (invocation is Task genericTask)
+                {
+                    await genericTask.ConfigureAwait(false);
+                    var resultProp = genericTask.GetType().GetProperty("Result");
+                    if (resultProp is not null)
+                    {
+                        var res = resultProp.GetValue(genericTask);
+                        if (res is MeowAutoChrome.Contracts.Abstractions.PluginActionResult par)
+                            return par;
+                    }
+                }
+                throw new InvalidOperationException($"插件动作返回类型无效：{plugin.Type.FullName}.{action.Method.Name}");
             },
             combinedCts.Token);
         return new BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
@@ -162,7 +242,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
 
             try
             {
-                candidateTypeNames = DiscoverPluginTypeNames(pluginPath);
+                candidateTypeNames = PluginMetadataScanner.DiscoverPluginTypeNames(pluginPath);
             }
             catch (Exception ex)
             {
@@ -177,11 +257,14 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
             if (candidateTypeNames.Length == 0)
                 continue;
 
-            var assembly = TryLoadPluginAssembly(pluginPath, errors);
+            var assembly = _assemblyLoader.Load(pluginPath, errors);
             if (assembly is null)
                 continue;
 
-            plugins.AddRange(DiscoverPlugins(assembly, pluginPath, candidateTypeNames, errors));
+            var discovered = DiscoverPlugins(assembly, pluginPath, candidateTypeNames, errors);
+            plugins.AddRange(discovered);
+            // register plugin ids to assembly map for potential unload
+            _assemblyLoader.RegisterPlugins(pluginPath, discovered.Select(p => p.Id));
         }
 
         return new PluginDiscoverySnapshot(
@@ -192,11 +275,101 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
             [.. errorsDetailed]);
     }
 
+    private async Task ScanLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var snapshot = _discovery.DiscoverAll(_assemblyLoader);
+                lock (_snapshotLock)
+                {
+                    _latestSnapshot = snapshot;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Background plugin scan failed.");
+            }
+
+            try { await Task.Delay(_scanInterval, cancellationToken); } catch { }
+        }
+    }
+
+    // Public access to latest snapshot so Web can query without triggering discovery
+    public PluginDiscoverySnapshot GetLatestSnapshot()
+    {
+        lock (_snapshotLock)
+        {
+            return _latestSnapshot;
+        }
+    }
+
+    /// <summary>
+    /// Attempt to load a single plugin assembly path and register discovered plugins.
+    /// Returns catalog response with any errors and loaded plugin descriptors.
+    /// </summary>
+    public BrowserPluginCatalogResponse LoadPluginAssembly(string pluginPath)
+    {
+        var (plugins, errors, errorsDetailed) = _discovery.DiscoverFromAssembly(pluginPath, _assemblyLoader);
+
+        // merge into snapshot
+        lock (_snapshotLock)
+        {
+            var merged = _latestSnapshot.Plugins.Concat(plugins).ToArray();
+            _latestSnapshot = new PluginDiscoverySnapshot(merged, _latestSnapshot.Errors.Concat(errors).ToArray(), _latestSnapshot.ErrorsDetailed);
+        }
+
+        var outErrors = new List<string>(errors);
+        var descriptors = plugins.Select(p => CreatePluginDescriptor(p, outErrors)).Where(d => d is not null).ToArray()!;
+        return new BrowserPluginCatalogResponse(descriptors, outErrors, errorsDetailed.ToArray());
+    }
+
+    /// <summary>
+    /// Attempt to unload plugin(s) by plugin id. If plugin id maps to an assembly, unload assembly and remove instances.
+    /// Returns success or errors.
+    /// </summary>
+    public (bool Success, IReadOnlyList<string> Errors) UnloadPlugin(string pluginId)
+    {
+        var errors = new List<string>();
+        try
+        {
+            var path = _assemblyLoader.GetAssemblyPathForPluginId(pluginId);
+            if (path is null)
+            {
+                errors.Add($"Plugin id {pluginId} not found or not loaded.");
+                return (false, errors);
+            }
+
+            // remove instances
+            _instanceManager.RemoveInstanceByPluginId(pluginId);
+
+            // unregister plugins and unload assembly
+            _assemblyLoader.UnregisterPlugins(path);
+            _assemblyLoader.Unload(path);
+
+            // refresh snapshot
+            lock (_snapshotLock)
+            {
+                var remaining = _latestSnapshot.Plugins.Where(p => p.Id != pluginId).ToArray();
+                _latestSnapshot = new PluginDiscoverySnapshot(remaining, _latestSnapshot.Errors, _latestSnapshot.ErrorsDetailed);
+            }
+
+            return (true, Array.Empty<string>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to unload plugin {PluginId}", pluginId);
+            errors.Add(ex.Message);
+            return (false, errors);
+        }
+    }
+
     private BrowserPluginDescriptor? CreatePluginDescriptor(RuntimeBrowserPlugin plugin, List<string> errors)
     {
         try
         {
-            var instance = GetOrCreatePluginInstance(plugin);
+            var instance = _instanceManager.GetOrCreateInstance(plugin);
 
             return new BrowserPluginDescriptor(
                 plugin.Id,
@@ -243,46 +416,9 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         }
     }
 
-    private RuntimeBrowserPluginInstance GetOrCreatePluginInstance(RuntimeBrowserPlugin plugin)
-    {
-        // simple lock using type's static lock
-        lock (this)
-        {
-            // store instances in a simple dictionary attached to this class
-            if (_instances.TryGetValue(plugin.Id, out var current) && current.Type == plugin.Type)
-                return current;
+    // Instance management moved to PluginInstanceManager
 
-            if (Activator.CreateInstance(plugin.Type) is not IPlugin instance)
-                throw new InvalidOperationException($"无法创建插件实例：{plugin.Type.FullName}");
-
-            current = new RuntimeBrowserPluginInstance(plugin.Type, instance);
-            _instances[plugin.Id] = current;
-            return current;
-        }
-    }
-
-    private static async Task<PluginActionResult> ExecuteWithHostContextAsync(RuntimeBrowserPluginInstance instance, IHostContext hostContext, Func<IPlugin, Task<PluginActionResult>> execute, CancellationToken cancellationToken)
-    {
-        await instance.ExecutionLock.WaitAsync(cancellationToken);
-
-        try
-        {
-            instance.Instance.HostContext = hostContext;
-
-            try
-            {
-                return await execute(instance.Instance);
-            }
-            finally
-            {
-                instance.Instance.HostContext = null;
-            }
-        }
-        finally
-        {
-            instance.ExecutionLock.Release();
-        }
-    }
+    // Execution logic moved to PluginExecutor
 
     private List<RuntimeBrowserPlugin> DiscoverPlugins(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, List<string> errors)
     {
@@ -305,8 +441,8 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
                     pluginAttribute.Name,
                     pluginAttribute.Description,
                     type,
-                    DiscoverControls(type),
-                    DiscoverActions(type)));
+                    BrowserPluginHostCoreHelpers.DiscoverControls(type),
+                    BrowserPluginHostCoreHelpers.DiscoverActions(type)));
             }
             catch (Exception ex)
             {
@@ -320,37 +456,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         return plugins;
     }
 
-    private static string[] DiscoverPluginTypeNames(string pluginPath)
-    {
-        using var stream = new FileStream(pluginPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var peReader = new PEReader(stream);
-
-        if (!peReader.HasMetadata)
-            return Array.Empty<string>();
-
-        var metadataReader = peReader.GetMetadataReader();
-        var typeNames = new List<string>();
-
-        foreach (var typeHandle in metadataReader.TypeDefinitions)
-        {
-            var typeDefinition = metadataReader.GetTypeDefinition(typeHandle);
-            var typeName = GetTypeFullName(metadataReader, typeDefinition);
-            if (string.IsNullOrWhiteSpace(typeName) || string.Equals(typeName, "<Module>", StringComparison.Ordinal))
-                continue;
-
-            if (!HasCustomAttribute(metadataReader, typeDefinition.GetCustomAttributes(), typeof(PluginAttribute).FullName ?? nameof(PluginAttribute)))
-                continue;
-
-            typeNames.Add(typeName);
-        }
-
-        return [.. typeNames.Distinct(StringComparer.Ordinal)];
-    }
-
-    private static bool HasCustomAttribute(MetadataReader metadataReader, CustomAttributeHandleCollection attributes, string attributeFullName)
-        => attributes.Any(attributeHandle => string.Equals(GetAttributeTypeFullName(metadataReader, attributeHandle), attributeFullName, StringComparison.Ordinal));
-
-    // Metadata helpers (single copy kept above)
+    // Metadata helpers have been moved to PluginMetadataScanner to reduce the size of this type.
 
     private static List<RuntimeBrowserPluginControl> DiscoverControls(Type type)
     {
@@ -375,8 +481,8 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
             return;
 
         var parameters = method.GetParameters()
-            .Where(p => !IsHostParameter(p))
-            .Select(p => CreateActionParameter(p, p.GetCustomAttributes<MeowAutoChrome.Contracts.Attributes.PInputAttribute>().LastOrDefault(), null))
+            .Where(p => !PluginParameterBinder.IsHostParameter(p))
+            .Select(p => PluginParameterBinder.CreateActionParameter(p, p.GetCustomAttributes<MeowAutoChrome.Contracts.Attributes.PInputAttribute>().LastOrDefault(), null))
             .ToArray();
 
         controls.Add(new RuntimeBrowserPluginControl(command, name, description, parameters));
@@ -384,46 +490,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
 
     private static object?[] BuildInvocationArguments(MethodInfo method, IHostContext hostContext)
     {
-        var parameters = method.GetParameters();
-        var args = new object?[parameters.Length];
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            if (IsHostParameter(p))
-            {
-                args[i] = hostContext;
-                continue;
-            }
-
-            hostContext.Arguments.TryGetValue(p.Name ?? string.Empty, out var rawValue);
-
-            if (rawValue is null)
-            {
-                if (p.HasDefaultValue)
-                    args[i] = p.DefaultValue;
-                else
-                    args[i] = p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null;
-                continue;
-            }
-
-            try
-            {
-                var targetType = p.ParameterType;
-                if (targetType == typeof(string))
-                    args[i] = rawValue;
-                else if (targetType.IsEnum)
-                    args[i] = Enum.Parse(targetType, rawValue, ignoreCase: true);
-                else
-                    args[i] = Convert.ChangeType(rawValue, targetType, CultureInfo.InvariantCulture);
-            }
-            catch
-            {
-                args[i] = rawValue;
-            }
-        }
-
-        return args;
+        return PluginParameterBinder.BuildInvocationArguments(method, hostContext);
     }
 
     private static List<RuntimeBrowserPluginAction> DiscoverActions(Type type)
@@ -445,8 +512,8 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
 
             var parameters = method
                 .GetParameters()
-                .Where(parameter => !IsHostParameter(parameter))
-                .Select(parameter => CreateActionParameter(
+                .Where(parameter => !PluginParameterBinder.IsHostParameter(parameter))
+                .Select(parameter => PluginParameterBinder.CreateActionParameter(
                     parameter,
                     parameter.GetCustomAttributes<MeowAutoChrome.Contracts.Attributes.PInputAttribute>().LastOrDefault(),
                     legacyParameterMetadata.GetValueOrDefault(parameter.Name ?? string.Empty)))
@@ -479,60 +546,13 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
 
     private static bool HasSupportedSignature(MethodInfo method)
     {
-        return typeof(Task<PluginActionResult>).IsAssignableFrom(method.ReturnType);
+        var target = typeof(Task<>).MakeGenericType(typeof(MeowAutoChrome.Contracts.Abstractions.PluginActionResult));
+        return target.IsAssignableFrom(method.ReturnType);
     }
 
-    private static bool IsHostParameter(ParameterInfo parameter)
-        => typeof(IHostContext).IsAssignableFrom(parameter.ParameterType);
+    // Parameter binding helpers have been moved to PluginParameterBinder to reduce the size of this type.
 
-    private static RuntimeBrowserPluginParameter CreateActionParameter(ParameterInfo parameter, MeowAutoChrome.Contracts.Attributes.PInputAttribute? attribute, MeowAutoChrome.Contracts.Attributes.PInputAttribute? legacy)
-    {
-        var param = new RuntimeBrowserPluginParameter
-        {
-            Name = parameter.Name ?? string.Empty,
-            Label = attribute?.Label ?? legacy?.Label ?? parameter.Name ?? string.Empty,
-            Description = attribute?.Description ?? legacy?.Description,
-            DefaultValue = attribute?.DefaultValue ?? legacy?.DefaultValue,
-            Required = attribute?.Required ?? legacy?.Required ?? false,
-            InputType = attribute?.InputType ?? legacy?.InputType ?? "text",
-            Options = Array.Empty<(string, string)>()
-        };
-
-        return param;
-    }
-
-    private Assembly? TryLoadPluginAssembly(string pluginPath, List<string> errors)
-    {
-        try
-        {
-            var fullPath = Path.GetFullPath(pluginPath);
-
-            lock (this)
-            {
-                if (_pluginAssemblies.TryGetValue(fullPath, out var loaded))
-                    return loaded;
-            }
-
-            var loadContext = new PluginLoadContext(fullPath);
-            var assembly = loadContext.LoadFromAssemblyPath(fullPath);
-
-            lock (this)
-            {
-                _pluginLoadContexts[fullPath] = loadContext;
-                _pluginAssemblies[fullPath] = assembly;
-            }
-
-            return assembly;
-        }
-        catch (Exception ex)
-        {
-            var detail = ex.ToString();
-            var message = $"插件程序集加载失败：{Path.GetFileName(pluginPath)} -> {detail}";
-            _logger.LogError(ex, "加载插件程序集失败：{PluginAssembly}", pluginPath);
-            errors.Add(message);
-            return null;
-        }
-    }
+    // Assembly loading moved to PluginAssemblyLoader
 
     // Metadata helpers (single copy)
     private static string? GetAttributeTypeFullName(MetadataReader metadataReader, CustomAttributeHandle attributeHandle)

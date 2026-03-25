@@ -62,6 +62,59 @@ public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvid
                     if (IsNestedDirectory(currentUserDataDirectory, targetUserDataDirectory) || IsNestedDirectory(targetUserDataDirectory, currentUserDataDirectory))
                         ModelState.AddModelError(nameof(model.UserDataDirectory), "浏览器用户数据目录不能设置为当前目录的子目录或父目录。");
                 }
+
+        /// <summary>
+        /// 显示独立的自定义设置页面（高级）。
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> CustomSettings()
+        {
+            var settings = await programSettingsService.GetAsync();
+            return View(new ProgramSettingsViewModel
+            {
+                CustomSettings = settings.CustomSettings ?? new System.Collections.Generic.Dictionary<string, string?>()
+            });
+        }
+
+        /// <summary>
+        /// 自动保存自定义设置（AJAX）。
+        /// </summary>
+        [HttpPost, ValidateAntiForgeryToken]
+        public async Task<IActionResult> AutoSaveCustomSettings(ProgramSettingsViewModel model)
+        {
+            // Only validate custom settings keys here
+            if (model.CustomSettings is not null && model.CustomSettings.Count > 0)
+            {
+                var keyPattern = new System.Text.RegularExpressions.Regex("^[A-Za-z0-9_.-]+$");
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in model.CustomSettings)
+                {
+                    var key = kv.Key?.Trim() ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(key))
+                        return Problem(detail: "自定义设置的键不能为空。", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+                    if (!keyPattern.IsMatch(key))
+                        return Problem(detail: $"自定义键 '{key}' 包含非法字符。", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+                    if (!seen.Add(key))
+                        return Problem(detail: $"自定义键 '{key}' 重复。", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+                }
+            }
+
+            try
+            {
+                if (model.CustomSettings != null)
+                {
+                    await programSettingsService.InjectCustomSettingsAsync(model.CustomSettings);
+                }
+
+                return Ok(new { message = "自定义设置已保存。" });
+            }
+            catch (Exception ex)
+            {
+                return Problem(detail: ex.Message, title: "ServerError", statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }
             // Validate custom settings keys: must match allowed pattern and have no duplicates
             if (model.CustomSettings is not null && model.CustomSettings.Count > 0)
             {

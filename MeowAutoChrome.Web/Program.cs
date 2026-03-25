@@ -28,10 +28,23 @@ builder.Services.AddSingleton(sp => new BrowserInstanceManager(sp.GetRequiredSer
 builder.Services.AddSingleton(sp => sp.GetRequiredService<BrowserInstanceManager>() as IBrowserInstanceManager ?? throw new InvalidOperationException("Failed to resolve IBrowserInstanceManager"));
 builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IProgramSettingsProvider, MeowAutoChrome.Core.Interface.FileProgramSettingsProvider>();
 builder.Services.AddSingleton<AppLogService>();
-builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginDiscovery.PluginDiscoveryService>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService, MeowAutoChrome.Core.Services.PluginDiscovery.PluginDiscoveryService>();
 builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>())); 
-builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>();
+// Plugin host dependencies
+builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader, MeowAutoChrome.Core.Services.PluginHost.PluginAssemblyLoader>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginHost.IPluginInstanceManager, MeowAutoChrome.Core.Services.PluginHost.PluginInstanceManager>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginHost.IPluginExecutor, MeowAutoChrome.Core.Services.PluginHost.PluginExecutor>();
+builder.Services.AddSingleton<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>(sp =>
+    new MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore(
+        sp.GetRequiredService<BrowserInstanceManagerCore>(),
+        sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService>(),
+        sp.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginOutputPublisher>(),
+        sp.GetRequiredService<ILogger<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>>(),
+        sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginInstanceManager>(),
+        sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader>(),
+        sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginExecutor>()));
 builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IPluginHostCore>(sp => sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>());
+builder.Services.AddSingleton<MeowAutoChrome.Web.Abstractions.IScreencastService, MeowAutoChrome.Web.Services.ScreencastService>();
 builder.Services.AddSingleton<ScreencastService>();
 builder.Services.AddSingleton<ScreenshotService>();
 builder.Services.AddSingleton<IScreencastFrameSink>(sp => new SignalRScreencastFrameSink(sp.GetRequiredService<IHubContext<BrowserHub>>()));
@@ -43,6 +56,19 @@ builder.Services.AddHostedService<ChromeShellService>(); // auto pull up chrome 
 var app = builder.Build();
 app.Lifetime.ApplicationStarted.Register(() => appLogService.WriteEntry(LogLevel.Information, "Application started.", "System"));
 app.Lifetime.ApplicationStopping.Register(() => appLogService.WriteEntry(LogLevel.Information, "Application stopping.", "System"));
+// ensure BrowserPluginHostCore stops background tasks on shutdown
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    try
+    {
+        var host = app.Services.GetService<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>();
+        if (host is not null)
+        {
+            host.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+    catch { }
+});
 
 app.UseMiddleware<MeowAutoChrome.Web.Middleware.ProblemDetailsExceptionMiddleware>();
 
