@@ -147,10 +147,6 @@
                         <i class="fa-regular fa-copy"></i>
                     </button>
                 </div>
-                <div id="createInstancePreview" class="mb-3 small text-muted" style="display:none">
-                    <div id="createInstancePreviewName">实例显示名：<span class="fw-semibold">（使用默认名）</span></div>
-                    <div id="createInstancePreviewPath">UserData 将使用：<span class="fw-semibold">（占位）</span></div>
-                </div>
                 <input type="hidden" id="createInstanceOwnerPluginId" value="ui" />
             </div>
             <div class="modal-footer">
@@ -505,7 +501,8 @@
                     try {
                         const owner = document.getElementById('createInstanceOwnerPluginId')?.value || 'ui';
                         const resp = await (await fetch('/Browser/PreviewNewInstance?ownerPluginId=' + encodeURIComponent(owner))).json();
-                        const previewPath = resp?.userDataDirectory || '';
+                        let previewPath = resp?.userDataDirectory || '';
+                        const originalPreviewPath = previewPath;
                         const previewId = resp?.instanceId || '';
 
                         const input = document.getElementById('createInstanceUserDataDirectory');
@@ -526,26 +523,38 @@
                                 const tipText = tip.querySelector('.create-path-text');
                                 const copyBtn = tip.querySelector('.create-path-copy-btn');
 
-                                function showTip() {
-                                    if (!input.value) {
+                                function showTip(always) {
+                                    // show when userData input is empty, or when caller forces (e.g. display name focused)
+                                    if (always || !input.value) {
                                         if (tipText) tipText.textContent = previewPath || '';
                                         tip.style.display = previewPath ? '' : 'none';
+                                        // ensure tooltip is positioned under the input and visible
+                                        try {
+                                            const rect = input.getBoundingClientRect();
+                                            tip.style.position = 'relative';
+                                            tip.style.marginTop = '0.5rem';
+                                            tip.style.left = '0';
+                                        } catch (e) { }
                                     }
                                 }
 
-                                input.addEventListener('mouseenter', showTip);
-                                input.addEventListener('focus', showTip);
-                                input.addEventListener('mouseleave', () => { if (tip) tip.style.display = 'none'; });
+                                // show tooltip when the input is focused or clicked
+                                input.addEventListener('focus', () => showTip(false));
+                                input.addEventListener('click', () => showTip(false));
                                 input.addEventListener('blur', () => { if (tip) tip.style.display = 'none'; });
 
+                                // do not show tooltip when display name is focused
+
                                 if (copyBtn) {
-                                    copyBtn.addEventListener('click', async () => {
+                                    // prevent mousedown from blurring the input so click can be handled
+                                    copyBtn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+                                    copyBtn.addEventListener('click', async (e) => {
                                         try {
                                             const text = (previewPath || '') || (input.value || '');
                                             await navigator.clipboard.writeText(text);
                                             showError('已复制到剪贴板', 'info');
-                                        } catch (e) {
-                                            showError('复制失败: ' + (e?.message || e), 'warning');
+                                        } catch (ex) {
+                                            showError('复制失败: ' + (ex?.message || ex), 'warning');
                                         }
                                     });
                                 }
@@ -614,20 +623,47 @@
                             });
                         }
 
-                        if (previewDiv && previewPathEl && previewNameEl) {
-                            previewDiv.style.display = '';
-                            const displayText = (displayNameInput && displayNameInput.value.trim()) || previewId || 'Browser';
-                            const nameSpan = previewNameEl.querySelector('span');
-                            const pathSpan = previewPathEl.querySelector('span');
-                            if (nameSpan) nameSpan.textContent = displayText || '(使用默认名)';
-                            if (pathSpan) pathSpan.textContent = previewPath || '(默认)';
-                        }
-
-                        if (displayNameInput && previewNameEl) {
+                        // move preview values into input placeholders
+                        if (displayNameInput) {
+                            // set placeholder to the preview id only (or keep default hint when absent)
+                            displayNameInput.placeholder = previewId || '留空使用默认名';
+                            displayNameInput.dataset.previewId = previewId || '';
+                            // when display name changes, update path placeholder and tooltip accordingly
                             displayNameInput.addEventListener('input', () => {
-                                const s = previewNameEl.querySelector('span');
-                                if (s) s.textContent = displayNameInput.value.trim() || 'Browser';
+                                const val = (displayNameInput.value || '').trim();
+                                if (val) {
+                                    // user provided a custom display name: update path preview
+                                    const root = originalPreviewPath ? originalPreviewPath.replace(/\\[^\\]+$/, '') : '';
+                                    const newPath = root ? (root + '\\' + val) : originalPreviewPath;
+                                    previewPath = newPath;
+                                    if (input) {
+                                        input.placeholder = newPath;
+                                        input.dataset.previewPath = newPath;
+                                    }
+                                    // update tooltip text immediately if visible
+                                    const tip = document.getElementById('createInstancePathTooltip');
+                                    if (tip) {
+                                        const tipText = tip.querySelector('.create-path-text');
+                                        if (tipText) tipText.textContent = newPath || '';
+                                    }
+                                } else {
+                                    // restore original previewPath
+                                    previewPath = originalPreviewPath;
+                                    if (input) {
+                                        input.placeholder = originalPreviewPath;
+                                        input.dataset.previewPath = originalPreviewPath;
+                                    }
+                                    const tip = document.getElementById('createInstancePathTooltip');
+                                    if (tip) {
+                                        const tipText = tip.querySelector('.create-path-text');
+                                        if (tipText) tipText.textContent = originalPreviewPath || '';
+                                    }
+                                }
                             });
+                        }
+                        if (input) {
+                            // ensure path placeholder already set earlier; also store previewId
+                            input.dataset.previewId = input.dataset.previewId || previewId;
                         }
                     } catch (e) {
                         // ignore preview errors

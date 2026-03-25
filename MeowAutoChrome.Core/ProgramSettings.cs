@@ -16,7 +16,7 @@ public sealed class ProgramSettings
     public const int DefaultPluginPanelWidth = 320;
 
     public static string GetAppDataDirectoryPath()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoBrowser");
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome");
 
     public static string GetSettingsDirectoryPath()
         => Path.Combine(GetAppDataDirectoryPath(), "setting");
@@ -28,7 +28,10 @@ public sealed class ProgramSettings
         => Path.Combine(AppContext.BaseDirectory, "program-settings.json");
 
     public static string GetDefaultUserDataDirectoryPath()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoBrowser", "instances");
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "instances");
+
+    public static string GetDefaultPluginDirectoryPath()
+        => Path.Combine(AppContext.BaseDirectory, "Plugins");
 
     public static string GetLegacyUserDataDirectoryPath()
         => Path.Combine(AppContext.BaseDirectory, "user_data");
@@ -37,6 +40,10 @@ public sealed class ProgramSettings
     public int ScreencastFps { get; set; } = DefaultScreencastFps;
     public int PluginPanelWidth { get; set; } = DefaultPluginPanelWidth;
     public string UserDataDirectory { get; set; } = GetDefaultUserDataDirectoryPath();
+    /// <summary>
+    /// 插件根目录（用于在运行时发现并加载插件）。
+    /// </summary>
+    public string PluginDirectory { get; set; } = GetDefaultPluginDirectoryPath();
     public string? UserAgent { get; set; }
     public bool AllowInstanceUserAgentOverride { get; set; }
     public bool Headless { get; set; } = true;
