@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using MeowAutoChrome.Contracts.Abstractions;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Contracts;
+using MeowAutoChrome.Core.Services.PluginDiscovery;
 using System.Reflection;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
