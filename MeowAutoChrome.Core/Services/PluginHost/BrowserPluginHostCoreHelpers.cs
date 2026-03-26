@@ -99,43 +99,9 @@ namespace MeowAutoChrome.Core.Services.PluginHost
 
         public static List<RuntimeBrowserPluginAction> DiscoverActions(Type type)
         {
-            var actions = new List<RuntimeBrowserPluginAction>();
-            var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public))
-            {
-                var attribute = method.GetCustomAttribute<PActionAttribute>();
-                if (attribute is null || !BrowserPluginHostCoreHelpersInternal.HasSupportedSignature(method))
-                    continue;
-
-                var legacyParameterMetadata = method
-                    .GetCustomAttributes<PInputAttribute>()
-                    .Where(item => !string.IsNullOrWhiteSpace(item.Name) || !string.IsNullOrWhiteSpace(item.Label))
-                    .GroupBy(item => item.Name ?? item.Label, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
-
-                var parameters = method
-                    .GetParameters()
-                    .Where(parameter => !PluginParameterBinder.IsHostParameter(parameter))
-                    .Select(parameter => PluginParameterBinder.CreateActionParameter(
-                        parameter,
-                        parameter.GetCustomAttributes<PInputAttribute>().LastOrDefault(),
-                        legacyParameterMetadata.GetValueOrDefault(parameter.Name ?? string.Empty)))
-                    .ToArray();
-
-                var baseId = string.IsNullOrWhiteSpace(attribute.Id) ? method.Name : attribute.Id.Trim();
-                var actionId = EnsureUniqueActionId(baseId, usedIds);
-                var actionName = string.IsNullOrWhiteSpace(attribute.Name) ? method.Name : attribute.Name.Trim();
-
-                actions.Add(new RuntimeBrowserPluginAction(
-                    actionId,
-                    actionName,
-                    attribute.Description,
-                    method,
-                    parameters));
-            }
-
-            return actions;
+            // Delegate discovery to PluginTypeIntrospector to avoid duplicated implementation
+            // and potential dead/unused code paths.
+            return PluginTypeIntrospector.DiscoverActions(type);
         }
 
         private static string EnsureUniqueActionId(string baseId, HashSet<string> usedIds)
