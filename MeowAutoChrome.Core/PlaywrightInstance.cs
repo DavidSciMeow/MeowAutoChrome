@@ -2,12 +2,15 @@
 using Microsoft.Extensions.Logging;
 using MeowAutoChrome.Contracts.BrowserContext;
 using System.Net;
-using MeowAutoChrome.Core.Services;
+// using MeowAutoChrome.Core.Services; // not required in this file
 using System.Collections.Concurrent;
+using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Services;
+using MeowAutoChrome.Core.Interface;
 
 namespace MeowAutoChrome.Core;
 
-public class PlaywrightInstance : IScreencastable
+public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
 {
     // Minimal wrapper adapted from original PlayWrightWarpper. Full feature parity will be migrated gradually.
     private readonly ILogger<PlaywrightInstance> _logger;

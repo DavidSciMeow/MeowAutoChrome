@@ -1,17 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using MeowAutoChrome.Contracts.BrowserPlugin;
 
 namespace MeowAutoChrome.Core.Models;
 
-public sealed class PluginDiscoverySnapshot
+public sealed class PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> plugins, IReadOnlyList<string> errors, IReadOnlyList<MeowAutoChrome.Contracts.BrowserPlugin.BrowserPluginErrorDescriptor>? errorsDetailed = null)
 {
-    public IReadOnlyList<RuntimeBrowserPlugin> Plugins { get; }
-    public IReadOnlyList<string> Errors { get; }
-    public IReadOnlyList<MeowAutoChrome.Contracts.BrowserPlugin.BrowserPluginErrorDescriptor>? ErrorsDetailed { get; }
-
-    public PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> plugins, IReadOnlyList<string> errors, IReadOnlyList<MeowAutoChrome.Contracts.BrowserPlugin.BrowserPluginErrorDescriptor>? errorsDetailed = null)
-    {
-        Plugins = plugins;
-        Errors = errors;
-        ErrorsDetailed = errorsDetailed;
-    }
+    public IReadOnlyList<RuntimeBrowserPlugin> Plugins { get; } = plugins;
+    public IReadOnlyList<string> Errors { get; } = errors;
+    public IReadOnlyList<BrowserPluginErrorDescriptor>? ErrorsDetailed { get; } = errorsDetailed;
 }

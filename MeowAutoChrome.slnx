@@ -3,7 +3,4 @@
   <Project Path="MeowAutoChrome.Core/MeowAutoChrome.Core.csproj" />
   <Project Path="MeowAutoChrome.ExamplePlugin/MeowAutoChrome.ExamplePlugin.csproj" />
   <Project Path="MeowAutoChrome.Web/MeowAutoChrome.Web.csproj" />
-  <Properties Name="NDepend">
-    <Property Name="Project" Value="&quot;.\MeowAutoChrome.ndproj&quot;" />
-  </Properties>
 </Solution>

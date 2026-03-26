@@ -1,4 +1,4 @@
-﻿using MeowAutoChrome.Contracts.Interface;
+﻿using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -18,7 +18,7 @@ public static class PluginResultExtensions
     /// <param name="message">消息</param>
     /// <param name="data">数据</param>
     /// <returns></returns>
-    public static Task<PluginActionResult> Ok(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Task.FromResult(plugin.OkResult(message, data));
+    public static Task<PAResult> Ok(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Task.FromResult(plugin.OkResult(message, data));
     /// <summary>
     /// 插件操作成功的结果，包含消息和数据，数据会自动合并插件当前状态等默认信息，方便插件在执行操作后返回结果给宿主或前端展示
     /// </summary>
@@ -26,7 +26,7 @@ public static class PluginResultExtensions
     /// <param name="message">消息</param>
     /// <param name="data">数据</param>
     /// <returns></returns>
-    public static PluginActionResult OkResult(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => new(message, MergeDefaultData(plugin, data));
+    public static PAResult OkResult(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => new(message, MergeDefaultData(plugin, data));
     /// <summary>
     /// 合成插件的结果数据，将插件当前状态等默认信息与传入的数据合并，确保结果数据包含必要的上下文信息，方便宿主或前端根据这些信息进行处理和展示
     /// </summary>

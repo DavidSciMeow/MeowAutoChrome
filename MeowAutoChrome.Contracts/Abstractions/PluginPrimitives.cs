@@ -17,4 +17,4 @@ public enum PluginState
 /// </summary>
 /// <param name="Message">操作结果消息</param>
 /// <param name="Data">操作结果数据</param>
-public sealed record PluginActionResult(string? Message, IReadOnlyDictionary<string, string?>? Data = null);
+public sealed record PAResult(string? Message, IReadOnlyDictionary<string, string?>? Data = null);

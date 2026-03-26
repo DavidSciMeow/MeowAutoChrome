@@ -5,6 +5,12 @@ using System.Collections.Generic;
 using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Contracts.BrowserPlugin;
 using MeowAutoChrome.Core.Models;
+using MeowAutoChrome.Core.Services.PluginDiscovery;
+using MeowAutoChrome.Core.Services.PluginHost;
+using MeowAutoChrome.Core.Services.PluginDiscovery;
+using MeowAutoChrome.Core.Services.PluginHost;
+using MeowAutoChrome.Core.Services.PluginDiscovery;
+using MeowAutoChrome.Core.Services.PluginHost;
 using System.Threading.Tasks;
 
 namespace MeowAutoChrome.Core.Services.PluginHost
@@ -79,7 +85,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
             if (method is null)
                 return;
 
-            // method signature must be supported (Task<PluginActionResult>)
+            // method signature must be supported (Task<PAResult>)
             if (!BrowserPluginHostCoreHelpersInternal.HasSupportedSignature(method))
                 return;
 
@@ -147,7 +153,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
     {
         public static bool HasSupportedSignature(MethodInfo method)
         {
-            var target = typeof(Task<>).MakeGenericType(typeof(MeowAutoChrome.Contracts.Abstractions.PluginActionResult));
+            var target = typeof(Task<>).MakeGenericType(typeof(MeowAutoChrome.Contracts.Abstractions.PAResult));
             return target.IsAssignableFrom(method.ReturnType);
         }
     }

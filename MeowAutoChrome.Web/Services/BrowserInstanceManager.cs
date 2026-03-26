@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MeowAutoChrome.Contracts.BrowserContext;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
 using Microsoft.Playwright;
@@ -137,7 +137,6 @@ public class BrowserInstanceManager : MeowAutoChrome.Contracts.IBrowserInstanceM
     public Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
         => Task.FromResult(false);
 
-    public Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth = null, int? displayHeight = null, CancellationToken cancellationToken = default)
-        => Task.FromResult(false);
+    // Long-parameter overload removed; callers should use BrowserInstanceSettingsUpdateRequest instead.
     public Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

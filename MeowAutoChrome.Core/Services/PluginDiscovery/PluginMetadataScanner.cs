@@ -6,7 +6,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using MeowAutoChrome.Contracts.Attributes;
 
-namespace MeowAutoChrome.Core.Services.PluginHost;
+namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
 /// <summary>
 /// Helper that scans assembly metadata for plugin types without loading the assembly.

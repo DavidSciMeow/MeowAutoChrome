@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using MeowAutoChrome.Core.Services;
 using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Contracts.SignalR;
+using MeowAutoChrome.Web;
 using MeowAutoChrome.Web.Hubs;
 
 namespace MeowAutoChrome.Web.Services;

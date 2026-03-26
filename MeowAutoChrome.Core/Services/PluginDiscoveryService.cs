@@ -4,7 +4,6 @@ using System.Linq;
 using System.Reflection;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Contracts.BrowserPlugin;
-using MeowAutoChrome.Core.Services.PluginHost;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
@@ -23,7 +22,7 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
 
     public IEnumerable<string> EnumeratePluginAssemblies() => Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories);
 
-    public PluginDiscoverySnapshot DiscoverAll(MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader assemblyLoader)
+    public PluginDiscoverySnapshot DiscoverAll(MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader assemblyLoader)
     {
         EnsurePluginDirectoryExists();
 
@@ -65,7 +64,7 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
             [.. errorsDetailed]);
     }
 
-    public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, IPluginAssemblyLoader assemblyLoader)
+    public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader assemblyLoader)
     {
         var plugins = new List<RuntimeBrowserPlugin>();
         var errors = new List<string>();
@@ -112,13 +111,14 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
                 if (pluginAttribute is null)
                     continue;
 
+                // Use the helper in PluginDiscovery namespace for controls/actions
                 plugins.Add(new RuntimeBrowserPlugin(
                     pluginAttribute.Id,
                     pluginAttribute.Name,
                     pluginAttribute.Description,
                     type,
-                    BrowserPluginHostCoreHelpers.DiscoverControls(type),
-                    BrowserPluginHostCoreHelpers.DiscoverActions(type)));
+                    PluginTypeIntrospector.DiscoverControls(type),
+                    PluginTypeIntrospector.DiscoverActions(type)));
             }
             catch (Exception ex)
             {

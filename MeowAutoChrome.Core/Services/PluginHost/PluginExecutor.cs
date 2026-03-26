@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MeowAutoChrome.Contracts.Abstractions;
 using MeowAutoChrome.Core.Models;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.BrowserPlugin;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
@@ -14,7 +14,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// </summary>
 public sealed class PluginExecutor : IPluginExecutor
 {
-    public async Task<PluginActionResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.IHostContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PluginActionResult>> execute, CancellationToken cancellationToken)
+    public async Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.IHostContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
     {
         await instance.ExecutionLock.WaitAsync(cancellationToken);
 

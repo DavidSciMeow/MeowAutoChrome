@@ -365,3 +365,4 @@ FodyWeavers.xsd
 /MeowAutoChrome.Web/user_data
 /NDependOut
 *.ndproj
+/.github

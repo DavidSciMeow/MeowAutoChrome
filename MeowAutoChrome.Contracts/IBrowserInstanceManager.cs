@@ -22,9 +22,8 @@ public interface IBrowserInstanceManager : IBrowserInstanceQuery
     Task SetViewportSizeAsync(int width, int height);
     Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false);
 
-    // Keep both old and new signatures for UpdateInstanceSettingsAsync for backward compatibility.
+    // Prefer request DTO to avoid long parameter lists.
     Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default);
-    Task<bool> UpdateInstanceSettingsAsync(string instanceId, string userDataDirectory, int viewportWidth, int viewportHeight, bool autoResizeViewport, bool preserveAspectRatio, bool useProgramUserAgent, string? userAgent, bool migrateExistingUserData, int? displayWidth = null, int? displayHeight = null, CancellationToken cancellationToken = default);
 
     Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default);
     Task<bool> CloseTabAsync(string tabId);

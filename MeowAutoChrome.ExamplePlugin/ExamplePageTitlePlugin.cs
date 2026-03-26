@@ -12,7 +12,7 @@ public sealed class ExamplePageTitlePlugin : PluginBase
     protected override string PluginName => "Example 插件";
 
     [PAction("读取网页标题", Description = "直接通过当前活动页面读取 document.title。")]
-    public async Task<PluginActionResult> ReadTitleAsync()
+    public async Task<PAResult> ReadTitleAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -35,7 +35,7 @@ public sealed class ExamplePageTitlePlugin : PluginBase
     }
 
     [PAction("读取 Playwright 对象", Description = "直接读取宿主注入的 BrowserContext 和 ActivePage。")]
-    public async Task<PluginActionResult> InspectPlaywrightAsync()
+    public async Task<PAResult> InspectPlaywrightAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -62,7 +62,7 @@ public sealed class ExamplePageTitlePlugin : PluginBase
     }
 
     [PAction("读取指定 ID 元素", Description = "输入 DOM 元素 ID，读取该元素的文本内容。")]
-    public async Task<PluginActionResult> ReadElementByIdAsync(
+    public async Task<PAResult> ReadElementByIdAsync(
         [PInput("元素 ID", Description = "要读取的 DOM id。")] string elementId
         )
     {
@@ -97,7 +97,7 @@ public sealed class ExamplePageTitlePlugin : PluginBase
     }
 
     [PAction("generate-letter", "生成信件", Description = "按当前页面标题和地址生成一封示例信件，并实时推送进度。")]
-    public async Task<PluginActionResult> GenerateLetterAsync(
+    public async Task<PAResult> GenerateLetterAsync(
         [PInput("收件人", Description = "留空时默认写作“朋友”。", Name = "recipient")] string? recipient = null)
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();

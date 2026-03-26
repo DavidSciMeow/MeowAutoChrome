@@ -12,7 +12,7 @@ public sealed class MultiInstanceExamplePlugin : PluginBase
     protected override string PluginName => "Example 多实例插件";
 
     [PAction("create-instance", "创建独立实例", Description = "创建一个新的独立 Chromium 实例，可选打开初始化地址。")]
-    public async Task<PluginActionResult> CreateInstanceAsync(
+    public async Task<PAResult> CreateInstanceAsync(
         [PInput("实例名称", Description = "留空时自动生成。", Name = "displayName")] string? displayName = null,
         [PInput("初始化地址", Description = "留空时默认打开 about:blank。", Name = "url")] string? url = null,
         [PInput("UserData 目录", Description = "留空时按实例名称自动查找或创建对应目录。", Name = "userDataDirectory")] string? userDataDirectory = null)
@@ -44,7 +44,7 @@ public sealed class MultiInstanceExamplePlugin : PluginBase
     }
 
     [PAction("list-instances", "列出实例", Description = "列出本插件创建的全部浏览器实例及颜色。")]
-    public Task<PluginActionResult> ListInstancesAsync()
+    public Task<PAResult> ListInstancesAsync()
     {
         var instanceIds = CurrentBrowserInstanceManager.GetPluginInstanceIds(PluginId);
         var data = new Dictionary<string, string?>
@@ -62,7 +62,7 @@ public sealed class MultiInstanceExamplePlugin : PluginBase
     }
 
     [PAction("navigate-all", "全部实例导航", Description = "让本插件创建的所有实例同时跳转到指定地址。")]
-    public async Task<PluginActionResult> NavigateAllInstancesAsync(
+    public async Task<PAResult> NavigateAllInstancesAsync(
         [PInput("目标地址", Description = "例如 https://example.com", Name = "url", Required = true)] string url)
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
@@ -96,7 +96,7 @@ public sealed class MultiInstanceExamplePlugin : PluginBase
     }
 
     [PAction("remove-instance", "移除实例", Description = "关闭并移除一个指定实例。")]
-    public async Task<PluginActionResult> RemoveInstanceAsync(
+    public async Task<PAResult> RemoveInstanceAsync(
         [PInput("实例 ID", Description = "可先调用“列出实例”获取。", Name = "instanceId", Required = true)] string instanceId)
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
@@ -109,7 +109,7 @@ public sealed class MultiInstanceExamplePlugin : PluginBase
         return this.OkResult(removed ? $"已移除实例：{normalizedInstanceId}" : $"未找到实例：{normalizedInstanceId}");
     }
 
-    public override async Task<PluginActionResult> StopAsync()
+    public override async Task<PAResult> StopAsync()
     {
         foreach (var instanceId in CurrentBrowserInstanceManager.GetPluginInstanceIds(PluginId))
         {

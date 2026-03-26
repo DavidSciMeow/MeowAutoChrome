@@ -1,7 +1,7 @@
 ﻿using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
 using MeowAutoChrome.Web.Abstractions;
-using MeowAutoChrome.Core;
+using MeowAutoChrome.Contracts;
 using Microsoft.AspNetCore.SignalR;
 
 namespace MeowAutoChrome.Web.Hubs;
@@ -13,10 +13,10 @@ namespace MeowAutoChrome.Web.Hubs;
 /// <param name="screencast">屏幕投影服务，负责处理事件分发和连接管理（通过依赖注入提供）。</param>
 public class BrowserHub : Hub<MeowAutoChrome.Contracts.SignalR.IBrowserClient>
 {
-    private readonly BrowserInstanceManager _browserInstances;
+    private readonly IBrowserInstanceManager _browserInstances;
     private readonly IScreencastService _screencast;
 
-    public BrowserHub(BrowserInstanceManager browserInstances, IScreencastService screencast)
+    public BrowserHub(IBrowserInstanceManager browserInstances, IScreencastService screencast)
     {
         _browserInstances = browserInstances;
         _screencast = screencast;
@@ -26,7 +26,15 @@ public class BrowserHub : Hub<MeowAutoChrome.Contracts.SignalR.IBrowserClient>
     /// 可能为 null（当尚未创建任何实例时）。
     /// 保持为 public 以兼容现有 API。
     /// </summary>
-    public PlaywrightInstance? Client => _browserInstances.CurrentInstance as PlaywrightInstance;
+    public MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceInfo? Client
+    {
+        get
+        {
+            var instances = _browserInstances.GetInstances();
+            var id = _browserInstances.CurrentInstanceId;
+            return instances.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     /// <summary>
     /// 当 SignalR 客户端连接时调用，通知 ScreencastService 处理连接逻辑。

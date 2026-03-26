@@ -135,7 +135,7 @@ public abstract class PluginBase : IPlugin
     /// 默认提供的启动方法，如果不重写则使用自动实现，插件开发者可以重写这个方法来实现自己的启动逻辑，如果当前状态不允许启动，则返回相应的错误结果，否则将状态更新为运行中，并返回一个成功的结果，表示插件已成功启动，插件开发者可以在这个方法中添加自己的逻辑来处理启动操作，例如初始化资源、注册事件、启动任务等，以便让插件在启动后能够正确地运行和提供功能
     /// </summary>
     /// <returns></returns>
-    public virtual Task<PluginActionResult> StartAsync()
+    public virtual Task<PAResult> StartAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -149,7 +149,7 @@ public abstract class PluginBase : IPlugin
     /// 默认提供的停止方法，如果不重写则使用自动实现，插件开发者可以重写这个方法来实现自己的停止逻辑，如果当前状态不允许停止，则返回相应的错误结果，否则将状态更新为已停止，并返回一个成功的结果，表示插件已成功停止，插件开发者可以在这个方法中添加自己的逻辑来处理停止操作，例如清理资源、保存状态等，以便让插件在停止后能够正确地释放资源和保持稳定
     /// </summary>
     /// <returns></returns>
-    public virtual Task<PluginActionResult> StopAsync()
+    public virtual Task<PAResult> StopAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
         State = PluginState.Stopped;
@@ -159,7 +159,7 @@ public abstract class PluginBase : IPlugin
     /// 默认提供的暂停方法，如果不重写则使用自动实现，插件开发者可以重写这个方法来实现自己的暂停逻辑，如果插件不支持暂停功能或者当前状态不允许暂停，则返回相应的错误结果，否则将状态更新为已暂停，并返回一个成功的结果，表示插件已成功进入暂停状态，插件开发者可以在这个方法中添加自己的逻辑来处理暂停操作，例如暂停某些任务、冻结某些状态等，以便让插件在暂停后能够保持稳定和节省资源
     /// </summary>
     /// <returns></returns>
-    public virtual Task<PluginActionResult> PauseAsync()
+    public virtual Task<PAResult> PauseAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
@@ -176,7 +176,7 @@ public abstract class PluginBase : IPlugin
     /// 默认提供的恢复方法，如果不重写则使用自动实现，插件开发者可以重写这个方法来实现自己的恢复逻辑，如果插件不支持暂停功能或者当前状态不允许恢复，则返回相应的错误结果，否则将状态更新为运行中，并返回一个成功的结果，表示插件已成功恢复，插件开发者可以在这个方法中添加自己的逻辑来处理恢复操作，例如重新启动某些任务、恢复某些资源等，以便让插件在恢复后能够继续正常工作
     /// </summary>
     /// <returns></returns>
-    public virtual Task<PluginActionResult> ResumeAsync()
+    public virtual Task<PAResult> ResumeAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
