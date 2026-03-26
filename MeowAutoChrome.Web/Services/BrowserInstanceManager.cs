@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 
-public class BrowserInstanceManager : IBrowserInstanceManager
+public class BrowserInstanceManager : MeowAutoChrome.Contracts.IBrowserInstanceManager
 {
     private readonly BrowserInstanceManagerCore _core;
     private readonly IProgramSettingsProvider _settingsProvider;

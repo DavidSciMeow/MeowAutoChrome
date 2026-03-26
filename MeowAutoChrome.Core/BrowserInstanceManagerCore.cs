@@ -12,7 +12,7 @@ using System.Linq;
 
 namespace MeowAutoChrome.Core;
 
-public class BrowserInstanceManagerCore : MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager
+public class BrowserInstanceManagerCore : MeowAutoChrome.Contracts.IBrowserInstanceManager
 {
     private readonly ILogger<BrowserInstanceManagerCore> _logger;
     private readonly ILoggerFactory? _loggerFactory;
@@ -28,16 +28,16 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Contracts.Interface.IBr
     }
 
     // Explicit interface implementations to satisfy IBrowserInstanceManager
-    Task<string> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.CreateBrowserInstanceAsync(string ownerPluginId, string? displayName, string? userDataDirectory, string? previewInstanceId, CancellationToken cancellationToken)
+    Task<string> MeowAutoChrome.Contracts.IBrowserInstanceManager.CreateBrowserInstanceAsync(string ownerPluginId, string? displayName, string? userDataDirectory, string? previewInstanceId, CancellationToken cancellationToken)
         => CreateBrowserInstanceAsync(ownerPluginId, displayName, userDataDirectory, previewInstanceId);
 
-    Task<bool> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
+    Task<bool> MeowAutoChrome.Contracts.IBrowserInstanceManager.RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
         => RemoveAsync(instanceId);
 
-    Task<bool> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
+    Task<bool> MeowAutoChrome.Contracts.IBrowserInstanceManager.SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken)
         => SelectBrowserInstanceAsync(instanceId, cancellationToken);
 
-    Task<(string InstanceId, string UserDataDirectory)> MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager.PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot)
+    Task<(string InstanceId, string UserDataDirectory)> MeowAutoChrome.Contracts.IBrowserInstanceManager.PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot)
         => PreviewNewInstanceAsync(ownerPluginId ?? "ui", userDataDirectoryRoot);
 
     // PreviewNewInstanceAsync is provided as a public method for wrappers to call.

@@ -1,7 +1,7 @@
 ﻿using MeowAutoChrome.Contracts.BrowserPlugin;
 using MeowAutoChrome.Contracts.Abstractions;
 using System.Linq;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core.Services;
 using Microsoft.Extensions.Logging;
 using System.Reflection;
@@ -16,7 +16,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Contracts.BrowserPlugin;
-using MeowAutoChrome.Contracts.Interface;
+// Restored original Interface namespace to maintain API compatibility
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
@@ -146,11 +146,11 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         var instanceCtn = _instanceManager.GetOrCreateInstance(plugin);
         var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
-            var hostContext = new PluginHostContext(
+            IHostContext hostContext = new MeowAutoChrome.Contracts.BrowserPlugin.PluginHostContext(
             _browserInstances.BrowserContext,
             _browserInstances.ActivePage,
             _browserInstances.CurrentInstanceId,
-            (MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager)_browserInstances,
+            (MeowAutoChrome.Contracts.IBrowserInstanceManager)_browserInstances,
             normalizedArguments,
             plugin.Id,
             command,
@@ -189,11 +189,11 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
-        var hostContext = new PluginHostContext(
+        IHostContext hostContext = new MeowAutoChrome.Contracts.BrowserPlugin.PluginHostContext(
             _browserInstances.BrowserContext,
             _browserInstances.ActivePage,
             _browserInstances.CurrentInstanceId,
-            (MeowAutoChrome.Contracts.Interface.IBrowserInstanceManager)_browserInstances,
+            (MeowAutoChrome.Contracts.IBrowserInstanceManager)_browserInstances,
             normalizedArguments,
             plugin.Id,
             action.Id,
@@ -462,10 +462,10 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
     {
         var controls = new List<RuntimeBrowserPluginControl>();
 
-        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(IPlugin.StartAsync));
-        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(IPlugin.StopAsync));
-        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(IPlugin.PauseAsync));
-        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(IPlugin.ResumeAsync));
+        AddControl(type, controls, "start", "启动", "执行插件启动逻辑。", nameof(MeowAutoChrome.Contracts.IPlugin.StartAsync));
+        AddControl(type, controls, "stop", "停止", "执行插件停止逻辑。", nameof(MeowAutoChrome.Contracts.IPlugin.StopAsync));
+        AddControl(type, controls, "pause", "暂停", "执行插件暂停逻辑。", nameof(MeowAutoChrome.Contracts.IPlugin.PauseAsync));
+        AddControl(type, controls, "resume", "恢复", "执行插件恢复逻辑。", nameof(MeowAutoChrome.Contracts.IPlugin.ResumeAsync));
 
         return controls;
     }
@@ -488,7 +488,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         controls.Add(new RuntimeBrowserPluginControl(command, name, description, parameters));
     }
 
-    private static object?[] BuildInvocationArguments(MethodInfo method, IHostContext hostContext)
+    private static object?[] BuildInvocationArguments(MethodInfo method, MeowAutoChrome.Contracts.IHostContext hostContext)
     {
         return PluginParameterBinder.BuildInvocationArguments(method, hostContext);
     }

@@ -11,7 +11,7 @@ namespace MeowAutoChrome.Web.Hubs;
 /// </summary>
 /// <param name="client">Playwright 封装器，用于与浏览器进行交互（通过依赖注入提供）。</param>
 /// <param name="screencast">屏幕投影服务，负责处理事件分发和连接管理（通过依赖注入提供）。</param>
-public class BrowserHub : Hub
+public class BrowserHub : Hub<MeowAutoChrome.Contracts.SignalR.IBrowserClient>
 {
     private readonly BrowserInstanceManager _browserInstances;
     private readonly IScreencastService _screencast;
@@ -24,6 +24,7 @@ public class BrowserHub : Hub
     /// <summary>
     /// Playwright 封装器的当前实例（由 BrowserInstanceManager 提供）。
     /// 可能为 null（当尚未创建任何实例时）。
+    /// 保持为 public 以兼容现有 API。
     /// </summary>
     public PlaywrightInstance? Client => _browserInstances.CurrentInstance as PlaywrightInstance;
 

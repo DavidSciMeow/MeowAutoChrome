@@ -21,7 +21,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
     /// <summary>
     /// 用于向所有连接的客户端广播帧数据和状态变化（如禁用通知）
     /// </summary>
-    private readonly IHubContext<BrowserHub> hub;
+    private readonly IHubContext<BrowserHub, MeowAutoChrome.Contracts.SignalR.IBrowserClient> hub;
     private readonly ILogger<ScreencastService> _logger;
     /// <summary>
     /// 当前的 CDP 会话实例；null 表示未启动推流
@@ -93,7 +93,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
     /// <param name="browserInstances">浏览器实例管理器，用于获取活动页面与上下文。</param>
     /// <param name="hub">SignalR Hub 上下文，用于向客户端广播帧数据与状态变化。</param>
     /// <param name="programSettingsService">程序设置服务，用于读取初始 Screencast FPS 配置。</param>
-    public ScreencastService(BrowserInstanceManagerCore browserInstances, IHubContext<BrowserHub> hub, IProgramSettingsProvider programSettingsService, ILogger<ScreencastService> logger)
+    public ScreencastService(BrowserInstanceManagerCore browserInstances, IHubContext<BrowserHub, MeowAutoChrome.Contracts.SignalR.IBrowserClient> hub, IProgramSettingsProvider programSettingsService, ILogger<ScreencastService> logger)
     {
         this.browserInstances = browserInstances;
         this.hub = hub;
@@ -233,12 +233,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
         catch { /* session 已失效时忽略 */ }
 
         if (data != null && CanSendFrameNow())
-            await hub.Clients.All.SendAsync("ReceiveFrame", new
-            {
-                data,
-                width,
-                height,
-            });
+            await hub.Clients.All.ReceiveFrame(data, width, height);
     }
     /// <summary>
     /// 将来自客户端的鼠标事件通过 CDP 会话转发到目标页面。
@@ -325,7 +320,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
             if (Enabled)
                 await StartAsync();
             else
-                await hub.Clients.All.SendAsync("ScreencastDisabled");
+                await hub.Clients.All.ScreencastDisabled();
             _logger?.LogInformation("Screencast settings updated: enabled={Enabled} max={W}x{H} interval={I} clients={C}", _enabled, _maxWidth, _maxHeight, _frameIntervalMs, _clientCount);
         }
         finally { _semaphore.Release(); }
@@ -368,7 +363,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
             if (Enabled)
                 await StartAsync();
             else
-                await hub.Clients.All.SendAsync("ScreencastDisabled");
+                await hub.Clients.All.ScreencastDisabled();
         }
         finally { _semaphore.Release(); }
     }
@@ -416,7 +411,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
             if (Enabled)
                 await StartAsync();
             else
-                await hub.Clients.All.SendAsync("ScreencastDisabled");
+                await hub.Clients.All.ScreencastDisabled();
         }
         finally { _semaphore.Release(); }
     }

@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using MeowAutoChrome.Contracts.BrowserContext;
 using Microsoft.Playwright;
 
-namespace MeowAutoChrome.Contracts.Interface;
+namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// 浏览器实例管理器接口，提供对浏览器实例的管理和操作能力，包括获取实例信息、创建和删除实例、选择实例等功能，插件可以通过这个接口与宿主进行交互，获取当前浏览器实例的信息或执行跨实例的操作

@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using MeowAutoChrome.Contracts.BrowserContext;
 using Microsoft.Playwright;
 
-namespace MeowAutoChrome.Contracts.Interface;
+namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// Read-only query surface for browser instances.

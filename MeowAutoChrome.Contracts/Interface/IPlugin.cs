@@ -2,7 +2,7 @@
 using MeowAutoChrome.Contracts.Abstractions;
 using System.Threading.Tasks;
 
-namespace MeowAutoChrome.Contracts.Interface;
+namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// 插件接口，定义了插件的基本属性和操作方法，包括插件状态、是否支持暂停、宿主上下文以及启动、停止、暂停和恢复等异步操作方法，插件实现这个接口以便与宿主进行交互和管理自己的生命周期

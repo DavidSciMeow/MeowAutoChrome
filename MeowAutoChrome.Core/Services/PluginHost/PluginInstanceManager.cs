@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using MeowAutoChrome.Core.Models;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 

@@ -1,4 +1,4 @@
-﻿using MeowAutoChrome.Contracts.Interface;
+﻿using MeowAutoChrome.Contracts;
 using System.Threading;
 
 namespace MeowAutoChrome.Core.Models;

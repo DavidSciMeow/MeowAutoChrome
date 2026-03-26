@@ -2,7 +2,7 @@
 using MeowAutoChrome.Contracts.BrowserContext;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core.Services.PluginHost;
 using MeowAutoChrome.Core;
 using Microsoft.AspNetCore.Mvc;

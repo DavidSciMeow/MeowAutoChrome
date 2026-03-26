@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MeowAutoChrome.Contracts.Interface;
+using MeowAutoChrome.Contracts;
 using Microsoft.Playwright;
 
 namespace MeowAutoChrome.Contracts.BrowserPlugin;

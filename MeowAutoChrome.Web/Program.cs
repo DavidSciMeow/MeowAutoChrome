@@ -1,6 +1,7 @@
 ﻿using MeowAutoChrome.Web.Hubs;
 using MeowAutoChrome.Web.Services;
 using Microsoft.AspNetCore.SignalR;
+using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.Interface;
 using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core;
@@ -47,7 +48,7 @@ builder.Services.AddSingleton<MeowAutoChrome.Core.Interface.IPluginHostCore>(sp 
 builder.Services.AddSingleton<MeowAutoChrome.Web.Abstractions.IScreencastService, MeowAutoChrome.Web.Services.ScreencastService>();
 builder.Services.AddSingleton<ScreencastService>();
 builder.Services.AddSingleton<ScreenshotService>();
-builder.Services.AddSingleton<IScreencastFrameSink>(sp => new SignalRScreencastFrameSink(sp.GetRequiredService<IHubContext<BrowserHub>>()));
+builder.Services.AddSingleton<IScreencastFrameSink>(sp => new SignalRScreencastFrameSink(sp.GetRequiredService<IHubContext<BrowserHub, MeowAutoChrome.Contracts.SignalR.IBrowserClient>>()));
 builder.Services.AddSingleton<ScreencastServiceCore>();
 builder.Services.AddSingleton<ResourceMetricsService>();
 builder.Services.AddHostedService<ChromeShellService>(); // auto pull up chrome (Web-hosted implementation)

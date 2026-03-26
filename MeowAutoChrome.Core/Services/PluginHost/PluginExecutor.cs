@@ -14,17 +14,18 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// </summary>
 public sealed class PluginExecutor : IPluginExecutor
 {
-    public async Task<PluginActionResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IHostContext hostContext, Func<IPlugin, Task<PluginActionResult>> execute, CancellationToken cancellationToken)
+    public async Task<PluginActionResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.IHostContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PluginActionResult>> execute, CancellationToken cancellationToken)
     {
         await instance.ExecutionLock.WaitAsync(cancellationToken);
 
         try
         {
-            instance.Instance.HostContext = hostContext;
+            // Assign to plugin HostContext (IHostContext from Contracts)
+            instance.Instance.HostContext = (MeowAutoChrome.Contracts.IHostContext)hostContext;
 
             try
             {
-                return await execute(instance.Instance);
+                return await execute((MeowAutoChrome.Contracts.IPlugin)instance.Instance);
             }
             finally
             {

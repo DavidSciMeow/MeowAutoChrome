@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
-namespace MeowAutoChrome.Contracts.Interface;
+namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// 宿主上下文接口，提供插件运行时所需的环境信息和操作接口，包括浏览器上下文、活动页面、浏览器实例ID、浏览器实例管理器、插件启动参数、插件ID、目标ID、取消令牌以及向宿主发送更新的功能，插件可以通过这个接口获取运行时所需的信息和能力，并与宿主进行交互，如发布更新消息等

@@ -105,7 +105,7 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
             try
             {
                 var type = assembly.GetType(candidateTypeName, throwOnError: false, ignoreCase: false);
-                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(MeowAutoChrome.Contracts.Interface.IPlugin).IsAssignableFrom(type))
+                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(MeowAutoChrome.Contracts.IPlugin).IsAssignableFrom(type))
                     continue;
 
                 var pluginAttribute = type.GetCustomAttribute<MeowAutoChrome.Contracts.Attributes.PluginAttribute>();
