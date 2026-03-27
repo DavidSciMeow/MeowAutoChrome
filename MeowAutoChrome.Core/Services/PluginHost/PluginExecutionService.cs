@@ -11,9 +11,9 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 
 public sealed class PluginExecutionService
 {
-    private readonly PluginExecutor _executor;
+    private readonly IPluginExecutor _executor;
 
-    public PluginExecutionService(PluginExecutor executor)
+    public PluginExecutionService(IPluginExecutor executor)
     {
         _executor = executor;
     }

@@ -4,7 +4,6 @@ using MeowAutoChrome.Web.Services;
 using MeowAutoChrome.Web.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
@@ -24,6 +23,9 @@ builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new AppLogLoggerProvider(appLogService));
 
 builder.Services.AddMeowAutoChromeServices();
+// Register MVC controllers (with views) so controller routes can be used and
+// `IServiceCollection.AddControllers`-required services are available.
+builder.Services.AddControllersWithViews();
 
 
 var app = builder.Build();

@@ -19,6 +19,9 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddMeowAutoChromeServices(this IServiceCollection services)
     {
+        // Ensure SignalR services are registered so IHubContext<T> can be resolved by DI
+        services.AddSignalR();
+
         services.AddSingleton<AppLogService>();
         services.AddSingleton<BrowserInstanceManagerCore>();
         services.AddSingleton<BrowserInstanceManager>(sp => new BrowserInstanceManager(sp.GetRequiredService<BrowserInstanceManagerCore>(), sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>() ));
