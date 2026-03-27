@@ -3,7 +3,7 @@ using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Struct;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts.BrowserContext;
+using MeowAutoChrome.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
@@ -186,7 +186,7 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
         return false;
     }
 
-    public async Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
     {
         if (!_instances.TryGetValue(request.InstanceId, out var inst)) return false;
         inst.UserDataDirectoryPath = request.UserDataDirectory;
@@ -235,30 +235,30 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
         return null;
     }
 
-    public async Task<IReadOnlyList<MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo>> GetTabsAsync()
+    public async Task<IReadOnlyList<BrowserTabInfo>> GetTabsAsync()
     {
-        var tabs = new List<MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo>();
+        var tabs = new List<BrowserTabInfo>();
         foreach (var inst in _instances.Values)
         {
             foreach (var id in inst.TabIds)
             {
                 var page = inst.GetPageById(id);
-                tabs.Add(new MeowAutoChrome.Contracts.BrowserContext.BrowserTabInfo(id, page?.TitleAsync().GetAwaiter().GetResult(), page?.Url, inst.SelectedPageId == id, inst.InstanceId, inst.DisplayName, "#ccc", inst.OwnerId, inst.SelectedPageId == id));
+                tabs.Add(new BrowserTabInfo(id, page?.TitleAsync().GetAwaiter().GetResult(), page?.Url, inst.SelectedPageId == id, inst.OwnerId));
             }
         }
 
         return tabs;
     }
 
-    public MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
+    public BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
     {
-        return new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse(1280, 800, true, true);
+        return new BrowserInstanceViewportSettingsResponse(1280, 800, "Auto");
     }
 
-    public async Task<MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId)
+    public async Task<BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId)
     {
         if (!_instances.TryGetValue(instanceId, out var inst)) return null;
-        return new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsResponse(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.SelectedPageId == inst.SelectedPageId, new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceViewportSettingsResponse(1280,800,true,true), new MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceUserAgentSettingsResponse(null, false, false, null, null, false));
+        return new BrowserInstanceSettingsResponse(inst.InstanceId, inst.UserDataDirectoryPath, inst.UserDataDirectoryPath);
     }
 
     public bool TryGet(string id, out ICoreBrowserInstance inst) => _instances.TryGetValue(id, out inst);

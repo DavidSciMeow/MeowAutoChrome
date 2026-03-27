@@ -35,6 +35,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="BrowserContext\" />
+    <Folder Include="BrowserPlugin\" />
     <Folder Include="Interface\" />
   </ItemGroup>
 

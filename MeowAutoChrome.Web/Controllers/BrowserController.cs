@@ -1,5 +1,6 @@
 ﻿using MeowAutoChrome.Web.Hubs;
-using MeowAutoChrome.Contracts.BrowserContext;
+using MeowAutoChrome.Core.Models;
+using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Web.Services;
 using MeowAutoChrome.Contracts;
@@ -19,7 +20,7 @@ namespace MeowAutoChrome.Web.Controllers
     /// <param name="pluginHost">插件宿主</param>
     /// <param name="resourceMetricsService">资源监控服务</param>
     /// <param name="programSettingsService">程序设置服务</param>
-public class BrowserController(IBrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, MeowAutoChrome.Core.Interface.IPluginHostCore pluginHost, Core.Services.ResourceMetricsService resourceMetricsService, MeowAutoChrome.Core.Interface.IProgramSettingsProvider programSettingsService) : Controller
+public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManager browserInstances, IHubContext<BrowserHub> hub, ScreencastService screencastService, MeowAutoChrome.Core.Interface.IPluginHostCore pluginHost, Core.Services.ResourceMetricsService resourceMetricsService, MeowAutoChrome.Core.Interface.IProgramSettingsProvider programSettingsService) : Controller
     {
         /// <summary>
         /// 用于从请求头中传递 BrowserHub 连接 ID 的自定义 header 名称，允许插件输出定向发送到特定客户端（例如仅发送给发起控制请求的页面）。如果未提供该 header，则插件输出将发送给所有连接的客户端。
@@ -74,7 +75,7 @@ public class BrowserController(IBrowserInstanceManager browserInstances, IHubCon
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns></returns>
         [HttpPost]
-        public async Task<IActionResult> ControlPlugin([FromBody] Contracts.BrowserPlugin.BrowserPluginControlRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> ControlPlugin([FromBody] MeowAutoChrome.Core.Models.BrowserPluginControlRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.PluginId) || string.IsNullOrWhiteSpace(request.Command))
                 return Problem(detail: "插件控制请求参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
@@ -91,7 +92,7 @@ public class BrowserController(IBrowserInstanceManager browserInstances, IHubCon
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns></returns>
         [HttpPost]
-        public async Task<IActionResult> RunPluginFunction([FromBody] Contracts.BrowserPlugin.BrowserPluginFunctionExecutionRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> RunPluginFunction([FromBody] MeowAutoChrome.Core.Models.BrowserPluginFunctionExecutionRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.PluginId) || string.IsNullOrWhiteSpace(request.FunctionId))
                 return Problem(detail: "插件函数执行请求参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
@@ -145,12 +146,12 @@ public class BrowserController(IBrowserInstanceManager browserInstances, IHubCon
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns></returns>
         [HttpPost]
-        public async Task<IActionResult> InstanceSettings([FromBody] MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> InstanceSettings([FromBody] MeowAutoChrome.Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.InstanceId)
-                || string.IsNullOrWhiteSpace(request.UserDataDirectory)
-                || request.ViewportWidth <= 0
-                || request.ViewportHeight <= 0)
+            if (string.IsNullOrWhiteSpace(request.InstanceId) 
+                || string.IsNullOrWhiteSpace(request.UserDataDirectory) 
+                || request.ViewportWidth <= 0 
+                || request.ViewportHeight <= 0) 
             {
                 return Problem(detail: "请求参数无效", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
             }

@@ -15,7 +15,7 @@ public sealed class SignalRPluginOutputPublisher : IPluginOutputPublisher
 
     public Task PublishPluginOutputAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool openModal, string? connectionId, CancellationToken cancellationToken)
     {
-        var payload = new Contracts.BrowserPlugin.BrowserPluginOutputUpdate(pluginId, targetId, message, data ?? new Dictionary<string, string?>(), openModal, DateTimeOffset.UtcNow);
+        var payload = new MeowAutoChrome.Core.Models.BrowserPluginOutputUpdate(pluginId, targetId, message, data ?? new Dictionary<string, string?>(), openModal, DateTimeOffset.UtcNow);
         var clients = string.IsNullOrWhiteSpace(connectionId) ? _hub.Clients.All : _hub.Clients.Client(connectionId);
         return clients.SendAsync("ReceivePluginOutput", payload, cancellationToken);
     }

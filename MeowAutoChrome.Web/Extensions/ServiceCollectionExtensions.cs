@@ -22,8 +22,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AppLogService>();
         services.AddSingleton<BrowserInstanceManagerCore>();
         services.AddSingleton<BrowserInstanceManager>(sp => new BrowserInstanceManager(sp.GetRequiredService<BrowserInstanceManagerCore>(), sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>() ));
-        // Note: Web adapts to Contracts.IBrowserInstanceManager via BrowserInstanceManager wrapper
-        services.AddSingleton<MeowAutoChrome.Contracts.IBrowserInstanceManager>(sp => sp.GetRequiredService<BrowserInstanceManager>());
+        // Note: Web provides BrowserInstanceManager directly; no longer registering obsolete Contracts interface.
+        // Keep registration for BrowserInstanceManager so other services can consume it by concrete type.
         services.AddSingleton<IProgramSettingsProvider, FileProgramSettingsProvider>();
         services.AddSingleton<IPluginDiscoveryService, PluginDiscoveryService>();
         services.AddSingleton<IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>())); 

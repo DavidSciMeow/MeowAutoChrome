@@ -1,4 +1,7 @@
-﻿using MeowAutoChrome.Contracts.BrowserPlugin;
+﻿using System;
+// Note: BrowserPlugin types have been migrated into MeowAutoChrome.Core.Models.
+// The minimal plugin-facing surface (`IPlugin`, `PAResult`, `PluginState`) remains
+// in Contracts. Avoid referencing removed Contracts sub-namespaces.
 using MeowAutoChrome.Contracts.Abstractions;
 using System.Threading.Tasks;
 
@@ -18,9 +21,11 @@ public interface IPlugin
     /// </summary>
     bool SupportsPause { get; }
     /// <summary>
-    /// 宿主上下文，表示当前插件所在的宿主环境的上下文信息，包括浏览器上下文、活动页面、浏览器实例ID、浏览器实例管理器、插件启动参数、插件ID、目标ID和取消令牌等信息，插件可以通过这个属性获取宿主提供的相关信息和功能，以便在自己的操作中使用和交互，宿主会在插件启动时注入这个属性，并且在插件停止时清除这个属性，以便插件正确地管理自己的生命周期和资源
+    /// 宿主上下文（遗留）。插件作者应优先依赖 `MeowAutoChrome.Contracts.Facade.IPluginContext`。
+    /// 该属性保留用于向后兼容并将在未来迁移到 Core 名称空间。
     /// </summary>
-    IHostContext? HostContext { get; set; }
+    [Obsolete("HostContext is legacy. Prefer MeowAutoChrome.Contracts.Facade.IPluginContext as the minimal plugin-facing surface.")]
+    MeowAutoChrome.Contracts.Facade.IPluginContext? HostContext { get; set; }
     /// <summary>
     /// 启动插件，表示插件开始运行的操作方法，插件实现这个方法来执行自己的启动逻辑，包括初始化资源、注册事件、启动任务等操作，宿主会在用户或系统触发插件启动时调用这个方法，并且根据返回的结果来判断插件是否成功启动，如果返回一个成功的结果，则宿主会将插件状态设置为运行中，并且允许用户进行相关的操作，如果返回一个失败的结果，则宿主会将插件状态设置为未启动，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地启动和停止自己
     /// </summary>

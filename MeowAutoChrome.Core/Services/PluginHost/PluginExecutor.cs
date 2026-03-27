@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using MeowAutoChrome.Contracts.Abstractions;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts.BrowserPlugin;
+// BrowserPlugin namespace removed from Contracts; executor uses facade IPluginContext instead.
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
@@ -14,14 +14,15 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// </summary>
 public sealed class PluginExecutor : IPluginExecutor
 {
-    public async Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.IHostContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
+    public async Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.Facade.IPluginContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
     {
         await instance.ExecutionLock.WaitAsync(cancellationToken);
 
         try
         {
-            // Assign to plugin HostContext (IHostContext from Contracts)
-            instance.Instance.HostContext = (MeowAutoChrome.Contracts.IHostContext)hostContext;
+            // Assign to plugin HostContext (Contracts facade) for backward compatibility.
+            // In future revisions we'll provide a Core-hosted ICorePluginContext adapter instead.
+            instance.Instance.HostContext = hostContext;
 
             try
             {

@@ -13,10 +13,10 @@ namespace MeowAutoChrome.Web.Hubs;
 /// <param name="screencast">屏幕投影服务，负责处理事件分发和连接管理（通过依赖注入提供）。</param>
 public class BrowserHub : Hub<MeowAutoChrome.Contracts.SignalR.IBrowserClient>
 {
-    private readonly IBrowserInstanceManager _browserInstances;
+    private readonly MeowAutoChrome.Web.Services.BrowserInstanceManager _browserInstances;
     private readonly IScreencastService _screencast;
 
-    public BrowserHub(IBrowserInstanceManager browserInstances, IScreencastService screencast)
+    public BrowserHub(MeowAutoChrome.Web.Services.BrowserInstanceManager browserInstances, IScreencastService screencast)
     {
         _browserInstances = browserInstances;
         _screencast = screencast;
@@ -26,7 +26,7 @@ public class BrowserHub : Hub<MeowAutoChrome.Contracts.SignalR.IBrowserClient>
     /// 可能为 null（当尚未创建任何实例时）。
     /// 保持为 public 以兼容现有 API。
     /// </summary>
-    public MeowAutoChrome.Contracts.BrowserContext.BrowserInstanceInfo? Client
+    public MeowAutoChrome.Core.Models.BrowserInstanceInfo? Client
     {
         get
         {

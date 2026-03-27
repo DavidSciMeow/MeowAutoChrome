@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Linq;
 using System.Collections.Generic;
 using MeowAutoChrome.Contracts.Attributes;
-using MeowAutoChrome.Contracts.BrowserPlugin;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
 using MeowAutoChrome.Core.Services.PluginHost;
