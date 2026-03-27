@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Core.Models;
 using System.Threading.Tasks;
+using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
@@ -93,7 +94,7 @@ internal static class PluginTypeIntrospector
     {
         public static bool HasSupportedSignature(MethodInfo method)
         {
-            var target = typeof(Task<>).MakeGenericType(typeof(MeowAutoChrome.Contracts.Abstractions.PAResult));
+            var target = typeof(Task<>).MakeGenericType(typeof(PAResult));
             return target.IsAssignableFrom(method.ReturnType);
         }
     }

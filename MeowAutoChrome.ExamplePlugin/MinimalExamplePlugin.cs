@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
 using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts.Abstractions;
 using MeowAutoChrome.Contracts.Attributes;
 
 namespace MeowAutoChrome.ExamplePlugin;
@@ -14,7 +13,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     public bool SupportsPause => false;
 
     [Obsolete("Legacy host context. Host will inject IPluginContext facade. Prefer MeowAutoChrome.Contracts.Facade.IPluginContext in future.")]
-    public MeowAutoChrome.Contracts.Facade.IPluginContext? HostContext { get; set; }
+    public IPluginContext? HostContext { get; set; }
 
     public async Task<PAResult> StartAsync()
     {

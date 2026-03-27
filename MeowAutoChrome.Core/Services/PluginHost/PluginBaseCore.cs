@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Contracts.Abstractions;
-using MeowAutoChrome.Contracts.Facade;
 using MeowAutoChrome.Core.Extensions;
 using Microsoft.Playwright;
 

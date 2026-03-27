@@ -11,6 +11,4 @@ public sealed class PInputAttribute : Attribute
     public string? DefaultValue { get; set; }
     public bool Required { get; set; }
     public string? InputType { get; set; }
-
-    public PInputAttribute() { }
 }

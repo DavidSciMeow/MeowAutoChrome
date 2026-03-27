@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MeowAutoChrome.Contracts.Abstractions;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Contracts;
 // BrowserPlugin namespace removed from Contracts; executor uses facade IPluginContext instead.
@@ -14,7 +13,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// </summary>
 public sealed class PluginExecutor : IPluginExecutor
 {
-    public async Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.Facade.IPluginContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
+    public async Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
     {
         await instance.ExecutionLock.WaitAsync(cancellationToken);
 

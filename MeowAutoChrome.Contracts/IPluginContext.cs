@@ -2,7 +2,7 @@
 using System.Threading;
 using Microsoft.Playwright;
 
-namespace MeowAutoChrome.Contracts.Facade;
+namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// Minimal plugin-facing context. Plugins should only depend on this facade.

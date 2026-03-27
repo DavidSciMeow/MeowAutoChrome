@@ -11,6 +11,7 @@ using MeowAutoChrome.Core.Services.PluginHost;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
 using MeowAutoChrome.Core.Services.PluginHost;
 using System.Threading.Tasks;
+using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Services.PluginHost
 {
@@ -118,7 +119,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
     {
         public static bool HasSupportedSignature(MethodInfo method)
         {
-            var target = typeof(Task<>).MakeGenericType(typeof(MeowAutoChrome.Contracts.Abstractions.PAResult));
+            var target = typeof(Task<>).MakeGenericType(typeof(PAResult));
             return target.IsAssignableFrom(method.ReturnType);
         }
     }

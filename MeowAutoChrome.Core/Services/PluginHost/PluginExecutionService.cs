@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MeowAutoChrome.Contracts.Abstractions;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
@@ -18,14 +17,14 @@ public sealed class PluginExecutionService
         _executor = executor;
     }
 
-    public Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, MeowAutoChrome.Contracts.Facade.IPluginContext hostContext, Func<IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
+    public Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
         => _executor.ExecuteAsync(instance, hostContext, execute, cancellationToken);
 
-    public Task<PAResult> ExecuteActionAsync(RuntimeBrowserPluginInstance instance, RuntimeBrowserPluginAction action, MeowAutoChrome.Contracts.Facade.IPluginContext hostContext, CancellationToken cancellationToken)
+    public Task<PAResult> ExecuteActionAsync(RuntimeBrowserPluginInstance instance, RuntimeBrowserPluginAction action, IPluginContext hostContext, CancellationToken cancellationToken)
     {
         return _executor.ExecuteAsync(instance, hostContext, async pluginInstance =>
         {
-            var invocation = action.Method.Invoke(pluginInstance, PluginParameterBinder.BuildInvocationArguments(action.Method, (MeowAutoChrome.Contracts.Facade.IPluginContext)hostContext));
+            var invocation = action.Method.Invoke(pluginInstance, PluginParameterBinder.BuildInvocationArguments(action.Method, (IPluginContext)hostContext));
             if (invocation is Task<PAResult> task)
                 return await task.ConfigureAwait(false);
             if (invocation is Task genericTask)
@@ -43,7 +42,7 @@ public sealed class PluginExecutionService
         }, cancellationToken);
     }
 
-    public Task<PAResult> ExecuteControlAsync(RuntimeBrowserPluginInstance instance, string command, MeowAutoChrome.Contracts.Facade.IPluginContext hostContext, CancellationToken cancellationToken)
+    public Task<PAResult> ExecuteControlAsync(RuntimeBrowserPluginInstance instance, string command, IPluginContext hostContext, CancellationToken cancellationToken)
     {
         return _executor.ExecuteAsync(instance, hostContext, pluginInstance => command.ToLowerInvariant() switch
         {

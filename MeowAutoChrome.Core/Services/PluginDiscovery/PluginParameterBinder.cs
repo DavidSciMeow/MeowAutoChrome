@@ -13,7 +13,7 @@ namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 /// </summary>
 internal static class PluginParameterBinder
 {
-    public static object?[] BuildInvocationArguments(MethodInfo method, MeowAutoChrome.Contracts.Facade.IPluginContext hostContext)
+    public static object?[] BuildInvocationArguments(MethodInfo method, IPluginContext hostContext)
     {
         var parameters = method.GetParameters();
         var args = new object?[parameters.Length];
@@ -58,7 +58,7 @@ internal static class PluginParameterBinder
     }
 
     public static bool IsHostParameter(ParameterInfo parameter)
-        => typeof(MeowAutoChrome.Contracts.Facade.IPluginContext).IsAssignableFrom(parameter.ParameterType);
+        => typeof(IPluginContext).IsAssignableFrom(parameter.ParameterType);
 
     public static RuntimeBrowserPluginParameter CreateActionParameter(ParameterInfo parameter, PInputAttribute? attribute, PInputAttribute? legacy)
     {

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Playwright;
 using MeowAutoChrome.Core.Adapters;
 using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
@@ -13,7 +14,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// plugins depending on Contracts continue to work while Core controls the concrete
 /// runtime objects.
 /// </summary>
-public sealed class PluginHostContextCore : MeowAutoChrome.Contracts.Facade.IPluginContext
+public sealed class PluginHostContextCore : IPluginContext
 {
     private readonly Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? _publishUpdate;
 
