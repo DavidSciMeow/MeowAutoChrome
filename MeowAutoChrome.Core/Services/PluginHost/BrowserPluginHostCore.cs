@@ -1,21 +1,8 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using MeowAutoChrome.Contracts.Abstractions;
-using System.Linq;
 using MeowAutoChrome.Contracts;
-using MeowAutoChrome.Core.Services;
 using Microsoft.Extensions.Logging;
-using System.Reflection;
 using CoreModels = MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Core.Interface;
-using MeowAutoChrome.Core.Services.PluginDiscovery;
-using System.Reflection.Metadata;
-using System.Reflection.PortableExecutable;
-using System.Runtime.Loader;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-using System.Globalization;
-using MeowAutoChrome.Contracts.Attributes;
-// Restored original Interface namespace to maintain API compatibility
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 /// <summary>
@@ -39,6 +26,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         private readonly MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader _assemblyLoader;
     private readonly IPluginExecutor _executor;
     private readonly BrowserPluginDiscovery _pluginDiscovery;
+    private readonly MeowAutoChrome.Core.Interface.IProgramSettingsProvider? _settingsProvider;
     // cached discovery snapshot maintained by background scanner
     private CoreModels.PluginDiscoverySnapshot _latestSnapshot = new CoreModels.PluginDiscoverySnapshot(Array.Empty<CoreModels.RuntimeBrowserPlugin>(), Array.Empty<string>(), Array.Empty<CoreModels.BrowserPluginErrorDescriptor>());
     private readonly object _snapshotLock = new();
@@ -57,10 +45,19 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         _executor = deps.Executor;
         _executionService = deps.ExecutionService;
         _publishingService = deps.PublishingService;
+        _settingsProvider = deps.SettingsProvider;
 
         // initialize discovery helper and start background scanning loop
         _pluginDiscovery = new BrowserPluginDiscovery(_discovery, _assemblyLoader, _logger, _instanceManager);
         _scanTask = Task.Run(() => _pluginDiscovery.ScanLoopAsync(_scanCts.Token));
+    }
+
+    private Task<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken ct)
+    {
+        var inst = _browserInstances.GetInstance(instanceId);
+        if (inst is null) return Task.FromResult<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>(null);
+        var info = new MeowAutoChrome.Contracts.PluginBrowserInstanceInfo(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.OwnerId, string.Equals(inst.InstanceId, _browserInstances.CurrentInstanceId, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>(info);
     }
 
     public async ValueTask DisposeAsync()
@@ -123,6 +120,12 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
 
     public IReadOnlyList<CoreModels.BrowserPluginDescriptor?> GetPlugins() => GetPluginCatalog().Plugins;
 
+    public Task<(string InstanceId, string? UserDataDirectory)?> PreviewNewInstanceAsync(string ownerId, string? root = null)
+        => Task.FromResult<(string InstanceId, string? UserDataDirectory)?>(_browserInstances.PreviewNewInstanceAsync(ownerId, root).GetAwaiter().GetResult());
+
+    public Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+        => _browserInstances.CloseInstanceAsync(instanceId);
+
     public async Task<CoreModels.BrowserPluginExecutionResponse?> ControlAsync(string pluginId, string command, IReadOnlyDictionary<string, string?>? arguments, string? connectionId = null, CancellationToken cancellationToken = default)
     {
         var plugins = _pluginDiscovery.GetLatestSnapshot().Plugins;
@@ -134,14 +137,14 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         var instanceCtn = _instanceManager.GetOrCreateInstance(plugin);
         var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
-        var hostContext = new PluginHostContextCore(_browserInstances.BrowserContext, _browserInstances.ActivePage, _browserInstances.CurrentInstanceId, normalizedArguments, plugin.Id, command, combinedCts.Token, (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token));
+        var hostContext = new PluginHostContextCore(_browserInstances.BrowserContext, _browserInstances.ActivePage, _browserInstances.CurrentInstanceId, normalizedArguments, plugin.Id, command, combinedCts.Token, (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token), RequestNewBrowserInstanceAsync, GetBrowserInstanceInfoAsync);
         if (string.Equals(command, "stop", StringComparison.OrdinalIgnoreCase))
         {
             try { _instanceManager.CancelLifecycle(plugin); } catch { }
         }
         var result = await _executionService.ExecuteControlAsync(instance, command, hostContext, combinedCts.Token);
         combinedCts.Dispose();
-        return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
+        return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data);
     }
 
     public async Task<CoreModels.BrowserPluginExecutionResponse?> ExecuteAsync(string pluginId, string functionId, IReadOnlyDictionary<string, string?>? arguments, string? connectionId = null, CancellationToken cancellationToken = default)
@@ -157,12 +160,94 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
-        var hostContext = new MeowAutoChrome.Core.Services.PluginHost.PluginHostContextCore(_browserInstances.BrowserContext, _browserInstances.ActivePage, _browserInstances.CurrentInstanceId, normalizedArguments, plugin.Id, action.Id, combinedCts.Token, (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token));
+        var hostContext = new MeowAutoChrome.Core.Services.PluginHost.PluginHostContextCore(_browserInstances.BrowserContext, _browserInstances.ActivePage, _browserInstances.CurrentInstanceId, normalizedArguments, plugin.Id, action.Id, combinedCts.Token, (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token), RequestNewBrowserInstanceAsync, GetBrowserInstanceInfoAsync);
+
+
         var result = await _executionService.ExecuteActionAsync(instance, action, hostContext, combinedCts.Token);
-        return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data ?? new Dictionary<string, string?>());
+        return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data);
     }
 
     // 其余 DiscoverPluginsCore、GetOrCreatePluginInstance、ExecuteWithHostContextAsync 等方法请从 Web 迁移并整理到此处
     // Discovery and metadata helpers have been moved to BrowserPluginDiscovery and PluginMetadataScanner
+
+    // Factory helper to satisfy PluginHostContextCore delegated creation request
+    private async Task<string?> RequestNewBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken ct)
+    {
+        var browserType = (options.BrowserType ?? "chromium").ToLowerInvariant();
+        if (browserType != "chromium" && browserType != "firefox" && browserType != "webkit")
+            return null;
+        var ownerId = string.IsNullOrWhiteSpace(options.OwnerId) ? "plugin" : options.OwnerId;
+        var display = string.IsNullOrWhiteSpace(options.DisplayName) ? ownerId : options.DisplayName;
+
+        // Load settings possibly provided by host
+        var settings = new MeowAutoChrome.Core.Struct.ProgramSettings();
+        try { settings = _settingsProvider is not null ? await _settingsProvider.GetAsync() : settings; } catch { }
+
+        var maxInstances = settings.MaxInstancesPerPlugin;
+        if (maxInstances > 0)
+        {
+            var existing = _browserInstances.GetPluginInstanceIds(ownerId);
+            if (existing.Count >= maxInstances)
+            {
+                _logger.LogWarning("Plugin {Plugin} exceeded max instances quota ({Max})", ownerId, maxInstances);
+                return null;
+            }
+        }
+
+        var defaultRoot = settings.UserDataDirectory;
+        string userData;
+        if (string.IsNullOrWhiteSpace(options.UserDataDirectory))
+        {
+            userData = defaultRoot;
+        }
+        else
+        {
+            try { userData = Path.GetFullPath(options.UserDataDirectory!); } catch { _logger.LogWarning("Invalid userDataDirectory requested by {Plugin}", ownerId); return null; }
+            var rootFull = Path.GetFullPath(defaultRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!userData.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Plugin {Plugin} requested disallowed user data directory {Path}", ownerId, userData);
+                return null;
+            }
+        }
+
+        if (options.Args is not null && settings.DisallowedBrowserArgs is not null)
+        {
+            foreach (var a in options.Args)
+            {
+                if (string.IsNullOrWhiteSpace(a)) continue;
+                var low = a.ToLowerInvariant();
+                if (settings.DisallowedBrowserArgs.Any(d => low.Contains(d)))
+                {
+                    _logger.LogWarning("Plugin {Plugin} attempted to use disallowed arg {Arg}", ownerId, a);
+                    return null;
+                }
+            }
+        }
+
+        try
+        {
+            var instId = await _browserInstances.CreateAsync(ownerId, display, userData, options.Headless, previewInstanceId: null);
+            _logger.LogInformation("Created plugin instance {Inst} for {Plugin}", instId, ownerId);
+            return instId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create instance for plugin {Plugin}", ownerId);
+        }
+
+        return null;
+    }
+
+    // Helper to get a settings provider from DI via dependencies (best-effort)
+    private IProgramSettingsProvider? depsAsSettingsProvider()
+    {
+        try
+        {
+            // _publisher was set from dependencies; Broker dependencies are not DI here. Try to access via AssemblyLoader's service provider if available - no reliable way here.
+            return null;
+        }
+        catch { return null; }
+    }
 
 }

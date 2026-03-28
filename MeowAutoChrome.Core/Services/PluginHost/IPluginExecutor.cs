@@ -8,6 +8,6 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 
 public interface IPluginExecutor
 {
-    Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken);
+    Task<IResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<IResult>> execute, CancellationToken cancellationToken);
 
 }

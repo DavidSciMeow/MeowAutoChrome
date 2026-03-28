@@ -1,6 +1,7 @@
 ﻿using MeowAutoChrome.Web;
 using MeowAutoChrome.Web.Extensions;
 using MeowAutoChrome.Web.Services;
+using Microsoft.AspNetCore.Builder;
 using MeowAutoChrome.Web.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Contracts;

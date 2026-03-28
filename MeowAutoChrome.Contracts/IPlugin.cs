@@ -3,6 +3,7 @@
 // The minimal plugin-facing surface (`IPlugin`, `PAResult`, `PluginState`) remains
 // in Contracts. Avoid referencing removed Contracts sub-namespaces.
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace MeowAutoChrome.Contracts;
 
@@ -20,23 +21,28 @@ public interface IPlugin
     /// </summary>
     bool SupportsPause { get; }
     /// <summary>
+    /// Host-provided context. Host will set this before invoking plugin actions and clear afterwards.
+    /// Plugins can use this to access host services like browser context. Implementations may be null-safe.
+    /// </summary>
+    IPluginContext? HostContext { get; set; }
+    /// <summary>
     /// 启动插件，表示插件开始运行的操作方法，插件实现这个方法来执行自己的启动逻辑，包括初始化资源、注册事件、启动任务等操作，宿主会在用户或系统触发插件启动时调用这个方法，并且根据返回的结果来判断插件是否成功启动，如果返回一个成功的结果，则宿主会将插件状态设置为运行中，并且允许用户进行相关的操作，如果返回一个失败的结果，则宿主会将插件状态设置为未启动，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地启动和停止自己
     /// </summary>
     /// <returns></returns>
-    Task<PAResult> StartAsync();
+    Task<IResult> StartAsync();
     /// <summary>
     /// 停止插件，表示插件结束运行的操作方法，插件实现这个方法来执行自己的停止逻辑，包括清理资源、注销事件、停止任务等操作，宿主会在用户或系统触发插件停止时调用这个方法，并且根据返回的结果来判断插件是否成功停止，如果返回一个成功的结果，则宿主会将插件状态设置为已停止，并且允许用户进行相关的操作，如果返回一个失败的结果则宿主会将插件状态保持为当前状态，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地停止自己
     /// </summary>
     /// <returns></returns>
-    Task<PAResult> StopAsync();
+    Task<IResult> StopAsync();
     /// <summary>
     /// 暂停插件，表示插件进入暂停状态的操作方法，插件实现这个方法来执行自己的暂停逻辑，包括暂停任务、冻结状态等操作，宿主会在用户或系统触发插件暂停时调用这个方法，并且根据返回的结果来判断插件是否成功暂停，如果返回一个成功的结果则宿主会将插件状态设置为已暂停，并且允许用户进行相关的操作，如果返回一个失败的结果则宿主会将插件状态保持为当前状态，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地暂停和恢复自己
     /// </summary>
     /// <returns></returns>
-    Task<PAResult> PauseAsync();
+    Task<IResult> PauseAsync();
     /// <summary>
     /// 恢复插件，表示插件从暂停状态恢复到运行状态的操作方法，插件实现这个方法来执行自己的恢复逻辑，包括恢复任务、解冻状态等操作，宿主会在用户或系统触发插件恢复时调用这个方法，并且根据返回的结果来判断插件是否成功恢复，如果返回一个成功的结果则宿主会将插件状态设置为运行中，并且允许用户进行相关的操作如果返回一个失败的结果则宿主会将插件状态保持为当前状态，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地暂停和恢复自己
     /// </summary>
     /// <returns></returns>
-    Task<PAResult> ResumeAsync();
+    Task<IResult> ResumeAsync();
 }

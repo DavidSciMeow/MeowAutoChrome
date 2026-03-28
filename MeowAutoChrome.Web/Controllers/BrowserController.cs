@@ -8,6 +8,11 @@ using MeowAutoChrome.Core.Services.PluginHost;
 using MeowAutoChrome.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Http;
+using System.IO.Compression;
+using System.IO;
+using System.Text.Json;
+using System.Collections.Generic;
 
 namespace MeowAutoChrome.Web.Controllers
 {
@@ -37,11 +42,177 @@ public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManage
         /// </summary>
         public IActionResult Index() => View();
         /// <summary>
+        /// Demo view for invoking plugins (moved from Razor Pages into MVC Views).
+        /// </summary>
+        [HttpGet]
+        public IActionResult PluginDemo()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> PluginDemo([FromForm] string PluginId, [FromForm] string FunctionId, [FromForm] string InstanceId)
+        {
+            if (string.IsNullOrWhiteSpace(PluginId) || string.IsNullOrWhiteSpace(FunctionId))
+            {
+                ViewData["ResultJson"] = JsonSerializer.Serialize(new { error = "PluginId and FunctionId are required" }, new JsonSerializerOptions { WriteIndented = true });
+                return View();
+            }
+
+            var args = new Dictionary<string, string?> { ["instanceId"] = string.IsNullOrWhiteSpace(InstanceId) ? null : InstanceId };
+            var resp = await pluginHost.ExecuteAsync(PluginId, FunctionId, args);
+            if (resp is null)
+            {
+                ViewData["ResultJson"] = JsonSerializer.Serialize(new { error = "Plugin or function not found or execution failed" }, new JsonSerializerOptions { WriteIndented = true });
+                ViewData["ResultData"] = null;
+            }
+            else
+            {
+                ViewData["ResultJson"] = JsonSerializer.Serialize(resp.Data, new JsonSerializerOptions { WriteIndented = true });
+                ViewData["ResultData"] = resp.Data;
+            }
+
+            ViewData["PluginId"] = PluginId;
+            ViewData["FunctionId"] = FunctionId;
+            ViewData["InstanceId"] = InstanceId;
+            return View();
+        }
+        /// <summary>
         /// 获取插件目录（供前端显示插件列表）。
         /// </summary>
         [HttpGet]
         public IActionResult Plugins()
             => Ok(pluginHost.GetPluginCatalog());
+
+        /// <summary>
+        /// Return installed plugins along with the assembly path (if known) so UI can manage them.
+        /// </summary>
+        [HttpGet]
+        public IActionResult InstalledPlugins()
+        {
+            var catalog = pluginHost.GetPluginCatalog();
+            var loader = HttpContext.RequestServices.GetService<MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader>();
+            var list = new List<object>();
+            foreach (var p in catalog.Plugins ?? Array.Empty<MeowAutoChrome.Core.Models.BrowserPluginDescriptor?>())
+            {
+                if (p is null) continue;
+                var path = loader?.GetAssemblyPathForPluginId(p.Id);
+                list.Add(new { id = p.Id, name = p.Name, description = p.Description, path });
+            }
+
+            return Ok(new { plugins = list });
+        }
+
+        /// <summary>
+        /// Enumerate assemblies found on disk under plugin root (including uploads) and report registration info.
+        /// </summary>
+        [HttpGet]
+        public IActionResult AvailableAssemblies()
+        {
+            var discovery = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService>();
+            var loader = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader>();
+            var catalog = pluginHost.GetPluginCatalog();
+            var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in catalog.Plugins ?? Array.Empty<MeowAutoChrome.Core.Models.BrowserPluginDescriptor?>())
+            {
+                if (p is null) continue;
+                var path = loader.GetAssemblyPathForPluginId(p.Id);
+                if (path is null) continue;
+                if (!map.TryGetValue(path, out var lst)) { lst = new List<string>(); map[path] = lst; }
+                lst.Add(p.Id);
+            }
+
+            var root = discovery.PluginRootPath;
+            var uploadsRoot = Path.Combine(root, "uploads");
+            var dlls = Directory.Exists(root) ? Directory.GetFiles(root, "*.dll", SearchOption.AllDirectories) : Array.Empty<string>();
+            var outList = new List<object>();
+            foreach (var dll in dlls)
+            {
+                var rel = Path.GetRelativePath(root, dll);
+                var registered = map.TryGetValue(Path.GetFullPath(dll), out var ids) ? ids.ToArray() : Array.Empty<string>();
+                var underUploads = Path.GetFullPath(dll).StartsWith(Path.GetFullPath(uploadsRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+                string? uploadGroup = null;
+                if (underUploads)
+                {
+                    var relUnderUploads = Path.GetRelativePath(uploadsRoot, dll);
+                    var parts = relUnderUploads.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 0) uploadGroup = parts[0];
+                }
+                outList.Add(new { path = dll, relative = rel, registered = registered, uploadGroup = uploadGroup });
+            }
+
+            return Ok(new { assemblies = outList });
+        }
+
+        /// <summary>
+        /// Load an assembly by path (re-add plugin from disk).
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> LoadAssembly([FromBody] string assemblyPath)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyPath)) return Problem(detail: "assemblyPath required", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var res = await pluginHost.LoadPluginAssemblyAsync(assemblyPath);
+                return Ok(res);
+            }
+            catch (Exception ex)
+            {
+                return Problem(detail: ex.Message, title: "LoadFailed", statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }
+
+        /// <summary>
+        /// Delete plugin files related to given plugin id. This will first unload the plugin and then remove the file or its upload folder if applicable.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> DeletePluginFiles([FromBody] string pluginId)
+        {
+            if (string.IsNullOrWhiteSpace(pluginId)) return Problem(detail: "pluginId required", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+            var loader = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader>();
+            var discovery = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService>();
+
+            var path = loader.GetAssemblyPathForPluginId(pluginId);
+            if (path is null) return Problem(detail: "plugin assembly path not found", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
+
+            // Unload first
+            try
+            {
+                await pluginHost.UnloadPluginAsync(pluginId);
+            }
+            catch { }
+
+            var root = discovery.PluginRootPath;
+            var uploadsRoot = Path.Combine(root, "uploads");
+            var full = Path.GetFullPath(path);
+            try
+            {
+                if (full.StartsWith(Path.GetFullPath(uploadsRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    var rel = Path.GetRelativePath(uploadsRoot, full);
+                    var parts = rel.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 0)
+                    {
+                        var groupDir = Path.Combine(uploadsRoot, parts[0]);
+                        if (Directory.Exists(groupDir)) Directory.Delete(groupDir, true);
+                        return Ok(new { deleted = true, removed = groupDir });
+                    }
+                }
+
+                // otherwise delete single file if exists and under plugin root
+                if (full.StartsWith(Path.GetFullPath(root), StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(full))
+                {
+                    System.IO.File.Delete(full);
+                    return Ok(new { deleted = true, removed = full });
+                }
+
+                return Problem(detail: "file not eligible for deletion or not found", title: "NotFound", statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (Exception ex)
+            {
+                return Problem(detail: ex.Message, title: "DeleteFailed", statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }
 
         /// <summary>
         /// Force scan for plugins (hot load) by path. Web uploads or points to a file path that Core will try to load.
@@ -54,6 +225,102 @@ public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManage
 
             var result = await pluginHost.LoadPluginAssemblyAsync(pluginPath);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Upload a plugin DLL or a ZIP containing a plugin and attempt to load it into the host.
+        /// Accepts a single file form field named 'file'.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> UploadPlugin(List<IFormFile> files)
+        {
+            if (files is null || files.Count == 0) return Problem(detail: "上传文件为空", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+            try
+            {
+                pluginHost.EnsurePluginDirectoryExists();
+            }
+            catch { }
+
+            var pluginRoot = pluginHost.PluginRootPath;
+            var uploadId = Guid.NewGuid().ToString("N");
+            var uploadDir = Path.Combine(pluginRoot, "uploads", uploadId);
+            Directory.CreateDirectory(uploadDir);
+
+            var processed = new List<object>();
+
+            try
+            {
+                // save all incoming files into uploadDir
+                foreach (var f in files)
+                {
+                    var dest = Path.Combine(uploadDir, Path.GetFileName(f.FileName));
+                    await using (var fs = System.IO.File.Create(dest))
+                    {
+                        await f.CopyToAsync(fs);
+                    }
+                }
+
+                // if any zip files present, extract them into subfolders
+                foreach (var zip in Directory.GetFiles(uploadDir, "*.zip", SearchOption.TopDirectoryOnly))
+                {
+                    var extractDir = Path.Combine(uploadDir, Path.GetFileNameWithoutExtension(zip));
+                    if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
+                    ZipFile.ExtractToDirectory(zip, extractDir);
+                }
+
+                // find all dll files under uploadDir (top-level and first-level extracted)
+                var dlls = Directory.GetFiles(uploadDir, "*.dll", SearchOption.AllDirectories);
+                foreach (var dll in dlls)
+                {
+                    var res = await pluginHost.LoadPluginAssemblyAsync(dll);
+                    var pluginCount = res.Plugins is null ? 0 : res.Plugins.Count;
+                    var pluginIds = res.Plugins is null ? Array.Empty<string>() : res.Plugins.Where(p => p is not null).Select(p => p!.Id).ToArray();
+                    var errors = res.Errors is null ? Array.Empty<string>() : res.Errors.ToArray();
+                    var errorsDetailed = res.ErrorsDetailed is null ? Array.Empty<object>() : res.ErrorsDetailed.Select(ed => new { ed.Assembly, ed.Summary, ed.Detail }).ToArray();
+
+                    processed.Add(new
+                    {
+                        Path = dll,
+                        PluginCount = pluginCount,
+                        PluginIds = pluginIds,
+                        Errors = errors,
+                        ErrorsDetailed = errorsDetailed
+                    });
+                }
+
+                // If no dlls found, return uploaded files listing for diagnosis
+                if (!dlls.Any())
+                {
+                    var saved = Directory.GetFiles(uploadDir, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(uploadDir, p)).ToArray();
+                    return Ok(new { uploaded = true, uploadDir = uploadDir, files = saved, processed = processed });
+                }
+
+                return Ok(new { uploaded = true, uploadDir = uploadDir, processed });
+            }
+            catch (System.Exception ex)
+            {
+                return Problem(detail: ex.Message, title: "UploadFailed", statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }
+
+        /// <summary>
+        /// Preview a new instance id and user data dir for a given owner.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> PreviewInstance([FromBody] string ownerId)
+        {
+            if (string.IsNullOrWhiteSpace(ownerId)) return Problem(detail: "ownerId required", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+            var res = await pluginHost.PreviewNewInstanceAsync(ownerId);
+            return res is null ? Problem(detail: "failed", title: "Error", statusCode: StatusCodes.Status500InternalServerError) : Ok(res);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CloseInstance([FromBody] string instanceId)
+        {
+            if (string.IsNullOrWhiteSpace(instanceId)) return Problem(detail: "instanceId required", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+            var ok = await pluginHost.CloseBrowserInstanceAsync(instanceId);
+            return ok ? Ok(new { closed = true }) : Problem(detail: "failed to close", title: "Error", statusCode: StatusCodes.Status500InternalServerError);
         }
 
         /// <summary>
@@ -83,7 +350,7 @@ public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManage
             var result = await pluginHost.ControlAsync(request.PluginId, request.Command, request.Arguments, GetBrowserHubConnectionId(), cancellationToken);
             return result is null
                 ? Problem(detail: "插件未找到或执行失败", title: "NotFound", statusCode: StatusCodes.Status404NotFound)
-                : Ok((object?)result);
+                : Ok(result.Data);
         }
         /// <summary>
         /// 执行插件的动作函数并返回结果。
@@ -100,7 +367,7 @@ public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManage
             var result = await pluginHost.ExecuteAsync(request.PluginId, request.FunctionId, request.Arguments, GetBrowserHubConnectionId(), cancellationToken);
             return result is null
                 ? Problem(detail: "插件或函数未找到或执行失败", title: "NotFound", statusCode: StatusCodes.Status404NotFound)
-                : Ok((object?)result);
+                : Ok(result.Data);
         }
         /// <summary>
         /// 获取浏览器与系统状态（用于前端仪表盘）。
@@ -416,11 +683,10 @@ public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManage
             var errorMessage = (string?)null;
 
             // supportsScreencast should reflect whether the backend/browser can produce screencast frames.
-            // Use presence of a BrowserContext (Playwright-managed) as capability indicator rather than
-            // the headless flag. A Playwright-launched headful (non-headless) context can still provide
-            // CDP screencast frames when launched by Playwright, so checking BrowserContext is more
-            // accurate for front-end UI decisions.
-            var supportsScreencast = hasInstance;
+            // Real-time screencast is only available when running in headless mode in our architecture
+            // (headful windows are rendered locally and we disable live streaming). Therefore require both
+            // presence of an instance and that the current launch mode is headless.
+            var supportsScreencast = hasInstance && browserInstances.IsHeadless;
             var screencastEnabled = supportsScreencast && screencastService.Enabled;
 
             return new(
@@ -438,7 +704,50 @@ public class BrowserController(MeowAutoChrome.Web.Services.BrowserInstanceManage
                 settings.PluginPanelWidth,
                 await browserInstances.GetTabsAsync(),
                 browserInstances.CurrentInstanceId,
-                browserInstances.GetCurrentInstanceViewportSettings());
+                browserInstances.GetCurrentInstanceViewportSettings(),
+                browserInstances.IsHeadless);
+        }
+
+        /// <summary>
+        /// 设置 Headless 模式（通过前端快速切换，不再只在设置页面）。
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> SetHeadless([FromBody] bool headless)
+        {
+            try
+            {
+                var settings = await programSettingsService.GetAsync();
+                if (settings.Headless == headless)
+                    return Ok(await BuildStatusAsync());
+
+                // remember current instances so plugin host can cleanup before restart
+                var previousInstanceIds = browserInstances.GetInstances().Select(i => i.Id).ToArray();
+
+                settings.Headless = headless;
+                await programSettingsService.SaveAsync(settings);
+
+                // Notify plugin host to cleanup references to previous instances before we recreate
+                foreach (var id in previousInstanceIds)
+                {
+                    try { await pluginHost.CloseBrowserInstanceAsync(id); } catch { }
+                }
+
+                // Recreate Playwright instances with new launch settings
+                await browserInstances.UpdateLaunchSettingsAsync(settings.UserDataDirectory, settings.Headless, forceReload: true);
+
+                // Rescan plugins so plugin host can reinitialize any instance-bound hooks
+                await pluginHost.ScanPluginsAsync();
+
+                // Let screencast service react to browser mode change
+                await screencastService.OnBrowserModeChangedAsync();
+
+                return Ok(await BuildStatusAsync());
+            }
+            catch (Exception ex)
+            {
+                // return failure detail so front-end can show an error
+                return Problem(detail: ex.Message, title: "SetHeadlessFailed", statusCode: StatusCodes.Status500InternalServerError);
+            }
         }
         /// <summary>
         /// 从请求头中读取可选的 BrowserHub 连接 ID（用于将插件输出仅发送给特定客户端）。

@@ -10,8 +10,8 @@ namespace MeowAutoChrome.Core.Extensions;
 /// </summary>
 public static class PluginResultExtensions
 {
-    public static Task<PAResult> Ok(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Task.FromResult(plugin.OkResult(message, data));
-    public static PAResult OkResult(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => new(message, MergeDefaultData(plugin, data));
+    public static Task<IResult> Ok(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Task.FromResult<IResult>(plugin.OkResult(message, data));
+    public static IResult OkResult(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Result.Ok(MergeDefaultData(plugin, data));
 
     private static Dictionary<string, string?> MergeDefaultData(IPlugin plugin, IReadOnlyDictionary<string, string?>? data)
     {

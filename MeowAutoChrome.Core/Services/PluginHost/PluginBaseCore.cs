@@ -62,49 +62,49 @@ public abstract class PluginBaseCore : IPlugin
         return Task.CompletedTask;
     }
 
-    public virtual Task<PAResult> StartAsync()
+    public virtual Task<IResult> StartAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
         if (State == PluginState.Running)
-            return this.Ok(AlreadyRunningMessage);
+            return Task.FromResult<IResult>(Result.Ok(new { message = AlreadyRunningMessage }));
 
         State = PluginState.Running;
-        return this.Ok(StartedMessage);
+        return Task.FromResult<IResult>(Result.Ok(new { message = StartedMessage }));
     }
 
-    public virtual Task<PAResult> StopAsync()
+    public virtual Task<IResult> StopAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
         State = PluginState.Stopped;
-        return this.Ok(StoppedMessage);
+        return Task.FromResult<IResult>(Result.Ok(new { message = StoppedMessage }));
     }
 
-    public virtual Task<PAResult> PauseAsync()
+    public virtual Task<IResult> PauseAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
         if (!SupportsPause)
-            return this.Ok(PauseNotSupportedMessage);
+            return Task.FromResult<IResult>(Result.Ok(new { message = PauseNotSupportedMessage }));
 
         if (State != PluginState.Running)
-            return this.Ok(PauseRequiresRunningMessage);
+            return Task.FromResult<IResult>(Result.Ok(new { message = PauseRequiresRunningMessage }));
 
         State = PluginState.Paused;
-        return this.Ok(PausedMessage);
+        return Task.FromResult<IResult>(Result.Ok(new { message = PausedMessage }));
     }
 
-    public virtual Task<PAResult> ResumeAsync()
+    public virtual Task<IResult> ResumeAsync()
     {
         CurrentCancellationToken.ThrowIfCancellationRequested();
 
         if (!SupportsPause)
-            return this.Ok(PauseNotSupportedMessage);
+            return Task.FromResult<IResult>(Result.Ok(new { message = PauseNotSupportedMessage }));
 
         if (State != PluginState.Paused)
-            return this.Ok(ResumeRequiresPausedMessage);
+            return Task.FromResult<IResult>(Result.Ok(new { message = ResumeRequiresPausedMessage }));
 
         State = PluginState.Running;
-        return this.Ok(ResumedMessage);
+        return Task.FromResult<IResult>(Result.Ok(new { message = ResumedMessage }));
     }
 }

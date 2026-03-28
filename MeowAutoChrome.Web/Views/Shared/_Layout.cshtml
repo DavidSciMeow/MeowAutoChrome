@@ -43,6 +43,11 @@
                         <i class="fa-solid fa-sliders"></i>
                         <span>设置</span>
                     </a>
+
+                    <a class="@NavLinkClass("Home", "PluginUpload")" asp-controller="Home" asp-action="PluginUpload">
+                        <i class="fa-solid fa-file-upload"></i>
+                        <span>插件上传</span>
+                    </a>
                     <a class="@NavLinkClass("Home", "Privacy")" asp-controller="Home" asp-action="Privacy">
                         <i class="fa-solid fa-shield-halved"></i>
                         <span>隐私提示</span>
@@ -51,6 +56,7 @@
             </div>
         </nav>
     </header>
+
     <div class="container-fluid px-3 px-xl-4 app-content">
         <main role="main" class="app-main">
             @RenderBody()
@@ -64,6 +70,7 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

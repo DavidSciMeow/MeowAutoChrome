@@ -17,10 +17,14 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 public sealed class PluginHostContextCore : IPluginContext
 {
     private readonly Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? _publishUpdate;
+    private readonly Func<BrowserCreationOptions, CancellationToken, Task<string?>>? _requestNewInstance;
+    private readonly Func<string, CancellationToken, Task<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>>? _getInstanceInfo;
 
-    public PluginHostContextCore(Microsoft.Playwright.IBrowserContext browserContext, Microsoft.Playwright.IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string,string?> arguments, string pluginId, string targetId, CancellationToken cancellationToken, System.Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate)
+    public PluginHostContextCore(Microsoft.Playwright.IBrowserContext browserContext, Microsoft.Playwright.IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string,string?> arguments, string pluginId, string targetId, CancellationToken cancellationToken, System.Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>>? getInstanceInfo = null)
     {
         _publishUpdate = publishUpdate;
+        _requestNewInstance = requestNewInstance;
+        _getInstanceInfo = getInstanceInfo;
         BrowserContext = browserContext;
         ActivePage = activePage;
         BrowserInstanceId = browserInstanceId;
@@ -40,4 +44,10 @@ public sealed class PluginHostContextCore : IPluginContext
 
     public Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = true)
         => _publishUpdate?.Invoke(message, data, openModal) ?? Task.CompletedTask;
+
+    public Task<string?> RequestNewBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken cancellationToken = default)
+        => _requestNewInstance is null ? Task.FromResult<string?>(null) : _requestNewInstance(options, cancellationToken);
+
+    public Task<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken cancellationToken = default)
+        => _getInstanceInfo is null ? Task.FromResult<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>(null) : _getInstanceInfo(instanceId, cancellationToken);
 }

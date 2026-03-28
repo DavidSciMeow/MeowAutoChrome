@@ -17,32 +17,42 @@ public sealed class PluginExecutionService
         _executor = executor;
     }
 
-    public Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
+    public Task<IResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<IResult>> execute, CancellationToken cancellationToken)
         => _executor.ExecuteAsync(instance, hostContext, execute, cancellationToken);
 
-    public Task<PAResult> ExecuteActionAsync(RuntimeBrowserPluginInstance instance, RuntimeBrowserPluginAction action, IPluginContext hostContext, CancellationToken cancellationToken)
+    public Task<IResult> ExecuteActionAsync(RuntimeBrowserPluginInstance instance, RuntimeBrowserPluginAction action, IPluginContext hostContext, CancellationToken cancellationToken)
     {
         return _executor.ExecuteAsync(instance, hostContext, async pluginInstance =>
         {
             var invocation = action.Method.Invoke(pluginInstance, PluginParameterBinder.BuildInvocationArguments(action.Method, (IPluginContext)hostContext));
-            if (invocation is Task<PAResult> task)
-                return await task.ConfigureAwait(false);
-            if (invocation is Task genericTask)
+            // Normalize various return shapes into IResult
+            if (invocation is Task<IResult> taskResult)
+                return await taskResult.ConfigureAwait(false);
+            if (invocation is IResult directResult)
+                return directResult;
+            if (invocation is Task task)
             {
-                await genericTask.ConfigureAwait(false);
-                var resultProp = genericTask.GetType().GetProperty("Result");
+                await task.ConfigureAwait(false);
+                var resultProp = task.GetType().GetProperty("Result");
                 if (resultProp is not null)
                 {
-                    var res = resultProp.GetValue(genericTask);
-                    if (res is PAResult par)
-                        return par;
+                    var res = resultProp.GetValue(task);
+                    if (res is IResult ir) return ir;
+                    return new Result(res);
                 }
+
+                // void-returning Task -> success without data
+                return Result.Ok();
             }
-            throw new InvalidOperationException($"插件动作返回类型无效：{action.Method.DeclaringType?.FullName}.{action.Method.Name}");
+
+            // synchronous returns
+            if (invocation is IResult ir2) return ir2;
+            if (invocation is null) return Result.Ok();
+            return new Result(invocation);
         }, cancellationToken);
     }
 
-    public Task<PAResult> ExecuteControlAsync(RuntimeBrowserPluginInstance instance, string command, IPluginContext hostContext, CancellationToken cancellationToken)
+    public Task<IResult> ExecuteControlAsync(RuntimeBrowserPluginInstance instance, string command, IPluginContext hostContext, CancellationToken cancellationToken)
     {
         return _executor.ExecuteAsync(instance, hostContext, pluginInstance => command.ToLowerInvariant() switch
         {
@@ -50,7 +60,7 @@ public sealed class PluginExecutionService
             "stop" => pluginInstance.StopAsync(),
             "pause" => pluginInstance.PauseAsync(),
             "resume" => pluginInstance.ResumeAsync(),
-            _ => Task.FromResult(new PAResult($"不支持的插件控制命令：{command}", null))
+            _ => Task.FromResult<IResult>(Result.Fail($"不支持的插件控制命令：{command}"))
         }, cancellationToken);
     }
 }

@@ -31,5 +31,6 @@ public sealed record BrowserStatusResponse(
     int PluginPanelWidth,
     IReadOnlyList<MeowAutoChrome.Core.Models.BrowserTabInfo> Tabs,
     string? CurrentInstanceId,
-    MeowAutoChrome.Core.Models.BrowserInstanceViewportSettingsResponse CurrentViewport);
+    MeowAutoChrome.Core.Models.BrowserInstanceViewportSettingsResponse CurrentViewport,
+    bool IsHeadless);
 

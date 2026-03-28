@@ -69,14 +69,7 @@
                         </div>
                         <span asp-validation-for="UserDataDirectory" class="text-danger"></span>
                     </div>
-                    <div class="card-body border-top">
-                        <div class="form-check form-switch">
-                            <input asp-for="Headless" class="form-check-input" />
-                            <label asp-for="Headless" class="form-check-label"></label>
-                        </div>
-                        <div class="form-text">关闭后会显示真实 Chrome 窗口，并自动禁用实时查看功能。</div>
-                        <span asp-validation-for="Headless" class="text-danger"></span>
-                    </div>
+                    <!-- Headless toggle moved to Browser Index toolbar; removed from program settings UI -->
                 </section>
 
                 <section id="userAgentSettingsCard" class="card shadow-sm settings-card">

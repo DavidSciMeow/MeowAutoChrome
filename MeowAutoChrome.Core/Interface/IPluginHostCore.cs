@@ -19,4 +19,6 @@ public interface IPluginHostCore
     Task<BrowserPluginCatalogResponse> ScanPluginsAsync(CancellationToken cancellationToken = default);
     Task<BrowserPluginCatalogResponse> LoadPluginAssemblyAsync(string pluginPath, CancellationToken cancellationToken = default);
     Task<(bool Success, IReadOnlyList<string> Errors)> UnloadPluginAsync(string pluginId, CancellationToken cancellationToken = default);
+    Task<(string InstanceId, string? UserDataDirectory)?> PreviewNewInstanceAsync(string ownerId, string? root = null);
+    Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
 }

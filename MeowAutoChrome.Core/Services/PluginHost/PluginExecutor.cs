@@ -13,9 +13,28 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// </summary>
 public sealed class PluginExecutor : IPluginExecutor
 {
-    public async Task<PAResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<PAResult>> execute, CancellationToken cancellationToken)
+    public async Task<IResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<MeowAutoChrome.Contracts.IPlugin, Task<IResult>> execute, CancellationToken cancellationToken)
     {
-        await instance.ExecutionLock.WaitAsync(cancellationToken);
+        try
+        {
+            await instance.ExecutionLock.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Caller requested cancellation (e.g. user clicked "Stop").
+            // Signal the plugin's lifecycle token so the running plugin can observe cancellation,
+            // then wait for the execution lock without the caller cancellation token so we can
+            // enter the plugin context and invoke its control (Stop/Pause) methods.
+            instance.CancelLifecycle();
+
+            // Wait without the external cancellation token so we won't throw here again.
+            await instance.ExecutionLock.WaitAsync();
+        }
+        catch
+        {
+            // Other cancellation/exception scenarios should propagate.
+            throw;
+        }
 
         try
         {

@@ -52,4 +52,22 @@ public sealed class ProgramSettings
     /// 字典中的值最好以字符串形式表示以保证序列化兼容性。
     /// </summary>
     public System.Collections.Generic.Dictionary<string, string?> CustomSettings { get; set; } = new();
+    // Maximum number of browser instances a single plugin/owner may create. Zero or negative means unlimited.
+    public int MaxInstancesPerPlugin { get; set; } = 3;
+
+    // Disallowed browser arguments that plugins should not pass through when requesting instances.
+    public string[] DisallowedBrowserArgs { get; set; } = new[] { "--user-data-dir", "--remote-debugging-port" };
+
+    // Upload / retention policy for plugin uploads
+    // Number of days to keep uploaded plugin files before automatic cleanup. Zero or negative means keep forever.
+    public int UploadRetentionDays { get; set; } = 30;
+
+    // Maximum number of files allowed in a single upload (directory upload counts each file individually)
+    public int MaxUploadFiles { get; set; } = 200;
+
+    // Maximum single uploaded file size in megabytes
+    public int MaxUploadFileSizeMb { get; set; } = 10;
+
+    // Maximum number of DLLs processed from an upload
+    public int MaxDllsPerUpload { get; set; } = 50;
 }

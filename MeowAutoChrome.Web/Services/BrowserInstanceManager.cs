@@ -77,11 +77,12 @@ public class BrowserInstanceManager
     public IPage? GetActivePage(string instanceId)
         => _core.Instances.FirstOrDefault(i => i.InstanceId == instanceId)?.BrowserContext?.Pages.FirstOrDefault();
 
-    public Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default)
+    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default)
     {
         var name = string.IsNullOrWhiteSpace(displayName) ? ownerPluginId : displayName;
-        var dir = string.IsNullOrWhiteSpace(userDataDirectory) ? MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultUserDataDirectoryPath() : Path.GetFullPath(userDataDirectory);
-        return _core.CreateAsync(ownerPluginId, name, dir, headless: true, previewInstanceId);
+        var settings = _settingsProvider is null ? new MeowAutoChrome.Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
+        var dir = string.IsNullOrWhiteSpace(userDataDirectory) ? settings.UserDataDirectory : Path.GetFullPath(userDataDirectory);
+        return await _core.CreateAsync(ownerPluginId, name, dir, headless: settings.Headless, previewInstanceId);
     }
 
     public Task<bool> RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
@@ -133,7 +134,22 @@ public class BrowserInstanceManager
     public Task ReloadAsync() => Task.CompletedTask;
     public Task<byte[]?> CaptureScreenshotAsync() => Task.FromResult<byte[]?>(null);
     public Task SetViewportSizeAsync(int width, int height) => Task.CompletedTask;
-    public Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false) => Task.CompletedTask;
+    public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false)
+    {
+        // Delegate to core manager which handles instance recreation.
+        await _core.UpdateLaunchSettingsAsync(primaryUserDataDirectory, isHeadless, forceReload);
+
+        // After recreating instances we should refresh plugin host state if available
+        try
+        {
+            var pluginHost = System.AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetTypes())
+                .SelectMany(t => t)
+                .FirstOrDefault(t => typeof(MeowAutoChrome.Core.Interface.IPluginHostCore).IsAssignableFrom(t));
+            // We don't have a direct reference here; callers should ensure plugin host reloads as needed.
+        }
+        catch { }
+    }
     public Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
         => Task.FromResult(false);
 

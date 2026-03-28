@@ -1,7 +1,6 @@
 ﻿using MeowAutoChrome.Web.Models;
-using MeowAutoChrome.Web.Services;
 using MeowAutoChrome.Web.Abstractions;
-using MeowAutoChrome.Contracts;
+using MeowAutoChrome.Contracts.SignalR;
 using Microsoft.AspNetCore.SignalR;
 
 namespace MeowAutoChrome.Web.Hubs;

@@ -1,4 +1,5 @@
 ﻿using MeowAutoChrome.Web.Hubs;
+using MeowAutoChrome.Contracts.SignalR;
 using MeowAutoChrome.Web.Models;
 using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
@@ -21,7 +22,7 @@ public class ScreencastService : MeowAutoChrome.Web.Abstractions.IScreencastServ
     /// <summary>
     /// 用于向所有连接的客户端广播帧数据和状态变化（如禁用通知）
     /// </summary>
-    private readonly IHubContext<BrowserHub, MeowAutoChrome.Contracts.SignalR.IBrowserClient> hub;
+    private readonly IHubContext<BrowserHub, IBrowserClient> hub;
     private readonly ILogger<ScreencastService> _logger;
     /// <summary>
     /// 当前的 CDP 会话实例；null 表示未启动推流

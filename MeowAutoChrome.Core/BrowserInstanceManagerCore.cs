@@ -173,7 +173,46 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
 
     public Task SetViewportSizeAsync(int width, int height) => Task.CompletedTask;
 
-    public Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false) => Task.CompletedTask;
+    public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false)
+    {
+        // If no instances, nothing to do.
+        if (!_instances.Any())
+            return;
+
+        // Normalize root
+        var root = string.IsNullOrWhiteSpace(primaryUserDataDirectory) ? ProgramSettings.GetDefaultUserDataDirectoryPath() : Path.GetFullPath(primaryUserDataDirectory);
+
+        // Capture existing instances info
+        var existing = _instances.Values.Select(i => new { i.InstanceId, i.DisplayName, i.OwnerId, UserData = i.UserDataDirectoryPath, WasSelected = string.Equals(i.InstanceId, _currentInstanceId, StringComparison.OrdinalIgnoreCase) }).ToList();
+
+        // Remove all instances
+        foreach (var item in existing)
+        {
+            if (_instances.ContainsKey(item.InstanceId))
+            {
+                try { await RemoveAsync(item.InstanceId); } catch { }
+            }
+        }
+
+        // Recreate instances using same ids under the new root and with new headless flag
+        string? newCurrent = null;
+        foreach (var item in existing)
+        {
+            try
+            {
+                var id = await CreateAsync(item.OwnerId, item.DisplayName ?? "Browser", root, headless: isHeadless, previewInstanceId: item.InstanceId);
+                if (item.WasSelected)
+                    newCurrent = id;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to recreate instance {Id} during launch settings update", item.InstanceId);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(newCurrent))
+            _currentInstanceId = newCurrent;
+    }
 
     public async Task<bool> CloseTabAsync(string tabId)
     {
@@ -262,6 +301,13 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
     }
 
     public bool TryGet(string id, out ICoreBrowserInstance inst) => _instances.TryGetValue(id, out inst);
+
+    public ICoreBrowserInstance? GetInstance(string instanceId) => _instances.TryGetValue(instanceId, out var inst) ? inst : null;
+
+    public async Task<bool> CloseInstanceAsync(string instanceId)
+    {
+        return await RemoveAsync(instanceId);
+    }
 
     public async Task<bool> RemoveAsync(string id)
     {

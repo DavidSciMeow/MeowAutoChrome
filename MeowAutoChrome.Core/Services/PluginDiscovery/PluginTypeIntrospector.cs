@@ -94,8 +94,8 @@ internal static class PluginTypeIntrospector
     {
         public static bool HasSupportedSignature(MethodInfo method)
         {
-            var target = typeof(Task<>).MakeGenericType(typeof(PAResult));
-            return target.IsAssignableFrom(method.ReturnType);
+            // Accept any return shape for plugin actions. Execution layer will normalize results.
+            return true;
         }
     }
 }

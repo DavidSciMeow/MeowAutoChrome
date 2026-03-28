@@ -1,7 +1,7 @@
-﻿using System;
-using System.Threading.Tasks;
-using MeowAutoChrome.Contracts;
+﻿using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.Attributes;
+using Microsoft.Playwright;
+using System.Threading.Tasks;
 
 namespace MeowAutoChrome.ExamplePlugin;
 
@@ -12,15 +12,15 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
 
     public bool SupportsPause => false;
 
-    [Obsolete("Legacy host context. Host will inject IPluginContext facade. Prefer MeowAutoChrome.Contracts.Facade.IPluginContext in future.")]
     public IPluginContext? HostContext { get; set; }
 
-    public async Task<PAResult> StartAsync()
+    public async Task<IResult> StartAsync()
     {
         State = PluginState.Running;
 
         try
         {
+            // If host provided an active page, report its title (as before)
             if (HostContext?.ActivePage is not null)
             {
                 string? title = null;
@@ -33,30 +33,143 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
                     // swallow, best-effort
                 }
 
-                return new PAResult(title is null ? "Started. Active page present but title unavailable." : $"Active page title: {title}");
+                return Result.Ok(new { title });
             }
 
-            return new PAResult("Started. No active page available.");
+            // Demonstrate requesting a fresh browser instance from the host.
+            if (HostContext is not null)
+            {
+                var opts = new BrowserCreationOptions(OwnerId: "example.minimal", UserDataDirectory: null, BrowserType: "chromium", Headless: true, UserAgent: null, DisplayName: "ExamplePluginInstance");
+                var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
+                if (!string.IsNullOrWhiteSpace(instanceId))
+                {
+                    return Result.Ok(new { instanceId });
+                }
+
+                return Result.Fail("Host refused to create a new browser instance.");
+            }
+
+            return Result.Ok(new { message = "Started. No active page available and no host context to request new one." });
         }
         catch (Exception ex)
         {
-            return new PAResult(ex.Message);
+            return Result.Fail(ex.Message);
         }
     }
 
-    public Task<PAResult> StopAsync()
+    public Task<IResult> StopAsync()
     {
         State = PluginState.Stopped;
-        return Task.FromResult(new PAResult("Stopped."));
+        return Task.FromResult<IResult>(Result.Ok(new { message = "Stopped." }));
     }
 
-    public Task<PAResult> PauseAsync() => Task.FromResult(new PAResult("Pause not supported."));
+    public Task<IResult> PauseAsync() => Task.FromResult<IResult>(Result.Ok(new { message = "Pause not supported." }));
 
-    public Task<PAResult> ResumeAsync() => Task.FromResult(new PAResult("Resume not supported."));
+    public Task<IResult> ResumeAsync() => Task.FromResult<IResult>(Result.Ok(new { message = "Resume not supported." }));
 
     public ValueTask DisposeAsync()
     {
         // No unmanaged resources in this minimal example.
         return ValueTask.CompletedTask;
+    }
+
+    // Extra demo actions to illustrate different return shapes for plugins
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ReturnObject")]
+    public async Task<IResult> ReturnObjectAsync()
+    {
+        await Task.Delay(10);
+        return Result.Ok(new { now = DateTime.UtcNow, message = "returned object" });
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ReturnGeneric")]
+    public Task<Result<int>> ReturnGenericAsync()
+    {
+        return Task.FromResult(Result<int>.Ok(42));
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "VoidTask")]
+    public async Task VoidTaskAsync()
+    {
+        await Task.Delay(10);
+        // no return
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "Throw")]
+    public Task<IResult> ThrowAsync()
+    {
+        throw new InvalidOperationException("示例异常");
+    }
+
+    // Additional demo actions to illustrate more return shapes and HostContext usage
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ReturnPrimitive")]
+    public Task<int> ReturnPrimitiveAsync()
+    {
+        return Task.FromResult(7);
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ValueTaskResult")]
+    public ValueTask<Result<string>> ValueTaskResultAsync()
+    {
+        return new ValueTask<Result<string>>(Result<string>.Ok("value-task-result"));
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "RequestInstanceWithArgs")]
+    public async Task<IResult> RequestInstanceWithArgsAsync()
+    {
+        if (HostContext is null) return Result.Fail("No host context available");
+
+        var opts = new BrowserCreationOptions(
+            OwnerId: HostContext.PluginId,
+            UserDataDirectory: null,
+            BrowserType: "chromium",
+            Headless: true,
+            UserAgent: "ExamplePlugin/1.0",
+            DisplayName: "Example-With-Args",
+            Args: new[] { "--no-sandbox", "--disable-setuid-sandbox" }
+        );
+
+        var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
+        if (string.IsNullOrWhiteSpace(instanceId))
+            return Result.Fail("Host refused to create a new browser instance.");
+
+        return Result.Ok(new { instanceId });
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "EvaluateActivePage")]
+    public async Task<IResult> EvaluateActivePageAsync()
+    {
+        if (HostContext?.ActivePage is null) return Result.Fail("No active page available");
+
+        try
+        {
+            // Read document title via Playwright evaluate
+            var title = await HostContext.ActivePage.EvaluateAsync<string>("() => document.title");
+            return Result.Ok(new { title });
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "GetInstanceInfo")]
+    public async Task<IResult> GetInstanceInfoAsync()
+    {
+        if (HostContext is null) return Result.Fail("No host context available");
+
+        // Expect instanceId to be provided via HostContext.Arguments["instanceId"]
+        if (!HostContext.Arguments.TryGetValue("instanceId", out var iid) || string.IsNullOrWhiteSpace(iid))
+            return Result.Fail("Missing required argument 'instanceId' in HostContext.Arguments");
+
+        try
+        {
+            var info = await HostContext.GetBrowserInstanceInfoAsync(iid!, HostContext.CancellationToken);
+            if (info is null) return Result.Fail("Instance not found");
+            return Result.Ok(info);
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
     }
 }

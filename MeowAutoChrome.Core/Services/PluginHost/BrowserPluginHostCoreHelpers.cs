@@ -119,7 +119,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
     {
         public static bool HasSupportedSignature(MethodInfo method)
         {
-            var target = typeof(Task<>).MakeGenericType(typeof(PAResult));
+            var target = typeof(Task<>).MakeGenericType(typeof(IResult));
             return target.IsAssignableFrom(method.ReturnType);
         }
     }

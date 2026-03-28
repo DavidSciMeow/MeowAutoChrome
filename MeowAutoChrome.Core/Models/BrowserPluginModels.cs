@@ -35,7 +35,7 @@ public sealed record BrowserPluginControlRequest(string PluginId, string Command
 
 public sealed record BrowserPluginFunctionExecutionRequest(string PluginId, string FunctionId, IReadOnlyDictionary<string, string?>? Arguments);
 
-public sealed record BrowserPluginExecutionResponse(string PluginId, string TargetId, string? Message, string State, IReadOnlyDictionary<string, string?> Data);
+public sealed record BrowserPluginExecutionResponse(string PluginId, string TargetId, string? Message, string State, object? Data);
 
 public sealed record BrowserPluginOutputUpdate(string PluginId, string TargetId, string? Message, IReadOnlyDictionary<string, string?> Data, bool OpenModal, DateTimeOffset TimestampUtc);
 

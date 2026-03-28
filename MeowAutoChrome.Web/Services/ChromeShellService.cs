@@ -158,32 +158,27 @@ public sealed class ChromeShellService(
         try
         {
             process.EnableRaisingEvents = true;
-            process.Exited += (_, _) =>
-            {
-                try
+                process.Exited += (_, _) =>
                 {
-                    if (_applicationStopping)
-                        return;
-
-                    var exitCode = -1;
-                    try { exitCode = process.HasExited ? process.ExitCode : -1; } catch { }
-                    appLogService.WriteEntry(LogLevel.Warning, $"Chrome shell exited. ProcessId={process.Id}; ExitCode={exitCode}", nameof(ChromeShellService));
-
-                    // When the main Chrome shell launched by this program is closed, treat it as intent to stop the whole application.
                     try
                     {
-                        hostApplicationLifetime.StopApplication();
+                        if (_applicationStopping)
+                            return;
+
+                        var exitCode = -1;
+                        try { exitCode = process.HasExited ? process.ExitCode : -1; } catch { }
+                        appLogService.WriteEntry(LogLevel.Warning, $"Chrome shell exited. ProcessId={process.Id}; ExitCode={exitCode}", nameof(ChromeShellService));
+
+                        // Do not stop the entire application when the external Chrome process exits.
+                        // Previously this treated closing the Chrome shell as an intent to stop the host,
+                        // which caused the web app to exit unexpectedly when the browser closed.
+                        // Keep the app running and optionally implement restart logic if desired.
                     }
                     catch (Exception ex)
                     {
-                        try { appLogService.WriteEntry(LogLevel.Error, $"Failed to stop application after Chrome exit: {ex}", nameof(ChromeShellService)); } catch { }
+                        try { appLogService.WriteEntry(LogLevel.Error, $"Error in Chrome shell exit handler: {ex}", nameof(ChromeShellService)); } catch { }
                     }
-                }
-                catch (Exception ex)
-                {
-                    try { appLogService.WriteEntry(LogLevel.Error, $"Error in Chrome shell exit handler: {ex}", nameof(ChromeShellService)); } catch { }
-                }
-            };
+                };
         }
         catch (Exception ex)
         {

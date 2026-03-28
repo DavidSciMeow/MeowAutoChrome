@@ -314,6 +314,76 @@ public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvid
         }
 
         /// <summary>
+        /// Show plugin upload/manage page (moved from Browser area to Settings sidebar).
+        /// </summary>
+        [HttpGet]
+        public IActionResult PluginUpload()
+        {
+            return View();
+        }
+
+        /// <summary>
+        /// Handle plugin file or folder upload. Accepts multiple files (directory upload supported via webkitdirectory front-end).
+        /// Saves files into Plugins/uploads/{uploadId} and triggers discovery on saved DLLs.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> PluginUpload(List<Microsoft.AspNetCore.Http.IFormFile> files)
+        {
+            if (files is null || files.Count == 0)
+                return Problem(detail: "上传文件为空", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+            try
+            {
+                var pluginHost = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginHostCore>();
+                var settingsProvider = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Interface.IProgramSettingsProvider>();
+                var settings = await settingsProvider.GetAsync();
+
+                // reuse BrowserController.UploadPlugin logic by calling into pluginHost.LoadPluginAssemblyAsync per-dll
+                var uploadDir = Path.Combine(pluginHost.PluginRootPath, "uploads", Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(uploadDir);
+
+                // enforce server-side limits
+                if (files.Count > Math.Max(1, settings.MaxUploadFiles))
+                    return Problem(detail: "上传文件数超过限制", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+                foreach (var f in files)
+                {
+                    if (f.Length > (long)settings.MaxUploadFileSizeMb * 1024 * 1024)
+                        return Problem(detail: $"文件 {f.FileName} 大小超过限制 ({settings.MaxUploadFileSizeMb} MB)", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+                    var dest = Path.Combine(uploadDir, Path.GetFileName(f.FileName));
+                    await using (var fs = System.IO.File.Create(dest))
+                        await f.CopyToAsync(fs);
+                }
+
+                // extract zips
+                foreach (var zip in Directory.GetFiles(uploadDir, "*.zip", SearchOption.TopDirectoryOnly))
+                {
+                    var extractDir = Path.Combine(uploadDir, Path.GetFileNameWithoutExtension(zip));
+                    if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
+                    System.IO.Compression.ZipFile.ExtractToDirectory(zip, extractDir);
+                }
+
+                var dlls = Directory.GetFiles(uploadDir, "*.dll", SearchOption.AllDirectories);
+                if (dlls.Length > settings.MaxDllsPerUpload)
+                    return Problem(detail: "上传中包含过多 DLL，停止处理以保护服务器资源", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
+
+                var processed = new List<object>();
+                foreach (var dll in dlls)
+                {
+                    var result = await HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginHostCore>().LoadPluginAssemblyAsync(dll);
+                    processed.Add(new { path = dll, plugins = result.Plugins, errors = result.Errors, errorsDetailed = result.ErrorsDetailed });
+                }
+
+                return Json(new { uploaded = true, uploadDir, processed });
+            }
+            catch (Exception ex)
+            {
+                return Problem(detail: ex.Message, title: "PluginUploadFailed", statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }
+
+        /// <summary>
         /// 错误页面展示接口。
         /// </summary>
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]

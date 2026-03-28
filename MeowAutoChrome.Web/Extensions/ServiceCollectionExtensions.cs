@@ -1,17 +1,12 @@
-﻿using System;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Core.Services;
+using MeowAutoChrome.Contracts.SignalR;
 using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
-using MeowAutoChrome.Core.Services.PluginHost;
 using MeowAutoChrome.Web.Services;
 using MeowAutoChrome.Web.Abstractions;
 using MeowAutoChrome.Web.Hubs;
-using MeowAutoChrome.Contracts.SignalR;
-using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Web.Extensions;
 
@@ -47,7 +42,8 @@ public static class ServiceCollectionExtensions
                 AssemblyLoader = sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginAssemblyLoader>(),
                 Executor = sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.IPluginExecutor>(),
                 ExecutionService = sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.PluginExecutionService>(),
-                PublishingService = sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.PluginPublishingService>()
+                PublishingService = sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.PluginPublishingService>(),
+                SettingsProvider = sp.GetRequiredService<IProgramSettingsProvider>()
             }, sp.GetRequiredService<ILogger<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>>()));
         services.AddSingleton<MeowAutoChrome.Core.Interface.IPluginHostCore>(sp => sp.GetRequiredService<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>());
 

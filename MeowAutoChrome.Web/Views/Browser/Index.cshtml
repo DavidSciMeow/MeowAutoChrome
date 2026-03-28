@@ -39,12 +39,38 @@
         </div>
     </div>
 </div>
+<!-- Headless confirm modal -->
+<div class="modal fade" id="headlessConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">切换 Headless 模式</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="headlessConfirmMessage">切换 Headless 模式会重启浏览器实例并导致当前标签页丢失。是否继续？</p>
+                <div id="headlessConfirmProgress" class="d-none">
+                    <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                    <span class="ms-2">正在应用变更，请稍候...</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="headlessConfirmSubmitBtn">确认并重启</button>
+            </div>
+        </div>
+    </div>
+</div>
                     <button type="button" class="btn btn-sm btn-primary browser-live-toggle" id="liveToggleBtn">实时画面</button>
                     <small class="browser-tabstrip-metric" id="cpuDisplay">CPU --</small>
                     <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
                     <small class="browser-tabstrip-metric" id="fpsDisplay">FPS --</small>
                     <span id="connStatus" class="badge bg-secondary">未连接</span>
                     <span id="instanceStatus" class="badge bg-danger d-none ms-2">无实例</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="headlessToggleBtn" title="切换 Headless 模式">
+                        <i class="fa-solid fa-eye-slash me-1"></i>
+                        <span id="headlessBadge" class="badge bg-secondary">Headless</span>
+                    </button>
                 </div>
 
                 <div class="browser-toolbar">
@@ -456,7 +482,64 @@
                 browserHubConnectionId = connectionId || conn.connectionId || null;
                 status.textContent = "已连接";
                 status.className = "badge bg-success";
+                // setup headless toggle UI handlers after reconnect
+                try { setupHeadlessToggle(); } catch (e) { }
             });
+
+            // start SignalR connection and initialize UI handlers/status
+            (async () => {
+                try {
+                    await conn.start();
+                    browserHubConnectionId = conn.connectionId || null;
+                    status.textContent = "已连接";
+                    status.className = "badge bg-success";
+                    try { setupHeadlessToggle(); } catch (e) { }
+                    try { await refreshStatus(); } catch (e) { }
+                } catch (e) {
+                    console.error('SignalR start failed', e);
+                    status.textContent = '未连接';
+                    status.className = 'badge bg-secondary';
+                }
+            })();
+
+            function setupHeadlessToggle() {
+                const headlessToggleBtn = document.getElementById('headlessToggleBtn');
+                const headlessConfirmModalEl = document.getElementById('headlessConfirmModal');
+                const headlessConfirmModal = headlessConfirmModalEl ? new bootstrap.Modal(headlessConfirmModalEl) : null;
+                const headlessConfirmSubmitBtn = document.getElementById('headlessConfirmSubmitBtn');
+                const headlessConfirmProgress = document.getElementById('headlessConfirmProgress');
+
+                if (!headlessToggleBtn || !headlessConfirmModal || !headlessConfirmSubmitBtn) return;
+
+                // avoid multiple event bindings
+                headlessToggleBtn.replaceWith(headlessToggleBtn.cloneNode(true));
+                const newToggle = document.getElementById('headlessToggleBtn');
+                newToggle.addEventListener('click', () => {
+                    headlessConfirmProgress.classList.add('d-none');
+                    headlessConfirmSubmitBtn.disabled = false;
+                    headlessConfirmModal.show();
+                });
+
+                headlessConfirmSubmitBtn.replaceWith(headlessConfirmSubmitBtn.cloneNode(true));
+                const newSubmit = document.getElementById('headlessConfirmSubmitBtn');
+                newSubmit.addEventListener('click', async () => {
+                    newSubmit.disabled = true;
+                    headlessConfirmProgress.classList.remove('d-none');
+                    try {
+                        const badge = document.getElementById('headlessBadge');
+                        const isHeadless = badge && badge.textContent && badge.textContent.indexOf('Headless') >= 0;
+                        await postJson('/Browser/SetHeadless', !isHeadless);
+                        headlessConfirmModal.hide();
+                        showToast('已切换', 'Headless 模式已切换，正在重建实例并刷新插件。', false);
+                        await refreshStatus();
+                    } catch (e) {
+                        showToast('失败', e.message || '切换 Headless 失败', true);
+                    } finally {
+                        headlessConfirmProgress.classList.add('d-none');
+                        newSubmit.disabled = false;
+                    }
+                });
+            }
             conn.onclose(()        => {
                 browserHubConnectionId = null;
                 status.textContent = "已断开"; status.className = "badge bg-danger";
@@ -1004,6 +1087,16 @@
                     if (instanceStatusBadge)
                         instanceStatusBadge.classList.add("d-none");
                 }
+
+                // 更新 Headless 徽章（兼容 camelCase 与 PascalCase）
+                try {
+                    const hb = document.getElementById('headlessBadge');
+                    if (hb) {
+                        const isHeadless = (data?.isHeadless === true) || (data?.IsHeadless === true);
+                        hb.textContent = isHeadless ? 'Headless' : 'Headful';
+                        hb.className = 'badge ' + (isHeadless ? 'bg-secondary' : 'bg-success');
+                    }
+                } catch (e) { }
 
                 setScreencastAvailability(data.supportsScreencast !== false && hasInstance);
                 if (screencastAvailable)
@@ -1610,36 +1703,7 @@
                 pluginCatalog.clear();
                 pluginOutputUi.clear();
 
-                // plugin management UI (load plugin by path)
-                const management = document.createElement("div");
-                management.className = "d-flex gap-2 mb-3 align-items-center";
-                const pluginPathInput = document.createElement("input");
-                pluginPathInput.type = "text";
-                pluginPathInput.placeholder = "插件 DLL 路径（例如 C:\\\\path\\\\to\\\\plugin.dll）";
-                pluginPathInput.className = "form-control form-control-sm";
-                const loadBtn = document.createElement("button");
-                loadBtn.type = "button";
-                loadBtn.className = "btn btn-sm btn-primary";
-                loadBtn.textContent = "加载插件";
-                loadBtn.addEventListener("click", async () => {
-                    try {
-                        loadBtn.disabled = true;
-                        const res = await postJson('/Browser/LoadPlugin', pluginPathInput.value.trim());
-                        await loadPlugins();
-                        if (res.errors && res.errors.length) {
-                            showToast('加载完成（有错误）', '请查看详细信息', true);
-                            showOperationModal('加载结果（有错误）', '部分插件加载失败，详情如下：', res.errors);
-                        } else {
-                            showToast('加载完成', '插件已加载', false);
-                        }
-                    } catch (e) {
-                        showToast('加载失败', e.message || String(e), true);
-                        showOperationModal('加载失败', '加载插件时发生异常：', [e.message || String(e)]);
-                    } finally { loadBtn.disabled = false; }
-                });
-                management.appendChild(pluginPathInput);
-                management.appendChild(loadBtn);
-                pluginHost.appendChild(management);
+                // plugin management moved to standalone page (/Home/PluginUpload)
 
                 if (!plugins.length) {
                     const empty = document.createElement("div");
