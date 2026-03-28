@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
+﻿using System.Reflection;
 using MeowAutoChrome.Core.Models;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
@@ -21,13 +18,13 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
 
     public IEnumerable<string> EnumeratePluginAssemblies() => Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories);
 
-    public PluginDiscoverySnapshot DiscoverAll(MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader assemblyLoader)
+    public PluginDiscoverySnapshot DiscoverAll(Interface.ICorePluginAssemblyLoader assemblyLoader)
     {
         EnsurePluginDirectoryExists();
 
         var plugins = new List<RuntimeBrowserPlugin>();
         var errors = new List<string>();
-        var errorsDetailed = new List<MeowAutoChrome.Core.Models.BrowserPluginErrorDescriptor>();
+        var errorsDetailed = new List<BrowserPluginErrorDescriptor>();
 
         foreach (var pluginPath in EnumeratePluginAssemblies())
         {
@@ -51,7 +48,7 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
                 var detail = ex.ToString();
                 var message = $"插件程序集 {Path.GetFileName(pluginPath)} 元数据扫描失败：{detail}";
                 errors.Add(message);
-                errorsDetailed.Add(new MeowAutoChrome.Core.Models.BrowserPluginErrorDescriptor(Path.GetFileName(pluginPath), ex.Message, detail));
+                errorsDetailed.Add(new BrowserPluginErrorDescriptor(Path.GetFileName(pluginPath), ex.Message, detail));
             }
         }
 
@@ -63,7 +60,7 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
             [.. errorsDetailed]);
     }
 
-    public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<MeowAutoChrome.Core.Models.BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader assemblyLoader)
+    public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.ICorePluginAssemblyLoader assemblyLoader)
     {
         var plugins = new List<RuntimeBrowserPlugin>();
         var errors = new List<string>();
@@ -103,10 +100,10 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
             try
             {
                 var type = assembly.GetType(candidateTypeName, throwOnError: false, ignoreCase: false);
-                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(MeowAutoChrome.Contracts.IPlugin).IsAssignableFrom(type))
+                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(Contracts.IPlugin).IsAssignableFrom(type))
                     continue;
 
-                var pluginAttribute = type.GetCustomAttribute<MeowAutoChrome.Contracts.Attributes.PluginAttribute>();
+                var pluginAttribute = type.GetCustomAttribute<Contracts.Attributes.PluginAttribute>();
                 if (pluginAttribute is null)
                     continue;
 

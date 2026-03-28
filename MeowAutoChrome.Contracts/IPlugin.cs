@@ -1,9 +1,7 @@
-﻿using System;
-// Note: BrowserPlugin types have been migrated into MeowAutoChrome.Core.Models.
+﻿// Note: BrowserPlugin types have been migrated into MeowAutoChrome.Core.Models.
 // The minimal plugin-facing surface (`IPlugin`, `PAResult`, `PluginState`) remains
 // in Contracts. Avoid referencing removed Contracts sub-namespaces.
 using System.Threading.Tasks;
-using System.Threading;
 
 namespace MeowAutoChrome.Contracts;
 

@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using MeowAutoChrome.Contracts;
+﻿using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Extensions;
 
@@ -10,7 +7,7 @@ namespace MeowAutoChrome.Core.Extensions;
 /// </summary>
 public static class PluginResultExtensions
 {
-    public static Task<IResult> Ok(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Task.FromResult<IResult>(plugin.OkResult(message, data));
+    public static Task<IResult> Ok(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Task.FromResult(plugin.OkResult(message, data));
     public static IResult OkResult(this IPlugin plugin, string message, IReadOnlyDictionary<string, string?>? data = null) => Result.Ok(MergeDefaultData(plugin, data));
 
     private static Dictionary<string, string?> MergeDefaultData(IPlugin plugin, IReadOnlyDictionary<string, string?>? data)

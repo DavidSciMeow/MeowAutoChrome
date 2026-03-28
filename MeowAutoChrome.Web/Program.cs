@@ -1,20 +1,15 @@
-﻿using MeowAutoChrome.Web;
-using MeowAutoChrome.Web.Extensions;
+﻿using MeowAutoChrome.Web.Extensions;
 using MeowAutoChrome.Web.Services;
-using Microsoft.AspNetCore.Builder;
 using MeowAutoChrome.Web.Hubs;
-using Microsoft.AspNetCore.SignalR;
-using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core.Services;
-using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
 
 var appLogService = new AppLogService();
 var originalConsoleOut = Console.Out;
 var originalConsoleError = Console.Error;
 
-Console.SetOut(new MeowAutoChrome.Core.Services.ConsoleLogTextWriter(originalConsoleOut, appLogService, LogLevel.Information, "Console.Out")); 
-Console.SetError(new MeowAutoChrome.Core.Services.ConsoleLogTextWriter(originalConsoleError, appLogService, LogLevel.Error, "Console.Error")); 
+Console.SetOut(new ConsoleLogTextWriter(originalConsoleOut, appLogService, LogLevel.Information, "Console.Out")); 
+Console.SetError(new ConsoleLogTextWriter(originalConsoleError, appLogService, LogLevel.Error, "Console.Error")); 
 
 AppDomain.CurrentDomain.UnhandledException += (_, args) => appLogService.WriteEntry(LogLevel.Critical, args.ExceptionObject?.ToString() ?? "Unknown unhandled exception.", "UnhandledException");
 TaskScheduler.UnobservedTaskException += (_, args) => appLogService.WriteEntry(LogLevel.Error, args.Exception.ToString(), "UnobservedTaskException");
@@ -59,7 +54,7 @@ app.MapControllerRoute("default", "{controller=Browser}/{action=Index}/{id?}").W
 
 try
 {
-    app.Services.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginHostCore>().EnsurePluginDirectoryExists();
+    app.Services.GetRequiredService<IPluginHostCore>().EnsurePluginDirectoryExists();
 }
 catch (Exception ex)
 {
@@ -68,11 +63,11 @@ catch (Exception ex)
 // Inject Web-level custom settings into Core program settings provider at startup if configured
 try
 {
-    var provider = app.Services.GetRequiredService<MeowAutoChrome.Core.Interface.IProgramSettingsProvider>();
+    var provider = app.Services.GetRequiredService<IProgramSettingsProvider>();
     var configSection = builder.Configuration.GetSection("Web:CustomSettings");
     if (configSection.Exists())
     {
-        var dict = configSection.Get<System.Collections.Generic.Dictionary<string, string?>>() ?? new();
+        var dict = configSection.Get<Dictionary<string, string?>>() ?? new();
         provider.InjectCustomSettingsAsync(dict).GetAwaiter().GetResult();
         appLogService.WriteEntry(LogLevel.Information, "Injected Web custom settings into Core.", "Startup");
     }

@@ -1,18 +1,14 @@
 ﻿using Microsoft.Playwright;
-using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Struct;
 using MeowAutoChrome.Core.Interface;
-using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Linq;
 
 namespace MeowAutoChrome.Core;
 
-public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBrowserInstanceManager
+public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
 {
     private readonly ILogger<BrowserInstanceManagerCore> _logger;
     private readonly ILoggerFactory? _loggerFactory;
@@ -39,7 +35,7 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
     /// </summary>
     public async Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string ownerId, string? userDataDirRoot = null)
     {
-        var settings = _settingsProvider is null ? new MeowAutoChrome.Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
         var root = string.IsNullOrWhiteSpace(userDataDirRoot) ? settings.UserDataDirectory : userDataDirRoot!;
         var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
         var id = $"{ownerId}-{shortId}";
@@ -61,9 +57,9 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
 
     public string CurrentInstanceId => !string.IsNullOrWhiteSpace(_currentInstanceId) ? _currentInstanceId : (CurrentInstance?.InstanceId ?? string.Empty);
     public bool IsHeadless => CurrentInstance?.IsHeadless ?? true;
-    IBrowserContext? MeowAutoChrome.Core.Interface.ICoreBrowserInstanceManager.BrowserContext => CurrentInstance?.BrowserContext;
-    IPage? MeowAutoChrome.Core.Interface.ICoreBrowserInstanceManager.ActivePage => CurrentInstance?.GetSelectedPage();
-    string? MeowAutoChrome.Core.Interface.ICoreBrowserInstanceManager.SelectedPageId => CurrentInstance?.SelectedPageId;
+    IBrowserContext? ICoreBrowserInstanceManager.BrowserContext => CurrentInstance?.BrowserContext;
+    IPage? ICoreBrowserInstanceManager.ActivePage => CurrentInstance?.GetSelectedPage();
+    string? ICoreBrowserInstanceManager.SelectedPageId => CurrentInstance?.SelectedPageId;
 
     public IBrowserContext? BrowserContext => CurrentInstance?.BrowserContext;
     public IPage? ActivePage => CurrentInstance?.GetSelectedPage();
@@ -128,7 +124,7 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
     // High-level helpers used by Web controllers
     public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null)
     {
-        var settings = _settingsProvider is null ? new MeowAutoChrome.Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
         var userData = string.IsNullOrWhiteSpace(userDataDirectory) ? settings.UserDataDirectory : userDataDirectory!;
         var name = string.IsNullOrWhiteSpace(displayName) ? "Browser" : displayName!;
         return await CreateAsync(ownerPluginId, name, userData, settings.Headless, previewInstanceId);
@@ -225,7 +221,7 @@ public class BrowserInstanceManagerCore : MeowAutoChrome.Core.Interface.ICoreBro
         return false;
     }
 
-    public async Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateInstanceSettingsAsync(BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
     {
         if (!_instances.TryGetValue(request.InstanceId, out var inst)) return false;
         inst.UserDataDirectoryPath = request.UserDataDirectory;

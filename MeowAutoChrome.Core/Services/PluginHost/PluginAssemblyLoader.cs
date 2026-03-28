@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
-using System.Runtime.Loader;
-using MeowAutoChrome.Core.Services.PluginHost;
+﻿using System.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
@@ -12,7 +7,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// Responsible for loading plugin assemblies into isolated PluginLoadContext instances
 /// and caching the loaded assemblies and their contexts. Extracted from BrowserPluginHostCore.
 /// </summary>
-public sealed class PluginAssemblyLoader : MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader, IPluginAssemblyLoader
+public sealed class PluginAssemblyLoader : Interface.ICorePluginAssemblyLoader, IPluginAssemblyLoader
 {
     private readonly Dictionary<string, Assembly> _assemblies = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PluginLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);

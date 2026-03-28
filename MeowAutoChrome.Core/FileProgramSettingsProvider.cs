@@ -7,9 +7,9 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
     private readonly SemaphoreSlim _semaphore = new(1,1);
     private readonly string _settingsFilePath = MeowAutoChrome.Core.Struct.ProgramSettings.GetSettingsFilePath();
     private readonly string _legacySettingsFilePath = MeowAutoChrome.Core.Struct.ProgramSettings.GetLegacySettingsFilePath();
-    private MeowAutoChrome.Core.Struct.ProgramSettings? _cachedSettings;
+    private Struct.ProgramSettings? _cachedSettings;
 
-    public async Task<MeowAutoChrome.Core.Struct.ProgramSettings> GetAsync()
+    public async Task<Struct.ProgramSettings> GetAsync()
     {
         await _semaphore.WaitAsync();
         try
@@ -20,19 +20,19 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
 
             if (!File.Exists(_settingsFilePath))
             {
-                _cachedSettings = new MeowAutoChrome.Core.Struct.ProgramSettings();
+                _cachedSettings = new Struct.ProgramSettings();
                 return Clone(_cachedSettings);
             }
 
             await using var stream = File.OpenRead(_settingsFilePath);
-            _cachedSettings = await JsonSerializer.DeserializeAsync<MeowAutoChrome.Core.Struct.ProgramSettings>(stream) ?? new MeowAutoChrome.Core.Struct.ProgramSettings();
+            _cachedSettings = await JsonSerializer.DeserializeAsync<Struct.ProgramSettings>(stream) ?? new Struct.ProgramSettings();
             Normalize(_cachedSettings);
             return Clone(_cachedSettings);
         }
         finally { _semaphore.Release(); }
     }
 
-    public async Task SaveAsync(MeowAutoChrome.Core.Struct.ProgramSettings settings)
+    public async Task SaveAsync(Struct.ProgramSettings settings)
     {
         Normalize(settings);
         await _semaphore.WaitAsync();
@@ -47,7 +47,7 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
         finally { _semaphore.Release(); }
     }
 
-    public async Task InjectCustomSettingsAsync(System.Collections.Generic.IDictionary<string, string?> customSettings)
+    public async Task InjectCustomSettingsAsync(IDictionary<string, string?> customSettings)
     {
         if (customSettings is null || customSettings.Count == 0) return;
 
@@ -65,7 +65,7 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
         finally { _semaphore.Release(); }
     }
 
-    private static void Normalize(MeowAutoChrome.Core.Struct.ProgramSettings settings)
+    private static void Normalize(Struct.ProgramSettings settings)
     {
         settings.SearchUrlTemplate = string.IsNullOrWhiteSpace(settings.SearchUrlTemplate) ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultSearchUrlTemplate : settings.SearchUrlTemplate.Trim();
         settings.UserDataDirectory = string.IsNullOrWhiteSpace(settings.UserDataDirectory) ? MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultUserDataDirectoryPath() : Path.GetFullPath(settings.UserDataDirectory);
@@ -83,6 +83,6 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
         File.Move(_legacySettingsFilePath, _settingsFilePath);
     }
 
-    private static MeowAutoChrome.Core.Struct.ProgramSettings Clone(MeowAutoChrome.Core.Struct.ProgramSettings settings)
-        => JsonSerializer.Deserialize<MeowAutoChrome.Core.Struct.ProgramSettings>(JsonSerializer.Serialize(settings)) ?? new MeowAutoChrome.Core.Struct.ProgramSettings();
+    private static Struct.ProgramSettings Clone(Struct.ProgramSettings settings)
+        => JsonSerializer.Deserialize<Struct.ProgramSettings>(JsonSerializer.Serialize(settings)) ?? new Struct.ProgramSettings();
 }

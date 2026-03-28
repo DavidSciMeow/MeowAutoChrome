@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace MeowAutoChrome.Core.Models;
+﻿namespace MeowAutoChrome.Core.Models;
 
 public sealed record BrowserPluginActionParameterOptionDescriptor(string Value, string Label);
 

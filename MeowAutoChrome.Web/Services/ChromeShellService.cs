@@ -1,9 +1,6 @@
 ﻿using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
-using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 

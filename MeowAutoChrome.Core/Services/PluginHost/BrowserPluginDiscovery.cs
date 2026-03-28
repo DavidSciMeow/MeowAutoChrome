@@ -2,20 +2,14 @@
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
     internal sealed class BrowserPluginDiscovery
     {
         private readonly IPluginDiscoveryService _discovery;
-    private readonly MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader _assemblyLoader;
+    private readonly ICorePluginAssemblyLoader _assemblyLoader;
         private readonly ILogger _logger;
         private readonly IPluginInstanceManager _instanceManager;
 
@@ -23,7 +17,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
         private readonly object _snapshotLock = new();
         private readonly TimeSpan _scanInterval = TimeSpan.FromSeconds(30);
 
-        public BrowserPluginDiscovery(IPluginDiscoveryService discovery, MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader assemblyLoader, ILogger logger, IPluginInstanceManager instanceManager)
+        public BrowserPluginDiscovery(IPluginDiscoveryService discovery, ICorePluginAssemblyLoader assemblyLoader, ILogger logger, IPluginInstanceManager instanceManager)
         {
             _discovery = discovery;
             _assemblyLoader = assemblyLoader;
@@ -159,10 +153,10 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
                 try
                 {
                     var type = assembly.GetType(candidateTypeName, throwOnError: false, ignoreCase: false);
-                    if (type is not { IsAbstract: false, IsInterface: false } || !typeof(MeowAutoChrome.Contracts.IPlugin).IsAssignableFrom(type))
+                    if (type is not { IsAbstract: false, IsInterface: false } || !typeof(Contracts.IPlugin).IsAssignableFrom(type))
                         continue;
 
-                    var pluginAttribute = type.GetCustomAttribute<MeowAutoChrome.Contracts.Attributes.PluginAttribute>();
+                    var pluginAttribute = type.GetCustomAttribute<Contracts.Attributes.PluginAttribute>();
                     if (pluginAttribute is null)
                         continue;
 

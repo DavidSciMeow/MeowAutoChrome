@@ -1,10 +1,8 @@
 ﻿using MeowAutoChrome.Web.Models;
-using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Struct;
 using MeowAutoChrome.Web.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace MeowAutoChrome.Web.Controllers
@@ -12,7 +10,7 @@ namespace MeowAutoChrome.Web.Controllers
     /// <summary>
     /// 主页控制器（用于设置、日志和隐私页面），负责处理程序设置的保存与验证，以及日志的展示与清理。
     /// </summary>
-public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvider programSettingsService, ScreencastService screencastService, Core.Services.AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
+public class HomeController(IProgramSettingsProvider programSettingsService, Core.Services.ScreencastServiceCore screencastService, Core.Services.AppLogService appLogService, BrowserInstanceManager browserInstances) : Controller
     {
         /// <summary>
         /// 将 FPS 值转换为帧间隔（毫秒），最小支持 16ms。
@@ -202,7 +200,7 @@ public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvid
                 UserAgent = settings.UserAgent,
                 AllowInstanceUserAgentOverride = settings.AllowInstanceUserAgentOverride,
                 Headless = settings.Headless,
-                CustomSettings = settings.CustomSettings ?? new System.Collections.Generic.Dictionary<string, string?>()
+                CustomSettings = settings.CustomSettings ?? new Dictionary<string, string?>()
             });
         }
 
@@ -327,15 +325,15 @@ public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvid
         /// Saves files into Plugins/uploads/{uploadId} and triggers discovery on saved DLLs.
         /// </summary>
         [HttpPost]
-        public async Task<IActionResult> PluginUpload(List<Microsoft.AspNetCore.Http.IFormFile> files)
+        public async Task<IActionResult> PluginUpload(List<IFormFile> files)
         {
             if (files is null || files.Count == 0)
                 return Problem(detail: "上传文件为空", title: "InvalidRequest", statusCode: StatusCodes.Status400BadRequest);
 
             try
             {
-                var pluginHost = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginHostCore>();
-                var settingsProvider = HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Interface.IProgramSettingsProvider>();
+                var pluginHost = HttpContext.RequestServices.GetRequiredService<IPluginHostCore>();
+                var settingsProvider = HttpContext.RequestServices.GetRequiredService<IProgramSettingsProvider>();
                 var settings = await settingsProvider.GetAsync();
 
                 // reuse BrowserController.UploadPlugin logic by calling into pluginHost.LoadPluginAssemblyAsync per-dll
@@ -371,7 +369,7 @@ public class HomeController(MeowAutoChrome.Core.Interface.IProgramSettingsProvid
                 var processed = new List<object>();
                 foreach (var dll in dlls)
                 {
-                    var result = await HttpContext.RequestServices.GetRequiredService<MeowAutoChrome.Core.Interface.IPluginHostCore>().LoadPluginAssemblyAsync(dll);
+                    var result = await HttpContext.RequestServices.GetRequiredService<IPluginHostCore>().LoadPluginAssemblyAsync(dll);
                     processed.Add(new { path = dll, plugins = result.Plugins, errors = result.Errors, errorsDetailed = result.ErrorsDetailed });
                 }
 

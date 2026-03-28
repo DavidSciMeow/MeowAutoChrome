@@ -1,7 +1,5 @@
 ﻿using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.Attributes;
-using Microsoft.Playwright;
-using System.Threading.Tasks;
 
 namespace MeowAutoChrome.ExamplePlugin;
 
@@ -74,46 +72,46 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     }
 
     // Extra demo actions to illustrate different return shapes for plugins
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ReturnObject")]
+    [PAction(Name = "ReturnObject")]
     public async Task<IResult> ReturnObjectAsync()
     {
         await Task.Delay(10);
         return Result.Ok(new { now = DateTime.UtcNow, message = "returned object" });
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ReturnGeneric")]
+    [PAction(Name = "ReturnGeneric")]
     public Task<Result<int>> ReturnGenericAsync()
     {
         return Task.FromResult(Result<int>.Ok(42));
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "VoidTask")]
+    [PAction(Name = "VoidTask")]
     public async Task VoidTaskAsync()
     {
         await Task.Delay(10);
         // no return
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "Throw")]
+    [PAction(Name = "Throw")]
     public Task<IResult> ThrowAsync()
     {
         throw new InvalidOperationException("示例异常");
     }
 
     // Additional demo actions to illustrate more return shapes and HostContext usage
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ReturnPrimitive")]
+    [PAction(Name = "ReturnPrimitive")]
     public Task<int> ReturnPrimitiveAsync()
     {
         return Task.FromResult(7);
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "ValueTaskResult")]
+    [PAction(Name = "ValueTaskResult")]
     public ValueTask<Result<string>> ValueTaskResultAsync()
     {
         return new ValueTask<Result<string>>(Result<string>.Ok("value-task-result"));
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "RequestInstanceWithArgs")]
+    [PAction(Name = "RequestInstanceWithArgs")]
     public async Task<IResult> RequestInstanceWithArgsAsync()
     {
         if (HostContext is null) return Result.Fail("No host context available");
@@ -135,7 +133,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
         return Result.Ok(new { instanceId });
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "EvaluateActivePage")]
+    [PAction(Name = "EvaluateActivePage")]
     public async Task<IResult> EvaluateActivePageAsync()
     {
         if (HostContext?.ActivePage is null) return Result.Fail("No active page available");
@@ -152,7 +150,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
         }
     }
 
-    [MeowAutoChrome.Contracts.Attributes.PAction(Name = "GetInstanceInfo")]
+    [PAction(Name = "GetInstanceInfo")]
     public async Task<IResult> GetInstanceInfoAsync()
     {
         if (HostContext is null) return Result.Fail("No host context available");

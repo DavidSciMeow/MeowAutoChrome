@@ -1,8 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace MeowAutoChrome.Core.Interface;
+﻿namespace MeowAutoChrome.Core.Interface;
 
 public interface IPluginOutputPublisher
 {

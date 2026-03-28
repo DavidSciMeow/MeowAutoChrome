@@ -1,10 +1,6 @@
 ﻿using System.Reflection;
-using System.Linq;
-using System.Collections.Generic;
 using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Core.Models;
-using System.Threading.Tasks;
-using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 

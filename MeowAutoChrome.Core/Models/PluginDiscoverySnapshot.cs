@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace MeowAutoChrome.Core.Models;
+﻿namespace MeowAutoChrome.Core.Models;
 
 public sealed class PluginDiscoverySnapshot(IReadOnlyList<RuntimeBrowserPlugin> plugins, IReadOnlyList<string> errors, IReadOnlyList<BrowserPluginErrorDescriptor>? errorsDetailed = null)
 {

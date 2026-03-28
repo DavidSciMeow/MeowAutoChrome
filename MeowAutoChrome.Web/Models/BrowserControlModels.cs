@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using MeowAutoChrome.Core.Models;
-
-namespace MeowAutoChrome.Web.Models;
+﻿namespace MeowAutoChrome.Web.Models;
 
 public sealed record BrowserCreateInstanceRequest(string? OwnerPluginId, string? DisplayName, string? UserDataDirectory, string? PreviewInstanceId);
 public sealed record BrowserCreateTabRequest(string? InstanceId, string? Url);
@@ -29,8 +26,13 @@ public sealed record BrowserStatusResponse(
     double MemoryUsageMb,
     int TotalPageCount,
     int PluginPanelWidth,
-    IReadOnlyList<MeowAutoChrome.Core.Models.BrowserTabInfo> Tabs,
+    IReadOnlyList<BrowserTabInfoDto> Tabs,
     string? CurrentInstanceId,
-    MeowAutoChrome.Core.Models.BrowserInstanceViewportSettingsResponse CurrentViewport,
+    BrowserInstanceViewportSettingsResponseDto CurrentViewport,
     bool IsHeadless);
+
+
+public sealed record BrowserTabInfoDto(string Id, string? Title, string? Url, bool IsActive, string? OwnerPluginId = null);
+
+public sealed record BrowserInstanceViewportSettingsResponseDto(int Width, int Height, string ViewportType = "Auto");
 

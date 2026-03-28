@@ -1,11 +1,7 @@
 ﻿using Microsoft.Playwright;
 using Microsoft.Extensions.Logging;
-using MeowAutoChrome.Core.Models;
-using System.Net;
 // using MeowAutoChrome.Core.Services; // not required in this file
 using System.Collections.Concurrent;
-using MeowAutoChrome.Core.Interface;
-using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core.Interface;
 
 namespace MeowAutoChrome.Core;

@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace MeowAutoChrome.Contracts;
+﻿namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// 插件状态枚举，表示插件当前的运行状态，包括停止、运行和暂停三种状态

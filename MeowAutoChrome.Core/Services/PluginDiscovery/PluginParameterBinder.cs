@@ -1,5 +1,4 @@
-﻿using System;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Reflection;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Contracts;

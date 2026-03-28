@@ -54,5 +54,5 @@ public sealed class ProgramSettingsViewModel
     /// <summary>
     /// 可选的自定义键值设置，由 Web UI 提供，注入到 Core 的 ProgramSettings.CustomSettings 中。
     /// </summary>
-    public System.Collections.Generic.Dictionary<string, string?>? CustomSettings { get; set; }
+    public Dictionary<string, string?>? CustomSettings { get; set; }
 }

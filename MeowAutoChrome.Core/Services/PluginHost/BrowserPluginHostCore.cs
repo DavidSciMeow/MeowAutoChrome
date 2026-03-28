@@ -11,10 +11,10 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// It exposes discovery, execution and publishing via IPluginOutputPublisher.
 /// </summary>
 [SuppressMessage("Maintainability", "Avoid types too big", Justification = "Planned refactor; suppressed temporarily to complete migration.")]
-public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPluginHostCore
+public sealed class BrowserPluginHostCore : IPluginHostCore
 {
-    private readonly MeowAutoChrome.Core.Interface.ICoreBrowserInstanceManager _browserInstances;
-    private readonly MeowAutoChrome.Core.Services.PluginDiscovery.IPluginDiscoveryService _discovery;
+    private readonly ICoreBrowserInstanceManager _browserInstances;
+    private readonly PluginDiscovery.IPluginDiscoveryService _discovery;
     private readonly IPluginOutputPublisher _publisher;
     private readonly ILogger<BrowserPluginHostCore> _logger;
 
@@ -23,10 +23,10 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
     private readonly PluginExecutionService _executionService;
     private readonly PluginPublishingService _publishingService;
     // assembly loader/executor injected via DI to allow testing and replacement
-        private readonly MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader _assemblyLoader;
+        private readonly ICorePluginAssemblyLoader _assemblyLoader;
     private readonly IPluginExecutor _executor;
     private readonly BrowserPluginDiscovery _pluginDiscovery;
-    private readonly MeowAutoChrome.Core.Interface.IProgramSettingsProvider? _settingsProvider;
+    private readonly IProgramSettingsProvider? _settingsProvider;
     // cached discovery snapshot maintained by background scanner
     private CoreModels.PluginDiscoverySnapshot _latestSnapshot = new CoreModels.PluginDiscoverySnapshot(Array.Empty<CoreModels.RuntimeBrowserPlugin>(), Array.Empty<string>(), Array.Empty<CoreModels.BrowserPluginErrorDescriptor>());
     private readonly object _snapshotLock = new();
@@ -52,12 +52,12 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         _scanTask = Task.Run(() => _pluginDiscovery.ScanLoopAsync(_scanCts.Token));
     }
 
-    private Task<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken ct)
+    private Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken ct)
     {
         var inst = _browserInstances.GetInstance(instanceId);
-        if (inst is null) return Task.FromResult<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>(null);
-        var info = new MeowAutoChrome.Contracts.PluginBrowserInstanceInfo(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.OwnerId, string.Equals(inst.InstanceId, _browserInstances.CurrentInstanceId, StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult<MeowAutoChrome.Contracts.PluginBrowserInstanceInfo?>(info);
+        if (inst is null) return Task.FromResult<PluginBrowserInstanceInfo?>(null);
+        var info = new PluginBrowserInstanceInfo(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.OwnerId, string.Equals(inst.InstanceId, _browserInstances.CurrentInstanceId, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult<PluginBrowserInstanceInfo?>(info);
     }
 
     public async ValueTask DisposeAsync()
@@ -160,7 +160,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
-        var hostContext = new MeowAutoChrome.Core.Services.PluginHost.PluginHostContextCore(_browserInstances.BrowserContext, _browserInstances.ActivePage, _browserInstances.CurrentInstanceId, normalizedArguments, plugin.Id, action.Id, combinedCts.Token, (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token), RequestNewBrowserInstanceAsync, GetBrowserInstanceInfoAsync);
+        var hostContext = new PluginHostContextCore(_browserInstances.BrowserContext, _browserInstances.ActivePage, _browserInstances.CurrentInstanceId, normalizedArguments, plugin.Id, action.Id, combinedCts.Token, (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token), RequestNewBrowserInstanceAsync, GetBrowserInstanceInfoAsync);
 
 
         var result = await _executionService.ExecuteActionAsync(instance, action, hostContext, combinedCts.Token);
@@ -180,7 +180,7 @@ public sealed class BrowserPluginHostCore : MeowAutoChrome.Core.Interface.IPlugi
         var display = string.IsNullOrWhiteSpace(options.DisplayName) ? ownerId : options.DisplayName;
 
         // Load settings possibly provided by host
-        var settings = new MeowAutoChrome.Core.Struct.ProgramSettings();
+        var settings = new Struct.ProgramSettings();
         try { settings = _settingsProvider is not null ? await _settingsProvider.GetAsync() : settings; } catch { }
 
         var maxInstances = settings.MaxInstancesPerPlugin;

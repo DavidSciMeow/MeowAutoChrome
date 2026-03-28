@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace MeowAutoChrome.Core.Models;
+﻿namespace MeowAutoChrome.Core.Models;
 
 public sealed class RuntimeBrowserPlugin(string id, string name, string? description, Type type, List<RuntimeBrowserPluginControl> controls, List<RuntimeBrowserPluginAction> actions)
 {

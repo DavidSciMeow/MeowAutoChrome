@@ -1,16 +1,8 @@
 ﻿using System.Reflection;
 using System.Globalization;
-using System.Linq;
-using System.Collections.Generic;
 using MeowAutoChrome.Contracts.Attributes;
 using MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
-using MeowAutoChrome.Core.Services.PluginHost;
-using MeowAutoChrome.Core.Services.PluginDiscovery;
-using MeowAutoChrome.Core.Services.PluginHost;
-using MeowAutoChrome.Core.Services.PluginDiscovery;
-using MeowAutoChrome.Core.Services.PluginHost;
-using System.Threading.Tasks;
 using MeowAutoChrome.Contracts;
 
 namespace MeowAutoChrome.Core.Services.PluginHost

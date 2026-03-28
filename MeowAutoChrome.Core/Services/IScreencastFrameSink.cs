@@ -1,6 +1,4 @@
-﻿using System.Threading.Tasks;
-
-namespace MeowAutoChrome.Core.Services;
+﻿namespace MeowAutoChrome.Core.Services;
 
 public interface IScreencastFrameSink
 {

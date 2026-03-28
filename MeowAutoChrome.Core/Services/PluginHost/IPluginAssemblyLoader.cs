@@ -1,9 +1,8 @@
-﻿using System.Collections.Generic;
-using System.Reflection;
+﻿using System.Reflection;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
-public interface IPluginAssemblyLoader : MeowAutoChrome.Core.Interface.ICorePluginAssemblyLoader
+public interface IPluginAssemblyLoader : Interface.ICorePluginAssemblyLoader
 {
     Assembly? Load(string pluginPath, List<string> errors);
     void Unload(string pluginPath);

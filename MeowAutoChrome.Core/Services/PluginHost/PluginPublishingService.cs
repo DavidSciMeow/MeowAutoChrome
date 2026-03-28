@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using MeowAutoChrome.Core.Interface;
+﻿using MeowAutoChrome.Core.Interface;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 

@@ -1,15 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using MeowAutoChrome.Core.Models;
-using MeowAutoChrome.Contracts;
+﻿// Avoid direct dependency on Core model types in Web layer; use Web DTOs instead.
 using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
 using Microsoft.Playwright;
-using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 
@@ -49,22 +41,28 @@ public class BrowserInstanceManager
 
     public int TotalPageCount => _core.Instances.Sum(i => i.BrowserContext?.Pages.Count ?? 0);
 
-    public IReadOnlyList<BrowserInstanceInfo> GetInstances()
+    public IReadOnlyList<Models.BrowserInstanceInfoDto> GetInstances()
     {
-        return _core.Instances.Select(i => new BrowserInstanceInfo(i.InstanceId, i.DisplayName, null, "#000000", string.Equals(i.InstanceId, CurrentInstanceId, StringComparison.OrdinalIgnoreCase), i.BrowserContext?.Pages.Count ?? 0)).ToArray();
+        return _core.Instances.Select(i => new Models.BrowserInstanceInfoDto(i.InstanceId, i.DisplayName, i.UserDataDirectoryPath, "#000000", string.Equals(i.InstanceId, CurrentInstanceId, StringComparison.OrdinalIgnoreCase), i.BrowserContext?.Pages.Count ?? 0)).ToArray();
     }
 
-    public async Task<BrowserInstanceSettingsResponse?> GetInstanceSettingsAsync(string instanceId)
+    // Backwards-compatible alias for callers that used the DTO-returning API name
+    public IReadOnlyList<Models.BrowserInstanceInfoDto> GetInstancesDto() => GetInstances();
+
+    public async Task<Models.BrowserInstanceSettingsResponseDto?> GetInstanceSettingsAsync(string instanceId)
     {
         var inst = _core.Instances.FirstOrDefault(i => i.InstanceId == instanceId);
         if (inst == null) return null;
-        return new BrowserInstanceSettingsResponse(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath);
+        return new Models.BrowserInstanceSettingsResponseDto(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath);
     }
 
-    public MeowAutoChrome.Core.Models.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
+    public Core.Models.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
     {
-        return new MeowAutoChrome.Core.Models.BrowserInstanceViewportSettingsResponse(1280, 800, "Auto");
+        return new Core.Models.BrowserInstanceViewportSettingsResponse(1280, 800, "Auto");
     }
+
+    public Task<Models.BrowserInstanceViewportSettingsResponseDto> GetCurrentInstanceViewportSettingsAsync()
+        => Task.FromResult(new Models.BrowserInstanceViewportSettingsResponseDto(1280, 800, "Auto"));
 
     public IReadOnlyList<string> GetPluginInstanceIds(string pluginId)
         => Array.Empty<string>();
@@ -80,7 +78,7 @@ public class BrowserInstanceManager
     public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default)
     {
         var name = string.IsNullOrWhiteSpace(displayName) ? ownerPluginId : displayName;
-        var settings = _settingsProvider is null ? new MeowAutoChrome.Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = _settingsProvider is null ? new Core.Struct.ProgramSettings() : await _settingsProvider.GetAsync();
         var dir = string.IsNullOrWhiteSpace(userDataDirectory) ? settings.UserDataDirectory : Path.GetFullPath(userDataDirectory);
         return await _core.CreateAsync(ownerPluginId, name, dir, headless: settings.Headless, previewInstanceId);
     }
@@ -97,15 +95,15 @@ public class BrowserInstanceManager
     public Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot)
         => _core.PreviewNewInstanceAsync(ownerPluginId ?? "ui", userDataDirectoryRoot);
 
-    public async Task<IReadOnlyList<MeowAutoChrome.Core.Models.BrowserTabInfo>> GetTabsAsync()
+    public async Task<IReadOnlyList<Models.BrowserTabInfoDto>> GetTabsAsync()
     {
-        var tabs = new List<MeowAutoChrome.Core.Models.BrowserTabInfo>();
+        var tabs = new List<Models.BrowserTabInfoDto>();
         foreach (var inst in _core.Instances)
         {
             var pages = inst.BrowserContext?.Pages ?? new List<IPage>();
             foreach (var page in pages)
             {
-                tabs.Add(new MeowAutoChrome.Core.Models.BrowserTabInfo(Guid.NewGuid().ToString("N"), await SafeTitleAsync(page), page.Url, false, null));
+                tabs.Add(new Models.BrowserTabInfoDto(Guid.NewGuid().ToString("N"), await SafeTitleAsync(page), page.Url, false, null));
             }
         }
 
@@ -145,12 +143,12 @@ public class BrowserInstanceManager
             var pluginHost = System.AppDomain.CurrentDomain.GetAssemblies()
                 .Select(a => a.GetTypes())
                 .SelectMany(t => t)
-                .FirstOrDefault(t => typeof(MeowAutoChrome.Core.Interface.IPluginHostCore).IsAssignableFrom(t));
+                .FirstOrDefault(t => typeof(IPluginHostCore).IsAssignableFrom(t));
             // We don't have a direct reference here; callers should ensure plugin host reloads as needed.
         }
         catch { }
     }
-    public Task<bool> UpdateInstanceSettingsAsync(MeowAutoChrome.Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
+    public Task<bool> UpdateInstanceSettingsAsync(Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
         => Task.FromResult(false);
 
     // Long-parameter overload removed; callers should use BrowserInstanceSettingsUpdateRequest instead.

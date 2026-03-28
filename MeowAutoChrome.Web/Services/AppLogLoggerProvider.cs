@@ -1,5 +1,4 @@
 ﻿using MeowAutoChrome.Core.Models;
-using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Web.Services;
 
