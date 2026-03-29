@@ -170,6 +170,7 @@
             </div>
         </div>
     </div>
+@* Scripts moved to layout to avoid duplication. *@
 </div>
 
 <div class="modal fade" id="pluginArgumentModal" tabindex="-1" aria-hidden="true">
@@ -480,21 +481,7 @@
                 try { setupHeadlessToggle(); } catch (e) { }
             });
 
-            // start SignalR connection and initialize UI handlers/status
-            (async () => {
-                try {
-                    await conn.start();
-                    browserHubConnectionId = conn.connectionId || null;
-                    status.textContent = "已连接";
-                    status.className = "badge bg-success";
-                    try { setupHeadlessToggle(); } catch (e) { }
-                    try { await refreshStatus(); } catch (e) { }
-                } catch (e) {
-                    console.error('SignalR start failed', e);
-                    status.textContent = '未连接';
-                    status.className = 'badge bg-secondary';
-                }
-            })();
+            // SignalR start handled once further below to avoid duplicate starts
 
             function setupHeadlessToggle() {
                 const headlessToggleBtn = document.getElementById('headlessToggleBtn');
@@ -1695,7 +1682,7 @@
                                 : { text: state || "", className: "btn btn-sm btn-outline-secondary" };
             }
 
-            function renderPlugins(plugins) {
+            window.renderPlugins = function (plugins) {
                 pluginHost.replaceChildren();
                 pluginCatalog.clear();
                 pluginOutputUi.clear();
@@ -2503,10 +2490,7 @@
             }, 2000);
 
             // input forwarding now handled by browser-input.js module
-            if (window.BrowserInput && typeof window.BrowserInput.init === 'function') {
-                try { window.BrowserInput.init(conn, canvas); } catch (e) { console.warn('BrowserInput init failed', e); }
-            }
-
-        }());
+            // initialization moved to external scripts to avoid duplicate execution when layout includes them
+        })();
     </script>
 }
