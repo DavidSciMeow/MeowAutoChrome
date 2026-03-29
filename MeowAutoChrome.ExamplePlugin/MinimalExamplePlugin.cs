@@ -151,12 +151,14 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     }
 
     [PAction(Name = "GetInstanceInfo")]
-    public async Task<IResult> GetInstanceInfoAsync()
+    public async Task<IResult> GetInstanceInfoAsync(
+        [PInput(Name = "instanceId", Required = true)] string instanceId
+        )
     {
         if (HostContext is null) return Result.Fail("No host context available");
 
         // Expect instanceId to be provided via HostContext.Arguments["instanceId"]
-        if (!HostContext.Arguments.TryGetValue("instanceId", out var iid) || string.IsNullOrWhiteSpace(iid))
+        if (!HostContext.Arguments.TryGetValue(instanceId, out var iid) || string.IsNullOrWhiteSpace(iid))
             return Result.Fail("Missing required argument 'instanceId' in HostContext.Arguments");
 
         try

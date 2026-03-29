@@ -577,11 +577,15 @@
             }
 
             async function postJson(url, body) {
+                // Support passing logical endpoint keys (e.g. 'pluginsRun') that map to
+                // concrete URLs via server-provided `window.__apiEndpoints`.
+                const resolvedUrl = (typeof url === 'string' && window.__apiEndpoints && window.__apiEndpoints[url]) ? window.__apiEndpoints[url] : url;
+
                 const headers = { "Content-Type": "application/json" };
                 if (browserHubConnectionId)
                     headers["X-BrowserHub-ConnectionId"] = browserHubConnectionId;
 
-                const response = await fetch(url, {
+                const response = await fetch(resolvedUrl, {
                     method: "POST",
                     headers,
                     body: JSON.stringify(body ?? {})
@@ -605,7 +609,7 @@
 
                     const err = new Error(message);
                     err.status = response.status;
-                    err.url = url;
+                    err.url = resolvedUrl;
                     throw err;
                 }
 
