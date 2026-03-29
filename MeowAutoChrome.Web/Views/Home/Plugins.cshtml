@@ -39,7 +39,7 @@
             el.replaceChildren();
 
             try{
-                const resp = await fetch('/Browser/Plugins');
+                const resp = await fetch('/api/plugins');
                 if(!resp.ok) throw new Error('获取插件失败：' + resp.status);
                 const payload = await resp.json();
 

@@ -1,10 +1,7 @@
 ﻿@model MeowAutoChrome.Web.Models.LogPageViewModel
 @{
     ViewData["Title"] = "运行日志";
-    var initialEntriesJson = System.Text.Json.JsonSerializer.Serialize(Model.Entries, new System.Text.Json.JsonSerializerOptions
-    {
-        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-    });
+    var initialEntriesJson = "[]";
 }
 
 <div class="container-fluid px-0 logs-page">
@@ -65,7 +62,7 @@
             const logViewer = document.getElementById("logViewer");
             const lastUpdated = document.getElementById("logsLastUpdated");
             const logsSummary = document.getElementById("logsSummary");
-            const logsContentUrl = "@Url.Action("LogsContent", "Home")";
+            const logsContentUrl = "/api/logs/content";
             const filterCheckboxes = Array.from(document.querySelectorAll("[data-log-filter]"));
             const autoRefreshIntervalMs = 3000;
             const logsViewStateStorageKey = "meowautochrome.logs.view-state";

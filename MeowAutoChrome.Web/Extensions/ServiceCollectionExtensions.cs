@@ -52,6 +52,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ScreenshotService>();
         services.AddSingleton<ResourceMetricsService>();
         services.AddHostedService<ChromeShellService>();
+        // Web-layer settings helper used by HomeController and Settings UI
+        services.AddSingleton<SettingsService>();
 
         return services;
     }

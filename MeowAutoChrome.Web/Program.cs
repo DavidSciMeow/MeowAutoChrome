@@ -50,7 +50,8 @@ app.MapStaticAssets();
 
 app.MapHub<BrowserHub>("/browserHub");
 
-app.MapControllerRoute("default", "{controller=Browser}/{action=Index}/{id?}").WithStaticAssets();
+// Default route should point to Home so root (/) resolves predictably.
+app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}").WithStaticAssets();
 
 try
 {

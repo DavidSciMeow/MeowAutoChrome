@@ -26,12 +26,12 @@
     <header>
         <nav class="navbar bg-white border-bottom box-shadow app-nav">
             <div class="container-fluid app-nav-shell">
-                <a class="navbar-brand app-brand" asp-area="" asp-controller="Browser" asp-action="Index">
+                <a class="navbar-brand app-brand" asp-area="" asp-controller="Home" asp-action="Index">
                     <span class="app-brand-mark"><img src="~/favicon.ico" asp-append-version="true" alt="MeowAutoChrome" class="app-brand-icon" /></span>
                     <span>MeowAutoChrome</span>
                 </a>
                 <div class="app-nav-links">
-                    <a class="@NavLinkClass("Browser", "Index")" asp-controller="Browser" asp-action="Index">
+                    <a class="@NavLinkClass("Home", "Index")" asp-controller="Home" asp-action="Index">
                         <i class="fa-solid fa-globe"></i>
                         <span>浏览器</span>
                     </a>
@@ -64,12 +64,19 @@
     </div>
     <footer class="app-footer text-muted">
         <div class="container-fluid px-3 px-xl-4">
-            @@Electronicute 萌喵电子
+            @@Electronicute 萌喵电子 @DateTime.Now.Year
         </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/lib/signalr/dist/browser/signalr.min.js"></script>
+    <script src="~/js/browser-index.js" asp-append-version="true"></script>
+    <script src="~/js/browser-screencast.js" asp-append-version="true"></script>
+    <script src="~/js/browser-ui.js" asp-append-version="true"></script>
+    <script src="~/js/browser-input.js" asp-append-version="true"></script>
+    <script src="~/js/browser-plugins.js" asp-append-version="true"></script>
+    <script src="~/js/browser-tabs.js" asp-append-version="true"></script>
 
     @await RenderSectionAsync("Scripts", required: false)
 </body>
