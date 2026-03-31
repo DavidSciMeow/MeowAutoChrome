@@ -6,41 +6,54 @@ using System.Threading.Tasks;
 namespace MeowAutoChrome.Contracts;
 
 /// <summary>
-/// 插件接口，定义了插件的基本属性和操作方法，包括插件状态、是否支持暂停、宿主上下文以及启动、停止、暂停和恢复等异步操作方法，插件实现这个接口以便与宿主进行交互和管理自己的生命周期
+/// 插件接口，定义插件的基本属性与生命周期操作。<br/>
+/// Plugin interface defining basic plugin properties and lifecycle operations.
 /// </summary>
 public interface IPlugin
 {
     /// <summary>
-    /// 插件状态，表示当前插件的运行状态，可以是未启动、运行中、已暂停或已停止等状态，插件可以通过这个属性让宿主了解自己的状态，以便进行相应的管理和展示
+    /// 启动插件并执行初始化逻辑。<br/>
+    /// Start the plugin and perform initialization logic.
+    /// </summary>
+    /// <returns>异步操作，返回规范化的操作结果。<br/>Asynchronous operation returning the normalized operation result.</returns>
+    Task<IResult> StartAsync();
+
+    /// <summary>
+    /// 停止插件并释放资源。<br/>
+    /// Stop the plugin and release resources.
+    /// </summary>
+    /// <returns>异步操作，返回规范化的操作结果。<br/>Asynchronous operation returning the normalized operation result.</returns>
+    Task<IResult> StopAsync();
+
+    /// <summary>
+    /// 将插件置于暂停状态（若支持）。<br/>
+    /// Pause the plugin (if supported).
+    /// </summary>
+    /// <returns>异步操作，返回规范化的操作结果。<br/>Asynchronous operation returning the normalized operation result.</returns>
+    Task<IResult> PauseAsync();
+
+    /// <summary>
+    /// 从暂停状态恢复插件运行（若支持）。<br/>
+    /// Resume the plugin from paused state (if supported).
+    /// </summary>
+    /// <returns>异步操作，返回规范化的操作结果。<br/>Asynchronous operation returning the normalized operation result.</returns>
+    Task<IResult> ResumeAsync();
+
+    /// <summary>
+    /// 当前插件状态。<br/>
+    /// Current plugin state.
     /// </summary>
     PluginState State { get; }
+
     /// <summary>
-    /// 是否支持暂停，表示当前插件是否支持暂停和恢复的功能，如果返回true，则宿主会提供相应的操作界面和功能来允许用户暂停和恢复插件的运行，如果返回false，则宿主会隐藏相关的操作界面，并且在用户尝试暂停或恢复插件时返回一个错误结果，插件可以通过这个属性告知宿主自己的能力，以便宿主进行相应的管理和展示
+    /// 是否支持暂停/恢复操作。<br/>
+    /// Whether the plugin supports pause/resume operations.
     /// </summary>
     bool SupportsPause { get; }
+
     /// <summary>
-    /// Host-provided context. Host will set this before invoking plugin actions and clear afterwards.
-    /// Plugins can use this to access host services like browser context. Implementations may be null-safe.
+    /// 宿主提供的上下文。宿主在调用插件动作前会设置该属性，调用后会清除。插件可通过该上下文访问宿主服务（例如浏览器上下文）。<br/>
+    /// Host-provided context. The host will set this before invoking plugin actions and clear it afterwards. Plugins can use this to access host services such as browser context.
     /// </summary>
     IPluginContext? HostContext { get; set; }
-    /// <summary>
-    /// 启动插件，表示插件开始运行的操作方法，插件实现这个方法来执行自己的启动逻辑，包括初始化资源、注册事件、启动任务等操作，宿主会在用户或系统触发插件启动时调用这个方法，并且根据返回的结果来判断插件是否成功启动，如果返回一个成功的结果，则宿主会将插件状态设置为运行中，并且允许用户进行相关的操作，如果返回一个失败的结果，则宿主会将插件状态设置为未启动，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地启动和停止自己
-    /// </summary>
-    /// <returns></returns>
-    Task<IResult> StartAsync();
-    /// <summary>
-    /// 停止插件，表示插件结束运行的操作方法，插件实现这个方法来执行自己的停止逻辑，包括清理资源、注销事件、停止任务等操作，宿主会在用户或系统触发插件停止时调用这个方法，并且根据返回的结果来判断插件是否成功停止，如果返回一个成功的结果，则宿主会将插件状态设置为已停止，并且允许用户进行相关的操作，如果返回一个失败的结果则宿主会将插件状态保持为当前状态，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地停止自己
-    /// </summary>
-    /// <returns></returns>
-    Task<IResult> StopAsync();
-    /// <summary>
-    /// 暂停插件，表示插件进入暂停状态的操作方法，插件实现这个方法来执行自己的暂停逻辑，包括暂停任务、冻结状态等操作，宿主会在用户或系统触发插件暂停时调用这个方法，并且根据返回的结果来判断插件是否成功暂停，如果返回一个成功的结果则宿主会将插件状态设置为已暂停，并且允许用户进行相关的操作，如果返回一个失败的结果则宿主会将插件状态保持为当前状态，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地暂停和恢复自己
-    /// </summary>
-    /// <returns></returns>
-    Task<IResult> PauseAsync();
-    /// <summary>
-    /// 恢复插件，表示插件从暂停状态恢复到运行状态的操作方法，插件实现这个方法来执行自己的恢复逻辑，包括恢复任务、解冻状态等操作，宿主会在用户或系统触发插件恢复时调用这个方法，并且根据返回的结果来判断插件是否成功恢复，如果返回一个成功的结果则宿主会将插件状态设置为运行中，并且允许用户进行相关的操作如果返回一个失败的结果则宿主会将插件状态保持为当前状态，并且向用户展示错误信息，插件可以通过这个方法来管理自己的生命周期和资源，以便在需要时正确地暂停和恢复自己
-    /// </summary>
-    /// <returns></returns>
-    Task<IResult> ResumeAsync();
 }

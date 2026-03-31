@@ -6,17 +6,31 @@ using System.Collections.Generic;
 
 namespace MeowAutoChrome.Web.Controllers.Api
 {
+    /// <summary>
+    /// 插件管理相关的 API，包括上传、加载、卸载、控制与执行插件等操作。<br/>
+    /// Plugin management API: upload, load, unload, control, and run plugins.
+    /// </summary>
     [ApiController]
     [Route("api/plugins")]
     public class PluginsController : ControllerBase
     {
         private readonly Core.Interface.IPluginHostCore pluginHost;
 
+        /// <summary>
+        /// 创建 PluginsController。<br/>
+        /// Create a PluginsController instance.
+        /// </summary>
+        /// <param name="pluginHost">插件宿主核心接口 / plugin host core interface.</param>
         public PluginsController(Core.Interface.IPluginHostCore pluginHost)
         {
             this.pluginHost = pluginHost;
         }
 
+        /// <summary>
+        /// 上传插件文件（支持 zip/dll），并尝试加载或解包。<br/>
+        /// Upload plugin files (zip/dll), extract if needed and attempt to load.
+        /// </summary>
+        /// <returns>上传与处理结果 / upload and processing result.</returns>
         [HttpPost("upload")]
         public async Task<IActionResult> Upload()
         {
@@ -69,6 +83,11 @@ namespace MeowAutoChrome.Web.Controllers.Api
             return Ok(new { uploaded = true, uploadDir, processed });
         }
 
+        /// <summary>
+        /// 获取插件目录下的插件目录（目录清单与错误信息）。<br/>
+        /// Get the plugin catalog (plugins list and any errors).
+        /// </summary>
+        /// <returns>包含插件列表与错误信息的响应 / response containing plugins and errors.</returns>
         [HttpGet]
         public IActionResult Get()
         {
@@ -76,6 +95,12 @@ namespace MeowAutoChrome.Web.Controllers.Api
             return Ok(new { plugins = catalog.Plugins, errors = catalog.Errors, errorsDetailed = catalog.ErrorsDetailed });
         }
 
+        /// <summary>
+        /// 加载指定路径的插件程序集。<br/>
+        /// Load a plugin assembly from the specified path.
+        /// </summary>
+        /// <param name="request">包含程序集路径的请求 / request containing the assembly path.</param>
+        /// <returns>加载结果（包含插件与错误） / load result containing plugins and errors.</returns>
         [HttpPost("load")]
         public async Task<IActionResult> Load([FromBody] Models.PluginLoadRequest request)
         {
@@ -83,6 +108,12 @@ namespace MeowAutoChrome.Web.Controllers.Api
             return Ok(result);
         }
 
+        /// <summary>
+        /// 卸载指定插件 Id。<br/>
+        /// Unload the plugin with the specified id.
+        /// </summary>
+        /// <param name="request">包含插件 Id 的请求 / request containing the plugin id.</param>
+        /// <returns>操作结果与错误列表 / operation result and errors list.</returns>
         [HttpPost("unload")]
         public async Task<IActionResult> Unload([FromBody] Models.PluginIdRequest request)
         {
@@ -90,6 +121,12 @@ namespace MeowAutoChrome.Web.Controllers.Api
             return Ok(new { success = result.Success, errors = result.Errors });
         }
 
+        /// <summary>
+        /// 删除指定插件相关的上传文件并尝试卸载。<br/>
+        /// Delete uploaded files related to the plugin and attempt to unload it.
+        /// </summary>
+        /// <param name="request">包含插件 Id 的请求 / request containing the plugin id.</param>
+        /// <returns>操作成功标志与错误信息 / success flag and errors.</returns>
         [HttpPost("delete")]
         public async Task<IActionResult> Delete([FromBody] Models.PluginIdRequest request)
         {
@@ -126,6 +163,12 @@ namespace MeowAutoChrome.Web.Controllers.Api
             return Ok(new { success = unload.Success || deletedAny, errors = unload.Errors });
         }
 
+        /// <summary>
+        /// 向插件发送控制命令（例如 start/stop/pause/resume）。<br/>
+        /// Send a control command to a plugin (e.g., start/stop/pause/resume).
+        /// </summary>
+        /// <param name="request">包含插件 Id、命令与可选参数的请求 / request containing plugin id, command and optional args.</param>
+        /// <returns>插件控制结果 / plugin control result.</returns>
         [HttpPost("control")]
         public async Task<IActionResult> Control([FromBody] PluginControlRequest request)
         {
@@ -133,6 +176,12 @@ namespace MeowAutoChrome.Web.Controllers.Api
             return Ok(res);
         }
 
+        /// <summary>
+        /// 执行插件动作（run），调用指定的 functionId。<br/>
+        /// Execute a plugin action (run) by invoking the specified functionId.
+        /// </summary>
+        /// <param name="request">包含插件 Id、函数 Id 与可选参数的请求 / request containing plugin id, function id and optional args.</param>
+        /// <returns>执行结果 / execution result.</returns>
         [HttpPost("run")]
         public async Task<IActionResult> Run([FromBody] PluginRunRequest request)
         {

@@ -5,15 +5,19 @@ using Microsoft.AspNetCore.SignalR;
 namespace MeowAutoChrome.Web.Hubs;
 
 /// <summary>
-/// BrowserHub 是一个 SignalR Hub，用于在浏览器客户端和服务端之间转发输入事件（鼠标与键盘）并管理客户端连接生命周期。
+/// BrowserHub 是一个 SignalR Hub，用于在浏览器客户端和服务端之间转发输入事件（鼠标与键盘）并管理客户端连接生命周期。<br/>
+/// BrowserHub is a SignalR Hub that forwards input events (mouse and keyboard) between browser clients and the server, and manages client connection lifecycle.
 /// </summary>
-/// <param name="client">Playwright 封装器，用于与浏览器进行交互（通过依赖注入提供）。</param>
-/// <param name="screencast">屏幕投影服务，负责处理事件分发和连接管理（通过依赖注入提供）。</param>
 public class BrowserHub : Hub<IBrowserClient>
 {
     private readonly Services.BrowserInstanceManager _browserInstances;
     private readonly Core.Services.ScreencastServiceCore _screencastCore;
-
+    /// <summary>
+    /// 构造新的 BrowserHub 实例并注入所需的服务。<br/>
+    /// Construct a new BrowserHub instance and inject required services.
+    /// </summary>
+    /// <param name="browserInstances">浏览器实例管理器，由 DI 提供 / BrowserInstanceManager provided via DI.</param>
+    /// <param name="screencastCore">屏幕投影服务核心，由 DI 提供 / Screencast service core provided via DI.</param>
     public BrowserHub(Services.BrowserInstanceManager browserInstances, Core.Services.ScreencastServiceCore screencastCore)
     {
         _browserInstances = browserInstances;

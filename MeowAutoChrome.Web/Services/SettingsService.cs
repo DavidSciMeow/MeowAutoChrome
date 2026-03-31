@@ -4,12 +4,20 @@ using MeowAutoChrome.Core.Struct;
 
 namespace MeowAutoChrome.Web.Services;
 
+/// <summary>
+/// Web 层的设置助手，负责验证与保存前端提交的程序设置，并将必要更改应用到运行时（例如重建实例与更新投屏设置）。<br/>
+/// Web-layer helper for program settings: validate and persist UI-submitted settings and apply runtime changes (recreate instances, update screencast, etc.).
+/// </summary>
 public class SettingsService
 {
     private readonly IProgramSettingsProvider programSettingsService;
     private readonly Core.Services.ScreencastServiceCore screencastService;
     private readonly BrowserInstanceManager browserInstances;
 
+    /// <summary>
+    /// 创建 SettingsService 实例。<br/>
+    /// Create a SettingsService instance.
+    /// </summary>
     public SettingsService(IProgramSettingsProvider programSettingsService, Core.Services.ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances)
     {
         this.programSettingsService = programSettingsService;
@@ -20,6 +28,12 @@ public class SettingsService
     private static int FpsToInterval(int fps)
         => Math.Max(16, (int)Math.Round(1000d / Math.Clamp(fps, 1, 60)));
 
+    /// <summary>
+    /// 校验前端的程序设置并通过回调返回模型错误（如果有）。<br/>
+    /// Validate program settings from the UI and report model errors via the provided callback.
+    /// </summary>
+    /// <param name="model">来自表单的视图模型 / view model from the form.</param>
+    /// <param name="addModelError">用于添加模型错误的回调 / callback to add model errors.</param>
     public void ValidateProgramSettings(ProgramSettingsViewModel model, Action<string> addModelError)
     {
         if (!model.SearchUrlTemplate.Contains("{query}", StringComparison.OrdinalIgnoreCase))
@@ -78,6 +92,12 @@ public class SettingsService
             || normalizedChildPath.StartsWith(normalizedParentPath + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// 保存程序设置并在需要时应用运行时更改（例如重建实例或更新投屏设置）。<br/>
+    /// Persist program settings and apply runtime changes when necessary (recreate instances, update screencast, etc.).
+    /// </summary>
+    /// <param name="model">来自 UI 的设置视图模型 / settings view model from the UI.</param>
+    /// <returns>包含操作结果信息的字符串 / a string describing the result of the operation.</returns>
     public async Task<string> SaveProgramSettingsAsync(ProgramSettingsViewModel model)
     {
         var previousSettings = await programSettingsService.GetAsync();

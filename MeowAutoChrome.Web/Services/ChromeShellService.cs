@@ -5,9 +5,15 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 namespace MeowAutoChrome.Web.Services;
 
 /// <summary>
-/// 在 Windows 平台上为应用启动一个外部 Chrome 窗口（仅在非开发环境下），用于将 Web UI 在桌面上以浏览器窗口打开。
+/// 在 Windows 平台上为应用启动一个外部 Chrome 窗口（仅在非开发环境下），用于将 Web UI 在桌面上以浏览器窗口打开。<br/>
+/// Starts an external Chrome window on Windows (typically in non-development environments) to surface the Web UI in a browser window.
 /// 通过 IHostedService 生命周期钩子在启动时自动启动 Chrome（若找到可执行文件）并在应用停止时关闭。
+/// The service uses IHostedService lifecycle hooks to start Chrome on application start (if found) and attempt to close it on shutdown.
 /// </summary>
+/// <param name="hostApplicationLifetime">宿主应用的生命周期钩子 / host application lifetime hooks.</param>
+/// <param name="server">应用的服务器实现（用于查询地址）/ the server implementation (used to query addresses).</param>
+/// <param name="environment">当前的宿主环境（例如 Development/Production）/ the host environment (e.g., Development/Production).</param>
+/// <param name="appLogService">用于写入应用日志的服务 / service used to write application logs.</param>
 public sealed class ChromeShellService(
     IHostApplicationLifetime hostApplicationLifetime,
     IServer server,
@@ -20,10 +26,11 @@ public sealed class ChromeShellService(
     private int _restartAttempt;
 
     /// <summary>
-    /// 用于在应用启动时自动打开 Chrome 浏览器窗口指向应用的 URL（仅在生产环境且 Windows 平台上）。在应用停止时会尝试关闭该浏览器窗口。
+    /// 用于在应用启动时自动打开 Chrome 浏览器窗口指向应用的 URL（仅在生产环境且 Windows 平台上）。在应用停止时会尝试关闭该浏览器窗口。<br/>
+    /// StartAsync registers application start/stop callbacks and will trigger Chrome startup when appropriate.
     /// </summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns></returns>
+    /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
+    /// <returns>启动任务 / start task.</returns>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         // Only skip on non-Windows platforms. Start Chrome in development as well so the shell
@@ -36,16 +43,20 @@ public sealed class ChromeShellService(
         return Task.CompletedTask;
     }
     /// <summary>
-    /// 用于在应用停止时尝试关闭之前启动的 Chrome 浏览器窗口。会设置一个标志以避免在浏览器窗口被用户手动关闭时触发应用停止逻辑。
+    /// 用于在应用停止时尝试关闭之前启动的 Chrome 浏览器窗口。会设置一个标志以避免在浏览器窗口被用户手动关闭时触发应用停止逻辑。<br/>
+    /// StopAsync will attempt to close the previously started Chrome process and mark the application as stopping.
     /// </summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns></returns>
+    /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
+    /// <returns>停止任务 / stop task.</returns>
     public Task StopAsync(CancellationToken cancellationToken)
     {
         OnApplicationStopping();
         return Task.CompletedTask;
     }
-    /// <inheritdoc/>
+    /// <summary>
+    /// 释放服务持有的资源并尝试关闭/释放 Chrome 进程句柄。<br/>
+    /// Dispose resources held by the service and attempt to close/dispose the Chrome process handle.
+    /// </summary>
     public void Dispose()
     {
         lock (_syncRoot)
@@ -155,27 +166,27 @@ public sealed class ChromeShellService(
         try
         {
             process.EnableRaisingEvents = true;
-                process.Exited += (_, _) =>
+            process.Exited += (_, _) =>
+            {
+                try
                 {
-                    try
-                    {
-                        if (_applicationStopping)
-                            return;
+                    if (_applicationStopping)
+                        return;
 
-                        var exitCode = -1;
-                        try { exitCode = process.HasExited ? process.ExitCode : -1; } catch { }
-                        appLogService.WriteEntry(LogLevel.Warning, $"Chrome shell exited. ProcessId={process.Id}; ExitCode={exitCode}", nameof(ChromeShellService));
+                    var exitCode = -1;
+                    try { exitCode = process.HasExited ? process.ExitCode : -1; } catch { }
+                    appLogService.WriteEntry(LogLevel.Warning, $"Chrome shell exited. ProcessId={process.Id}; ExitCode={exitCode}", nameof(ChromeShellService));
 
-                        // Do not stop the entire application when the external Chrome process exits.
-                        // Previously this treated closing the Chrome shell as an intent to stop the host,
-                        // which caused the web app to exit unexpectedly when the browser closed.
-                        // Keep the app running and optionally implement restart logic if desired.
-                    }
-                    catch (Exception ex)
-                    {
-                        try { appLogService.WriteEntry(LogLevel.Error, $"Error in Chrome shell exit handler: {ex}", nameof(ChromeShellService)); } catch { }
-                    }
-                };
+                    // Do not stop the entire application when the external Chrome process exits.
+                    // Previously this treated closing the Chrome shell as an intent to stop the host,
+                    // which caused the web app to exit unexpectedly when the browser closed.
+                    // Keep the app running and optionally implement restart logic if desired.
+                }
+                catch (Exception ex)
+                {
+                    try { appLogService.WriteEntry(LogLevel.Error, $"Error in Chrome shell exit handler: {ex}", nameof(ChromeShellService)); } catch { }
+                }
+            };
         }
         catch (Exception ex)
         {

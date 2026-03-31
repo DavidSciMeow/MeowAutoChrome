@@ -2,13 +2,22 @@
 
 namespace MeowAutoChrome.Core.Interface;
 
+/// <summary>
+/// 基于文件的程序设置提供者，负责从磁盘读取和写入程序设置并提供内存缓存。<br/>
+/// File-backed program settings provider responsible for reading/writing program settings from disk with an in-memory cache.
+/// </summary>
 public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
 {
-    private readonly SemaphoreSlim _semaphore = new(1,1);
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly string _settingsFilePath = MeowAutoChrome.Core.Struct.ProgramSettings.GetSettingsFilePath();
     private readonly string _legacySettingsFilePath = MeowAutoChrome.Core.Struct.ProgramSettings.GetLegacySettingsFilePath();
     private Struct.ProgramSettings? _cachedSettings;
 
+    /// <summary>
+    /// 异步获取当前的程序设置，如果配置文件不存在则返回默认设置。<br/>
+    /// Asynchronously get the current program settings; returns defaults if no settings file exists.
+    /// </summary>
+    /// <returns>程序设置对象的副本。<br/>A cloned instance of the program settings.</returns>
     public async Task<Struct.ProgramSettings> GetAsync()
     {
         await _semaphore.WaitAsync();
@@ -32,6 +41,11 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
         finally { _semaphore.Release(); }
     }
 
+    /// <summary>
+    /// 将提供的设置异步保存到磁盘并更新缓存。<br/>
+    /// Asynchronously save the provided settings to disk and update the cache.
+    /// </summary>
+    /// <param name="settings">要保存的设置对象 / settings to save.</param>
     public async Task SaveAsync(Struct.ProgramSettings settings)
     {
         Normalize(settings);
@@ -47,6 +61,11 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
         finally { _semaphore.Release(); }
     }
 
+    /// <summary>
+    /// 将自定义键值对注入到当前设置中的 CustomSettings 字典并持久化。<br/>
+    /// Inject custom key/value pairs into the current settings' CustomSettings dictionary and persist them.
+    /// </summary>
+    /// <param name="customSettings">要注入的自定义设置字典 / custom settings to inject.</param>
     public async Task InjectCustomSettingsAsync(IDictionary<string, string?> customSettings)
     {
         if (customSettings is null || customSettings.Count == 0) return;

@@ -8,17 +8,25 @@ using System.Diagnostics;
 namespace MeowAutoChrome.Web.Controllers
 {
     /// <summary>
-    /// 主页控制器（用于设置、日志和隐私页面），负责处理程序设置的保存与验证，以及日志的展示与清理。
+    /// 主页控制器（用于设置、日志和隐私页面），负责处理程序设置的保存与验证，以及日志的展示与清理。<br/>
+    /// Home controller for settings, logs and privacy pages; handles saving/validation of program settings and log display/cleanup.
     /// </summary>
+    /// <param name="programSettingsService">程序设置提供者 / program settings provider.</param>
+    /// <param name="screencastService">投屏服务 / screencast service.</param>
+    /// <param name="appLogService">应用日志服务 / application log service.</param>
+    /// <param name="browserInstances">浏览器实例管理服务 / browser instance manager.</param>
+    /// <param name="settingsService">页面/设置服务 / settings helper service.</param>
     public class HomeController(IProgramSettingsProvider programSettingsService, Core.Services.ScreencastServiceCore screencastService, Core.Services.AppLogService appLogService, BrowserInstanceManager browserInstances, SettingsService settingsService) : Controller
     {
         /// <summary>
-        /// 显示浏览器控制台页面（已将浏览器页面合并到 Home 区）。
+        /// 显示浏览器控制台页面（已将浏览器页面合并到 Home 区）。<br/>
+        /// Shows the browser console page (browser UI merged into the Home area).
         /// </summary>
         public IActionResult Index() => View();
 
         /// <summary>
-        /// 显示当前程序设置页面（GET）.
+        /// 显示当前程序设置页面（GET）。<br/>
+        /// Displays the current program settings page (GET).
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> Settings()
@@ -38,10 +46,11 @@ namespace MeowAutoChrome.Web.Controllers
         }
 
         /// <summary>
-        /// 保存程序设置（POST）。
+        /// 保存程序设置（POST）。<br/>
+        /// Save program settings (POST).
         /// </summary>
-        /// <param name="model">一个包含程序设置的视图模型。</param>
-        /// <returns></returns>
+        /// <param name="model">一个包含程序设置的视图模型。<br/>A view model containing program settings.</param>
+        /// <returns>重定向或带模型错误的视图。<br/>Redirects or returns the view with model errors.</returns>
         [HttpPost, ValidateAntiForgeryToken]
         public async Task<IActionResult> Settings(ProgramSettingsViewModel model)
         {
@@ -66,7 +75,8 @@ namespace MeowAutoChrome.Web.Controllers
         }
 
         /// <summary>
-        /// 显示日志页面（视图）。
+        /// 显示日志页面（视图）。<br/>
+        /// Displays the logs page (view).
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> Logs()
@@ -92,7 +102,8 @@ namespace MeowAutoChrome.Web.Controllers
         }
 
         /// <summary>
-        /// 清空日志文件并重定向回日志页面（保留用于表单提交回退）。
+        /// 清空日志文件并重定向回日志页面（保留用于表单提交回退）。<br/>
+        /// Clears the log file and redirects back to the logs page (kept for form POST fallback).
         /// </summary>
         [HttpPost, ValidateAntiForgeryToken]
         public async Task<IActionResult> ClearLogs()
@@ -103,17 +114,20 @@ namespace MeowAutoChrome.Web.Controllers
         }
 
         /// <summary>
-        /// 隐私页展示。
+        /// 隐私页展示。<br/>
+        /// Displays the privacy page.
         /// </summary>
         public IActionResult Privacy() => View();
 
         /// <summary>
-        /// Show plugin upload/manage page (moved from Browser area to Settings sidebar).
+        /// Show plugin upload/manage page (moved from Browser area to Settings sidebar).<br/>
+        /// 显示插件上传/管理页面（从 Browser 区迁移到 Settings 侧边栏）。
         /// </summary>
         public IActionResult PluginUpload() => View();
 
         /// <summary>
-        /// 错误页面展示接口。
+        /// 错误页面展示接口。<br/>
+        /// Error page display endpoint.
         /// </summary>
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()

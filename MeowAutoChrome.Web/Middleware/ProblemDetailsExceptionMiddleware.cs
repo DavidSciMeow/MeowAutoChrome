@@ -4,12 +4,20 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MeowAutoChrome.Web.Middleware;
 
+/// <summary>
+/// 将未处理的异常转换为 RFC 7807 Problem Details 的中间件并写入响应。<br/>
+/// Middleware that translates unhandled exceptions into RFC 7807 ProblemDetails responses.
+/// </summary>
 public sealed class ProblemDetailsExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ProblemDetailsExceptionMiddleware> _logger;
     private readonly IWebHostEnvironment _env;
 
+    /// <summary>
+    /// 创建中间件实例并注入依赖。<br/>
+    /// Create a middleware instance and inject dependencies.
+    /// </summary>
     public ProblemDetailsExceptionMiddleware(RequestDelegate next, ILogger<ProblemDetailsExceptionMiddleware> logger, IWebHostEnvironment env)
     {
         _next = next;
@@ -17,6 +25,12 @@ public sealed class ProblemDetailsExceptionMiddleware
         _env = env;
     }
 
+    /// <summary>
+    /// 捕获后续中间件/请求处理中的异常，并将其转换为 ProblemDetails 响应。<br/>
+    /// Capture exceptions from downstream middleware/request handling and convert them to ProblemDetails responses.
+    /// </summary>
+    /// <param name="context">HTTP 上下文 / HTTP context.</param>
+    /// <returns>处理请求的任务 / task representing request handling.</returns>
     public async Task InvokeAsync(HttpContext context)
     {
         try

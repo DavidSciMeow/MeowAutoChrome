@@ -5,11 +5,19 @@ using MeowAutoChrome.Contracts.Attributes;
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
 /// <summary>
+/// 在不加载程序集的情况下扫描程序集元数据以发现插件类型的辅助工具。<br/>
 /// Helper that scans assembly metadata for plugin types without loading the assembly.
+/// 从 BrowserPluginHostCore 中提取以减小该类型的大小和职责。<br/>
 /// Extracted from BrowserPluginHostCore to reduce that type's size and responsibilities.
 /// </summary>
 internal static class PluginMetadataScanner
 {
+    /// <summary>
+    /// 在不加载程序集的情况下发现程序集内标记为插件的类型全名。<br/>
+    /// Discover plugin type full names inside an assembly without loading it.
+    /// </summary>
+    /// <param name="pluginPath">插件程序集文件路径 / plugin assembly file path.</param>
+    /// <returns>找到的类型全名数组 / array of discovered type full names.</returns>
     internal static string[] DiscoverPluginTypeNames(string pluginPath)
     {
         using var stream = new FileStream(pluginPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

@@ -4,8 +4,18 @@ using MeowAutoChrome.Core.Models;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
+/// <summary>
+/// 插件类型检测器：负责从类型中发现动作与控制命令并构建描述符。<br/>
+/// Plugin type introspector responsible for discovering actions and control commands on types and building descriptors.
+/// </summary>
 internal static class PluginTypeIntrospector
 {
+    /// <summary>
+    /// 发现类型中可用的控制命令（如 start/stop/pause/resume）并构建相应的控制描述符列表。<br/>
+    /// Discover available control commands (e.g. start/stop/pause/resume) on a type and build control descriptors.
+    /// </summary>
+    /// <param name="type">要扫描的类型 / type to scan.</param>
+    /// <returns>发现的控制描述符列表 / list of discovered control descriptors.</returns>
     public static List<RuntimeBrowserPluginControl> DiscoverControls(Type type)
     {
         var controls = new List<RuntimeBrowserPluginControl>();
@@ -35,6 +45,12 @@ internal static class PluginTypeIntrospector
         controls.Add(new RuntimeBrowserPluginControl(command, name, description, parameters));
     }
 
+    /// <summary>
+    /// 发现类型中标注为动作的方法并构建动作描述符列表。<br/>
+    /// Discover methods marked as actions on the type and build action descriptors.
+    /// </summary>
+    /// <param name="type">要扫描的类型 / type to scan.</param>
+    /// <returns>发现的动作描述符列表 / list of discovered action descriptors.</returns>
     public static List<RuntimeBrowserPluginAction> DiscoverActions(Type type)
     {
         var actions = new List<RuntimeBrowserPluginAction>();
@@ -88,6 +104,12 @@ internal static class PluginTypeIntrospector
 
     private static class PluginTypeIntrospectorInternal
     {
+        /// <summary>
+        /// 检查给定的方法签名是否为受支持的插件动作签名。<br/>
+        /// Check whether the provided method signature is supported for plugin actions.
+        /// </summary>
+        /// <param name="method">要检查的 MethodInfo / MethodInfo to check.</param>
+        /// <returns>当签名被接受时返回 true / true when signature is accepted.</returns>
         public static bool HasSupportedSignature(MethodInfo method)
         {
             // Accept any return shape for plugin actions. Execution layer will normalize results.

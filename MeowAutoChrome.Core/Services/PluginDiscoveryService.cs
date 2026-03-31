@@ -3,21 +3,48 @@ using MeowAutoChrome.Core.Models;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
+/// <summary>
+/// 插件发现实现：在插件根目录中扫描程序集、加载集合并返回发现的插件及错误信息。<br/>
+/// Implementation of plugin discovery which scans the plugin root directory, loads assemblies and returns discovered plugins and errors.
+/// </summary>
 public sealed class PluginDiscoveryService : IPluginDiscoveryService
 {
     private readonly string _pluginRootPath;
 
+    /// <summary>
+    /// 创建一个 PluginDiscoveryService 实例，可通过可选参数覆盖插件根路径。<br/>
+    /// Create a PluginDiscoveryService instance; plugin root path can be overridden via the optional constructor parameter.
+    /// </summary>
+    /// <param name="pluginRootPath">可选的插件根目录路径 / optional plugin root path.</param>
     public PluginDiscoveryService(string? pluginRootPath = null)
     {
         _pluginRootPath = pluginRootPath ?? Path.Combine(AppContext.BaseDirectory, "Plugins");
     }
 
+    /// <summary>
+    /// 插件根目录路径。<br/>
+    /// Plugin root path.
+    /// </summary>
     public string PluginRootPath => _pluginRootPath;
 
+    /// <summary>
+    /// 确保插件目录已存在（若不存在则创建）。<br/>
+    /// Ensure the plugin directory exists (create if missing).
+    /// </summary>
     public void EnsurePluginDirectoryExists() => Directory.CreateDirectory(_pluginRootPath);
 
+    /// <summary>
+    /// 枚举插件根目录下所有的程序集文件路径（递归）。<br/>
+    /// Enumerate all assembly file paths under the plugin root directory (recursive).
+    /// </summary>
     public IEnumerable<string> EnumeratePluginAssemblies() => Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories);
 
+    /// <summary>
+    /// 发现插件根目录下的所有插件并返回聚合快照。<br/>
+    /// Discover all plugins under the plugin root and return an aggregated snapshot.
+    /// </summary>
+    /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader.</param>
+    /// <returns>表示发现结果的快照 / snapshot representing discovery results.</returns>
     public PluginDiscoverySnapshot DiscoverAll(Interface.ICorePluginAssemblyLoader assemblyLoader)
     {
         EnsurePluginDirectoryExists();
@@ -60,6 +87,13 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
             [.. errorsDetailed]);
     }
 
+    /// <summary>
+    /// 从单个程序集路径发现插件并返回插件与错误信息。<br/>
+    /// Discover plugins from a single assembly path and return plugins and errors.
+    /// </summary>
+    /// <param name="pluginPath">程序集文件路径 / assembly file path.</param>
+    /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader.</param>
+    /// <returns>包含插件、错误摘要与详细错误信息的三元组 / tuple containing plugins, error messages and detailed descriptors.</returns>
     public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.ICorePluginAssemblyLoader assemblyLoader)
     {
         var plugins = new List<RuntimeBrowserPlugin>();

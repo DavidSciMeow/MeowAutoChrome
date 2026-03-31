@@ -5,12 +5,23 @@ namespace MeowAutoChrome.Web.Controllers.Api;
 
 [ApiController]
 [Route("api/settings")]
+/// <summary>
+/// 提供程序设置相关的 API，包括自动保存设置并触发运行时变更。<br/>
+/// API for program settings, including autosave and applying runtime changes.
+/// </summary>
 public class SettingsController : ControllerBase
 {
     private readonly Core.Interface.IProgramSettingsProvider programSettingsService;
     private readonly Core.Services.ScreencastServiceCore screencastService;
     private readonly Web.Services.BrowserInstanceManager browserInstances;
 
+    /// <summary>
+    /// 创建 SettingsController 实例。<br/>
+    /// Create a SettingsController instance.
+    /// </summary>
+    /// <param name="programSettingsService">程序设置提供者 / program settings provider.</param>
+    /// <param name="screencastService">投屏服务 / screencast service.</param>
+    /// <param name="browserInstances">浏览器实例管理器 / browser instance manager.</param>
     public SettingsController(Core.Interface.IProgramSettingsProvider programSettingsService, Core.Services.ScreencastServiceCore screencastService, Web.Services.BrowserInstanceManager browserInstances)
     {
         this.programSettingsService = programSettingsService;
@@ -18,6 +29,12 @@ public class SettingsController : ControllerBase
         this.browserInstances = browserInstances;
     }
 
+    /// <summary>
+    /// 接收来自前端的自动保存请求，验证并保存程序设置，必要时触发实例重建与投屏更新。<br/>
+    /// Receive an autosave request from the UI, validate and save program settings, and apply changes.
+    /// </summary>
+    /// <param name="model">来自表单的视图模型 / view model from the form.</param>
+    /// <returns>操作结果或错误信息 / operation result or error message.</returns>
     [HttpPost("autosave")]
     public async Task<IActionResult> AutoSave([FromForm] ProgramSettingsViewModel model)
     {

@@ -9,8 +9,18 @@ using MeowAutoChrome.Web.Hubs;
 
 namespace MeowAutoChrome.Web.Extensions;
 
+/// <summary>
+/// 注册 MeowAutoChrome 所需的依赖服务（例如插件宿主、Screencast、SignalR 等）。<br/>
+/// Registers MeowAutoChrome required services (plugin host, screencast, SignalR, etc.).
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// 将 MeowAutoChrome 的服务添加到 DI 容器并返回服务集合。<br/>
+    /// Adds MeowAutoChrome services to the DI container and returns the service collection.
+    /// </summary>
+    /// <param name="services">目标服务集合 / target service collection.</param>
+    /// <returns>更新后的 IServiceCollection / updated IServiceCollection.</returns>
     public static IServiceCollection AddMeowAutoChromeServices(this IServiceCollection services)
     {
         // Ensure SignalR services are registered so IHubContext<T> can be resolved by DI
@@ -18,12 +28,12 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<AppLogService>();
         services.AddSingleton<BrowserInstanceManagerCore>();
-        services.AddSingleton(sp => new BrowserInstanceManager(sp.GetRequiredService<BrowserInstanceManagerCore>(), sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>() ));
+        services.AddSingleton(sp => new BrowserInstanceManager(sp.GetRequiredService<BrowserInstanceManagerCore>(), sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>()));
         // Note: Web provides BrowserInstanceManager directly; no longer registering obsolete Contracts interface.
         // Keep registration for BrowserInstanceManager so other services can consume it by concrete type.
         services.AddSingleton<IProgramSettingsProvider, FileProgramSettingsProvider>();
         services.AddSingleton<IPluginDiscoveryService, PluginDiscoveryService>();
-        services.AddSingleton<IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>())); 
+        services.AddSingleton<IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>()));
 
         // Plugin host dependencies
         services.AddSingleton<Core.Services.PluginHost.IPluginAssemblyLoader, Core.Services.PluginHost.PluginAssemblyLoader>();
