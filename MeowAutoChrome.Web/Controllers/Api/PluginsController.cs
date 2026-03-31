@@ -77,31 +77,26 @@ namespace MeowAutoChrome.Web.Controllers.Api
         }
 
         [HttpPost("load")]
-        public async Task<IActionResult> Load([FromBody] dynamic body)
+        public async Task<IActionResult> Load([FromBody] Models.PluginLoadRequest request)
         {
-            string path = body?.path ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(path)) return BadRequest(new { error = "path required" });
-            var result = await pluginHost.LoadPluginAssemblyAsync(path.ToString());
+            var result = await pluginHost.LoadPluginAssemblyAsync(request.Path);
             return Ok(result);
         }
 
         [HttpPost("unload")]
-        public async Task<IActionResult> Unload([FromBody] dynamic body)
+        public async Task<IActionResult> Unload([FromBody] Models.PluginIdRequest request)
         {
-            string id = body?.pluginId ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(id)) return BadRequest(new { error = "pluginId required" });
-            var result = await pluginHost.UnloadPluginAsync(id.ToString());
+            var result = await pluginHost.UnloadPluginAsync(request.PluginId);
             return Ok(new { success = result.Success, errors = result.Errors });
         }
 
         [HttpPost("delete")]
-        public async Task<IActionResult> Delete([FromBody] dynamic body)
+        public async Task<IActionResult> Delete([FromBody] Models.PluginIdRequest request)
         {
-            string id = body?.pluginId ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(id)) return BadRequest(new { error = "pluginId required" });
+            var id = request.PluginId;
 
             // Try to unload first
-            var unload = await pluginHost.UnloadPluginAsync(id.ToString());
+            var unload = await pluginHost.UnloadPluginAsync(id);
 
             // Best-effort delete uploaded files matching the plugin id under PluginRootPath/uploads
             var deletedAny = false;
