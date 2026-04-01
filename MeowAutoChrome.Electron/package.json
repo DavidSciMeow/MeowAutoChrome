@@ -1,0 +1,17 @@
+{
+    "name": "meowautochrome-electron",
+    "version": "0.0.1",
+    "description": "Electron shell for MeowAutoChrome (prototype)",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "dev": "concurrently \"dotnet watch --project ../MeowAutoChrome.WebAPI/MeowAutoChrome.WebAPI.csproj\" \"electron .\"",
+        "pack": "electron-builder --dir",
+        "dist": "electron-builder"
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.0",
+        "electron": "^26.0.0",
+        "electron-builder": "^24.7.0"
+    }
+}

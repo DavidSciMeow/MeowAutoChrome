@@ -6,8 +6,22 @@
 /// </summary>
 public enum PluginState
 {
+    /// <summary>
+    /// 插件已停止。<br/>
+    /// The plugin is stopped.
+    /// </summary>
     Stopped,
+
+    /// <summary>
+    /// 插件正在运行。<br/>
+    /// The plugin is running.
+    /// </summary>
     Running,
+
+    /// <summary>
+    /// 插件已暂停。<br/>
+    /// The plugin is paused.
+    /// </summary>
     Paused
 }
 

@@ -35,8 +35,8 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     }
 
     // Note: this core class does not implement IBrowserInstanceManager directly.
-    // The Web-level adapter `MeowAutoChrome.Web.Services.BrowserInstanceManager` implements
-    // IBrowserInstanceManager and delegates to this core class.
+    // A host-level adapter implements IBrowserInstanceManager and delegates
+    // to this core class.
 
     // PreviewNewInstanceAsync is provided as a public method for wrappers to call.
 
@@ -172,8 +172,8 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     public IPage? GetActivePage(string instanceId) => _instances.TryGetValue(instanceId, out var inst2) ? inst2.GetSelectedPage() : null;
 
     // Note: this core class does not implement IBrowserInstanceManager directly.
-    // The Web-level adapter `MeowAutoChrome.Web.Services.BrowserInstanceManager` implements
-    // IBrowserInstanceManager and delegates to this core class.
+    // A host-level adapter implements IBrowserInstanceManager and delegates
+    // to this core class.
 
     /// <summary>
     /// 创建一个新的浏览器实例并启动 Playwright 持久化上下文。<br/>

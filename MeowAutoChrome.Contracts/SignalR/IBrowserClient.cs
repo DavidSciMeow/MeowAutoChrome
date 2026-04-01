@@ -1,8 +1,10 @@
-﻿namespace MeowAutoChrome.Contracts.SignalR
+﻿using System.Threading.Tasks;
+
+namespace MeowAutoChrome.Contracts.SignalR
 {
     /// <summary>
-    /// SignalR 客户端契约的最小占位定义（供 Hub 的泛型参数使用）。<br/>
-    /// Minimal placeholder for the SignalR client contract used by the Hub generic parameter.
+    /// SignalR 客户端契约定义，供 Hub 泛型参数和前后端实时通信使用。<br/>
+    /// SignalR client contract used by the Hub generic parameter and realtime browser messaging.
     /// </summary>
     public interface IBrowserClient
     {
