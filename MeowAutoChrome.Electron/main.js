@@ -17,10 +17,10 @@ function updatePageMenuSelection(page) {
 function buildAppMenu(win) {
     const pages = [
         { label: '浏览器', page: 'browser', accelerator: 'CmdOrCtrl+1' },
-        { label: '日志', page: 'logs', accelerator: 'CmdOrCtrl+2' },
-        { label: '设置', page: 'settings', accelerator: 'CmdOrCtrl+3' },
-        { label: '插件上传', page: 'plugin-upload', accelerator: 'CmdOrCtrl+4' },
-        { label: '隐私提示', page: 'privacy', accelerator: 'CmdOrCtrl+5' }
+        { label: '设置', page: 'settings', accelerator: 'CmdOrCtrl+2' },
+        { label: '日志', page: 'logs', accelerator: 'CmdOrCtrl+3' },
+        { label: '插件', page: 'plugin-upload', accelerator: 'CmdOrCtrl+4' },
+        { label: '帮助', page: 'privacy', accelerator: 'CmdOrCtrl+5' }
     ];
 
     const navigateToPage = (page) => {
@@ -28,16 +28,15 @@ function buildAppMenu(win) {
         win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify('#' + page)};`, true).catch(() => { });
     };
 
+    const pageMenuItems = pages.map(item => ({
+        id: `page:${item.page}`,
+        label: item.label,
+        accelerator: item.accelerator,
+        click: () => navigateToPage(item.page)
+    }));
+
     const template = [
-        {
-            label: '页面',
-            submenu: pages.map(item => ({
-                id: `page:${item.page}`,
-                label: item.label,
-                accelerator: item.accelerator,
-                click: () => navigateToPage(item.page)
-            }))
-        },
+        ...pageMenuItems,
         {
             label: '操作',
             submenu: [

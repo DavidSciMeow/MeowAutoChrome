@@ -1134,8 +1134,25 @@ body.app-shell .browser-chrome {
 }
 
 body.app-shell .browser-tabstrip-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+        "controls"
+        "tabs";
     align-items: center;
     margin-bottom: 0.7rem;
+}
+
+body.app-shell .browser-tabstrip-controls {
+    grid-area: controls;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+}
+
+body.app-shell .browser-tabs-shell {
+    grid-area: tabs;
+    width: 100%;
 }
 
 body.app-shell .browser-toolbar {
@@ -1198,9 +1215,14 @@ body.app-shell .browser-workspace.plugin-drawer-open .plugin-drawer-toggle {
 
 @media (max-width: 1400px) {
 
-    body.app-shell .browser-tabstrip-controls,
     body.app-shell .browser-toolbar-group {
         width: auto;
+    }
+
+    body.app-shell .browser-tabstrip-controls {
+        width: 100%;
+        justify-content: flex-start;
+        margin-left: 0;
     }
 
     body.app-shell .browser-toolbar-group:last-child {
