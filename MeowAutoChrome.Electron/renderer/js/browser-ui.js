@@ -316,6 +316,25 @@
         resizeSyncTimer = setTimeout(() => { syncScreencastSettings(force).catch(() => { }); }, force ? 0 : 150);
     }
 
+    // Instance viewport sync (debounced). Uses localStorage override per-instance
+    // so UI can opt into "auto resize" behavior even before backend persists it.
+    let instanceViewportSyncTimer = null;
+    function scheduleInstanceViewportSync(force) {
+        if (instanceViewportSyncTimer) clearTimeout(instanceViewportSyncTimer);
+        instanceViewportSyncTimer = setTimeout(async () => {
+            if (!selectedInstanceId) return;
+            try {
+                const stored = localStorage.getItem('autoResize:' + selectedInstanceId);
+                const should = (instanceAutoResizeViewportInput?.checked) || (stored === 'true');
+                if (!should) return;
+                const viewport = getCanvasViewportSize();
+                await postJson(resolveApi('instancesViewport', '/api/instances/viewport'), { width: viewport.width, height: viewport.height });
+            } catch (err) {
+                console.debug('instance viewport sync failed', err && (err.message || err));
+            }
+        }, force ? 0 : 150);
+    }
+
     function readViewportFromStatus(data) {
         const viewport = getValue(data, 'currentViewport', 'CurrentViewport', null);
         if (!viewport) {
@@ -361,7 +380,10 @@
             instancePreserveAspectRatioInput.disabled = true;
         }
         if (instanceAutoResizeViewportInput) {
-            instanceAutoResizeViewportInput.checked = !!getValue(viewport, 'autoResizeViewport', 'AutoResizeViewport', false);
+            const instId = getValue(payload, 'instanceId', 'InstanceId', '');
+            const stored = instId ? localStorage.getItem('autoResize:' + instId) : null;
+            const serverVal = !!getValue(viewport, 'autoResizeViewport', 'AutoResizeViewport', false);
+            instanceAutoResizeViewportInput.checked = stored ? (stored === 'true') : serverVal;
         }
     }
 
@@ -393,7 +415,9 @@
                 isHeadless: instanceHeadless,
                 userDataDirectory: instanceUserDataDirectoryInput?.value?.trim() || instanceSettingsCurrentUserDataDirectory?.value || '',
                 viewportWidth,
-                viewportHeight
+                viewportHeight,
+                // include UI preference (backend may ignore until implemented)
+                autoResizeViewport: instanceAutoResizeViewportInput?.checked || (localStorage.getItem('autoResize:' + instanceId) === 'true')
             });
 
             if (instanceAutoResizeViewportInput?.checked && instanceId === selectedInstanceId) {
@@ -708,6 +732,20 @@
     createInstanceUserDataDirectoryInput?.addEventListener('input', () => loadCreateInstancePreview().catch(() => { }));
     createInstanceDisplayNameInput?.addEventListener('input', () => loadCreateInstancePreview().catch(() => { }));
     instanceSettingsSubmitBtn?.addEventListener('click', () => saveInstanceSettings().catch(() => { }));
+    instanceAutoResizeViewportInput?.addEventListener('change', async () => {
+        const instanceId = instanceSettingsInstanceId?.value || selectedInstanceId;
+        if (!instanceId) return;
+        try { localStorage.setItem('autoResize:' + instanceId, instanceAutoResizeViewportInput.checked ? 'true' : 'false'); } catch { }
+        if (instanceAutoResizeViewportInput.checked && instanceId === selectedInstanceId) {
+            const vp = getCanvasViewportSize();
+            try {
+                await postJson(resolveApi('instancesViewport', '/api/instances/viewport'), { width: vp.width, height: vp.height });
+                window.showNotification?.('已请求同步实例视口。', 'success');
+            } catch (err) {
+                showError('请求同步视口失败。');
+            }
+        }
+    });
     document.getElementById('headlessToggleBtn')?.addEventListener('click', () => toggleHeadless().catch(() => { }));
     liveToggleBtn?.addEventListener('click', () => {
         if (!screencastAvailable) return;
@@ -766,8 +804,12 @@
     window.addEventListener('resize', () => {
         if (pointerResizeActive) return;
         applyPluginPanelWidth(pluginPanelWidth);
-        if (selectedInstanceId && instanceAutoResizeViewportInput?.checked) {
-            scheduleScreencastSync(false);
+        // Schedule instance viewport sync (debounced) if instance selected and auto-resize enabled
+        if (selectedInstanceId) {
+            scheduleInstanceViewportSync(false);
+            if (instanceAutoResizeViewportInput?.checked) {
+                scheduleScreencastSync(false);
+            }
         }
     });
 
