@@ -1309,11 +1309,24 @@ body.app-shell .browser-stage {
     border-radius: 0 !important;
 }
 
+/* Stack tabs status header and message vertically and center them */
 .tabs-status-panel {
     border-radius: 0 !important;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
+    gap: 0.25rem;
     padding: 1rem;
+}
+
+/* When inside the status panel, center the header (override space-between) */
+.tabs-status-panel .tabs-status-header {
+    justify-content: center;
+    width: 100%;
+}
+
+.tabs-status-panel .tabs-status-title {
+    margin-bottom: 0.25rem;
 }
