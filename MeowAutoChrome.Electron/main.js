@@ -314,13 +314,21 @@ ipcMain.handle('meow:open-path', async (_event, targetPath) => {
         return { ok: false, message: '路径无效。' };
     }
 
+    const openTarget = fs.existsSync(normalizedPath)
+        ? normalizedPath
+        : path.dirname(normalizedPath);
+
+    if (!openTarget || !fs.existsSync(openTarget)) {
+        return { ok: false, message: '目标目录不存在。' };
+    }
+
     try {
-        const result = await shell.openPath(normalizedPath);
+        const result = await shell.openPath(openTarget);
         if (result) {
             return { ok: false, message: result };
         }
 
-        return { ok: true };
+        return { ok: true, openedPath: openTarget };
     } catch (error) {
         return { ok: false, message: error?.message || '打开文件夹失败。' };
     }

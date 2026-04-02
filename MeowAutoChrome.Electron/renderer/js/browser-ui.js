@@ -18,6 +18,8 @@
     const urlInput = document.getElementById('urlInput');
     const liveToggleBtn = document.getElementById('liveToggleBtn');
     const headlessBadge = document.getElementById('headlessBadge');
+    const headlessToggleIcon = document.getElementById('headlessToggleIcon');
+    const headlessToggleBtn = document.getElementById('headlessToggleBtn');
     const backBtn = document.getElementById('backBtn');
     const forwardBtn = document.getElementById('forwardBtn');
     const reloadBtn = document.getElementById('reloadBtn');
@@ -38,6 +40,7 @@
     const createInstancePathText = createInstancePathTooltip?.querySelector('.create-path-text');
     const createInstanceOpenBtn = createInstancePathTooltip?.querySelector('.create-path-open-btn');
     const createInstanceCopyBtn = createInstancePathTooltip?.querySelector('.create-path-copy-btn');
+    const instanceUserDataDirectoryOpenBtn = document.getElementById('instanceUserDataDirectoryOpenBtn');
     const createInstanceOwnerPluginIdInput = document.getElementById('createInstanceOwnerPluginId');
     const createInstanceSubmitBtn = document.getElementById('createInstanceSubmitBtn');
     const instanceSettingsModalElement = document.getElementById('instanceSettingsModal');
@@ -69,7 +72,10 @@
     let pluginDrawerOpen = true;
     let selectedInstanceId = null;
     let currentViewport = null;
-    let currentHeadless = false;
+    // `instanceHeadless` tracks the current instance's headless state (from /api/status).
+    let instanceHeadless = false;
+    // `globalHeadless` tracks the globally saved Headless setting (from /api/settings).
+    let globalHeadless = false;
     let screenshotPreviewUrl = null;
 
     function buildAbsoluteUrl(url) {
@@ -160,11 +166,8 @@
 
     function updateStatusBadge(hasInstance) {
         if (!statusBadge) return;
-        if (!hasInstance) {
-            statusBadge.textContent = '无实例';
-            statusBadge.className = 'badge bg-danger';
-            return;
-        }
+        // statusBadge (`connStatus`) represents backend connection state.
+        // When applyStatus is called (after a successful status fetch) mark the connection as established.
         statusBadge.textContent = '已连接';
         statusBadge.className = 'badge ' + (screencastAvailable && liveDisplayEnabled ? 'bg-success' : 'bg-secondary');
     }
@@ -219,10 +222,47 @@
         updateStatusBadge(hasInstance);
     }
 
+    // Update internal instance-level headless state (does NOT change the toolbar button UI).
+    function setInstanceHeadlessState(headless) {
+        instanceHeadless = !!headless;
+    }
+
+    // Update the toolbar/button UI to reflect the global Headless setting.
+    function setGlobalHeadlessUi(headless) {
+        globalHeadless = !!headless;
+        if (headlessBadge) {
+            headlessBadge.textContent = globalHeadless ? 'Headless' : 'Headful';
+            headlessBadge.className = 'badge ' + (globalHeadless ? 'bg-secondary' : 'bg-success');
+        }
+        if (headlessToggleBtn) {
+            headlessToggleBtn.classList.remove('btn-primary', 'btn-outline-secondary');
+            if (globalHeadless) headlessToggleBtn.classList.add('btn-outline-secondary');
+            else headlessToggleBtn.classList.add('btn-primary');
+        }
+    }
+
+    // Load global settings (used to initialize and confirm the toolbar state).
+    async function loadGlobalSettings() {
+        try {
+            const r = await fetch(resolveApi('settings', '/api/settings'), { cache: 'no-store' });
+            if (!r.ok) throw new Error('读取设置失败: ' + r.status);
+            const payload = await r.json();
+            const head = getValue(payload, 'headless', 'Headless', getValue(payload, 'isHeadless', 'IsHeadless', false));
+            setGlobalHeadlessUi(!!head);
+        } catch (error) {
+            // Silent failure is acceptable for UI init; keep console trace for debugging.
+            console.debug('loadGlobalSettings error', error && (error.message || error));
+        }
+    }
+
     function clampPluginPanelWidth(width) {
         const workspaceWidth = Math.max(0, browserWorkspace?.clientWidth || 0);
-        const minWidth = 240;
-        const maxWidth = workspaceWidth > 0 ? Math.max(minWidth, workspaceWidth - 360) : 520;
+        if (workspaceWidth <= 0) return pluginPanelWidth;
+        // Enforce plugin panel to be between 30% and 50% of the workspace width.
+        const minPct = 0.30;
+        const maxPct = 0.50;
+        const minWidth = Math.round(workspaceWidth * minPct);
+        const maxWidth = Math.round(workspaceWidth * maxPct);
         return Math.max(minWidth, Math.min(maxWidth, Math.round(Number(width) || pluginPanelWidth)));
     }
 
@@ -250,13 +290,7 @@
         if (value) value.textContent = pluginPanelWidth + ' px';
     }
 
-    async function persistPluginPanelWidth() {
-        try {
-            await postJson(resolveApi('layout', '/api/layout'), { pluginPanelWidth });
-        } catch (error) {
-            console.warn('layout save failed', error);
-        }
-    }
+    // Persistence of plugin panel width removed — layout no longer saved from client.
 
     async function syncScreencastSettings(force) {
         const viewport = getCanvasViewportSize();
@@ -356,7 +390,7 @@
             const instanceId = instanceSettingsInstanceId.value;
             await postJson(resolveApi('instancesSettings', '/api/instances/settings'), {
                 instanceId,
-                isHeadless: currentHeadless,
+                isHeadless: instanceHeadless,
                 userDataDirectory: instanceUserDataDirectoryInput?.value?.trim() || instanceSettingsCurrentUserDataDirectory?.value || '',
                 viewportWidth,
                 viewportHeight
@@ -504,9 +538,38 @@
 
     async function toggleHeadless() {
         try {
-            await postJson(resolveApi('instancesHeadless', '/api/instances/headless'), { isHeadless: !currentHeadless });
+            // Toggle the global Headless setting (toolbar button reflects global state).
+            const newHeadless = !globalHeadless;
+            // Optimistically update the toolbar UI to reflect new global headless state
+            setGlobalHeadlessUi(newHeadless);
+            // Read current global settings snapshot and POST autosave with updated Headless
+            const settingsUrl = resolveApi('settings', '/api/settings');
+            const r = await fetch(settingsUrl, { cache: 'no-store' });
+            if (!r.ok) throw new Error('读取设置失败: ' + r.status);
+            const payload = await r.json();
+
+            const form = new FormData();
+            form.append('SearchUrlTemplate', payload.searchUrlTemplate || '');
+            form.append('ScreencastFps', String(payload.screencastFps ?? 30));
+            form.append('PluginPanelWidth', String(payload.pluginPanelWidth ?? (pluginPanelWidth || 320)));
+            form.append('UserDataDirectory', payload.userDataDirectory || '');
+            if (payload.userAgent) form.append('UserAgent', payload.userAgent);
+            form.append('AllowInstanceUserAgentOverride', payload.allowInstanceUserAgentOverride ? 'true' : 'false');
+            form.append('Headless', newHeadless ? 'true' : 'false');
+
+            const autosaveUrl = resolveApi('settingsAutosave', '/api/settings/autosave');
+            const saveResp = await fetch(autosaveUrl, { method: 'POST', body: form, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!saveResp.ok) {
+                const err = await saveResp.json().catch(() => null);
+                throw new Error(err?.message || '设置保存失败: ' + saveResp.status);
+            }
+
+            // Refresh status (instance data) then re-load global settings to ensure toolbar UI
+            // reflects the persisted global value (server may update instances asynchronously).
             await refreshStatus();
+            await loadGlobalSettings();
             scheduleScreencastSync(true);
+            window.showNotification?.('Headless 设置已保存。', 'success');
         } catch (error) {
             showError(error.message || '运行模式切换失败。');
         }
@@ -541,28 +604,33 @@
         const pluginWidth = Number(getValue(data, 'pluginPanelWidth', 'PluginPanelWidth', pluginPanelWidth));
         selectedInstanceId = getValue(data, 'currentInstanceId', 'CurrentInstanceId', null);
         currentViewport = readViewportFromStatus(data);
-        currentHeadless = !!getValue(data, 'isHeadless', 'IsHeadless', false);
+        // Preserve instance-level headless state separately from the global UI state.
+        setInstanceHeadlessState(!!getValue(data, 'isHeadless', 'IsHeadless', false));
 
         if (!isEditingUrl && urlInput) urlInput.value = currentUrl || '';
         document.title = title + ' - MeowAutoChrome';
         if (errorMessage) showError(errorMessage); else clearError();
 
-        if (headlessBadge) {
-            headlessBadge.textContent = currentHeadless ? 'Headless' : 'Headful';
-            headlessBadge.className = 'badge ' + (currentHeadless ? 'bg-secondary' : 'bg-success');
-        }
+        // NOTE: toolbar/button UI (headlessBadge/headlessToggleBtn) reflects the global
+        // Headless setting and is therefore updated via `loadGlobalSettings` /
+        // `setGlobalHeadlessUi`. Do not overwrite the toolbar UI from status polling.
 
-        const instanceStatus = document.getElementById('instanceStatus');
-        if (instanceStatus) {
-            instanceStatus.textContent = hasInstance ? '实例在线' : '无实例';
-            instanceStatus.className = 'badge ' + (hasInstance ? 'bg-success ms-2' : 'bg-danger ms-2');
+        // Update the eye icon inside the headless toggle to indicate instance presence:
+        // open eye when instance exists, slashed eye when none.
+        if (headlessToggleIcon) {
+            headlessToggleIcon.classList.remove('fa-eye', 'fa-eye-slash', 'text-success', 'text-muted');
+            if (hasInstance) {
+                headlessToggleIcon.classList.add('fa-eye', 'text-success');
+            } else {
+                headlessToggleIcon.classList.add('fa-eye-slash', 'text-muted');
+            }
         }
 
         renderResourceMetrics(data);
         applyPluginPanelWidth(pluginWidth);
         setScreencastAvailability(supportsScreencast, hasInstance);
         if (supportsScreencast) setLiveDisplayEnabled(screencastEnabled);
-        renderBrowserStageState({ hasInstance, supportsScreencast, headless: currentHeadless });
+        renderBrowserStageState({ hasInstance, supportsScreencast, headless: instanceHeadless });
         updateStatusBadge(hasInstance);
 
         if (!hasInstance && noSignal) {
@@ -596,12 +664,12 @@
                 applyPluginPanelWidth(startWidth + delta);
             };
 
-            const onUp = async upEvent => {
+            const onUp = upEvent => {
                 pointerResizeActive = false;
                 browserPaneDivider.releasePointerCapture?.(upEvent.pointerId);
                 window.removeEventListener('pointermove', onMove);
                 window.removeEventListener('pointerup', onUp);
-                await persistPluginPanelWidth();
+                // No persistence call — user requested settings not be saved client-side.
             };
 
             window.addEventListener('pointermove', onMove);
@@ -665,13 +733,33 @@
         try {
             const result = await window.meow?.openPath?.(targetPath);
             if (!result?.ok) {
-                showError(result?.message || '打开实例目录失败。', 'warning');
+                showError(result?.message || '打开创建位置失败。', 'warning');
                 return;
             }
 
-            window.showNotification?.('实例目录已打开。', 'success');
+            window.showNotification?.('创建位置已打开。', 'success');
         } catch {
-            showError('打开实例目录失败。', 'warning');
+            showError('打开创建位置失败。', 'warning');
+        }
+    });
+
+    instanceUserDataDirectoryOpenBtn?.addEventListener('click', async () => {
+        const target = instanceUserDataDirectoryInput?.value?.trim() || instanceSettingsCurrentUserDataDirectory?.value || '';
+        if (!target) {
+            showError('路径为空或未设置。', 'warning');
+            return;
+        }
+
+        try {
+            const result = await window.meow?.openPath?.(target);
+            if (!result?.ok) {
+                showError(result?.message || '打开目录失败。', 'warning');
+                return;
+            }
+
+            window.showNotification?.('目录已打开。', 'success');
+        } catch (err) {
+            showError('打开目录失败。', 'warning');
         }
     });
 
@@ -717,6 +805,8 @@
     setTimeout(() => {
         refreshStatus().catch(() => { });
         loadPlugins().catch(() => { });
+        // Ensure toolbar reflects persisted global Headless setting on startup
+        loadGlobalSettings().catch(() => { });
     }, 0);
 
     setInterval(() => {

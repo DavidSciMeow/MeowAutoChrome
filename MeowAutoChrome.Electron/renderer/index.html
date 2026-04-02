@@ -19,10 +19,6 @@
         <div class="app-main">
             <section class="app-page app-page-browser" data-page="browser">
                 <div class="browser-workspace" id="browserWorkspace">
-                    <button type="button" class="btn btn-primary plugin-drawer-toggle d-none" id="pluginDrawerOpenBtn"
-                        aria-controls="pluginDrawerPane" aria-expanded="false">
-                        <i class="fa-solid fa-puzzle-piece me-2"></i>插件区
-                    </button>
                     <div class="plugin-drawer-backdrop d-none" id="pluginDrawerBackdrop"></div>
                     <div class="browser-pane browser-pane-left">
                         <div class="browser-control-panel mb-3">
@@ -49,10 +45,9 @@
                                         <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
                                         <small class="browser-tabstrip-metric" id="fpsDisplay">FPS --</small>
                                         <span id="connStatus" class="badge bg-secondary">未连接</span>
-                                        <span id="instanceStatus" class="badge bg-danger d-none ms-2">无实例</span>
                                         <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
                                             id="headlessToggleBtn" title="切换 Headless 模式">
-                                            <i class="fa-solid fa-eye-slash me-1"></i>
+                                            <i id="headlessToggleIcon" class="fa-solid fa-eye-slash me-1"></i>
                                             <span id="headlessBadge" class="badge bg-secondary">Headless</span>
                                         </button>
                                     </div>
@@ -91,6 +86,12 @@
                                             title="新建实例" aria-label="新建实例"
                                             style="font-weight:600;padding:.35rem .85rem"><i
                                                 class="fa-solid fa-plus me-1"></i>新建实例</button>
+                                        <button type="button"
+                                            class="btn btn-outline-secondary btn-md ms-2 plugin-drawer-toggle d-none"
+                                            id="pluginDrawerOpenBtn" aria-controls="pluginDrawerPane"
+                                            aria-expanded="false" title="打开插件区" aria-label="插件区">
+                                            <i class="fa-solid fa-puzzle-piece me-1"></i>插件区
+                                        </button>
                                     </div>
                                 </div>
 
@@ -106,7 +107,7 @@
                     </div>
 
                     <div class="modal fade" id="instanceSettingsModal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-dialog-scrollable">
+                        <div class="modal-dialog modal-dialog-scrollable modal-lg">
                             <div class="modal-content">
                                 <div class="modal-header">
                                     <h5 class="modal-title" id="instanceSettingsModalTitle">实例设置</h5>
@@ -122,8 +123,13 @@
                                     <div class="mb-3">
                                         <label class="form-label" for="instanceUserDataDirectoryInput">UserData
                                             目录</label>
-                                        <input type="text" class="form-control" id="instanceUserDataDirectoryInput"
-                                            placeholder="输入浏览器 UserData 目录" />
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="instanceUserDataDirectoryInput"
+                                                placeholder="输入浏览器 UserData 目录" />
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="instanceUserDataDirectoryOpenBtn" title="打开目录"><i
+                                                    class="fa-solid fa-folder-open"></i></button>
+                                        </div>
                                         <div class="form-text">切换目录时会询问是否把旧目录一起迁移过去。</div>
                                     </div>
 
@@ -208,7 +214,7 @@
                                         <div class="create-path-actions">
                                             <button type="button"
                                                 class="btn btn-sm btn-outline-secondary create-path-open-btn"
-                                                title="打开文件夹">
+                                                title="打开创建位置">
                                                 <i class="fa-regular fa-folder-open"></i>
                                             </button>
                                             <button type="button"
@@ -423,7 +429,13 @@
                                     <div class="card-header fw-semibold">浏览器用户数据</div>
                                     <div class="card-body">
                                         <label class="form-label" for="UserDataDirectory">浏览器用户数据目录</label>
-                                        <input id="UserDataDirectory" name="UserDataDirectory" class="form-control" />
+                                        <div class="input-group">
+                                            <input id="UserDataDirectory" name="UserDataDirectory"
+                                                class="form-control" />
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="UserDataDirectoryOpenBtn" title="打开目录"><i
+                                                    class="fa-solid fa-folder-open"></i></button>
+                                        </div>
                                         <div class="form-text">
                                             默认目录：<span id="defaultUserDataDirectory">加载中...</span>。
                                         </div>
@@ -450,29 +462,9 @@
                                     </div>
                                 </section>
 
-                                <section id="headlessSettingsCard" class="card shadow-sm settings-card">
-                                    <div class="card-header fw-semibold">运行模式</div>
-                                    <div class="card-body">
-                                        <div class="form-check form-switch">
-                                            <input id="Headless" name="Headless" class="form-check-input"
-                                                type="checkbox" />
-                                            <label class="form-check-label" for="Headless">Headless 模式</label>
-                                        </div>
-                                    </div>
-                                </section>
+                                <!-- Headless 控件已从设置页移除；请在 浏览器 页面使用顶部切换按钮进行设置 -->
 
-                                <section id="layoutSettingsCard" class="card shadow-sm settings-card">
-                                    <div class="card-header fw-semibold">界面布局</div>
-                                    <div class="card-body">
-                                        <label class="form-label" for="PluginPanelWidth">插件区宽度</label>
-                                        <input id="PluginPanelWidth" name="PluginPanelWidth" type="range" min="240"
-                                            max="520" class="form-range" />
-                                        <div class="d-flex justify-content-between align-items-center small text-muted">
-                                            <span>浏览器区与插件区之间分隔条的默认位置。</span>
-                                            <span id="pluginPanelWidthValue">320 px</span>
-                                        </div>
-                                    </div>
-                                </section>
+                                <!-- 界面布局：插件区宽度控件已移除 -->
                             </form>
                         </div>
                     </div>

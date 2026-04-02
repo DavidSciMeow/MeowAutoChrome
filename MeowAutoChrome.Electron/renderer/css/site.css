@@ -1127,3 +1127,138 @@ body.app-shell .app-footer {
         right: calc(min(var(--plugin-panel-width), 18rem) - 0.2rem);
     }
 }
+
+/* Toolbar layout refresh: omnibox on top, actions below, no collapsed button pile */
+body.app-shell .browser-chrome {
+    padding: 0.8rem;
+}
+
+body.app-shell .browser-tabstrip-meta {
+    align-items: center;
+    margin-bottom: 0.7rem;
+}
+
+body.app-shell .browser-toolbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem 0.75rem;
+    align-items: center;
+    padding: 0.7rem;
+    border-radius: 1.25rem;
+}
+
+body.app-shell .browser-omnibox {
+    grid-column: 1 / -1;
+    order: -1;
+    width: 100%;
+    min-width: 0;
+}
+
+body.app-shell .browser-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    width: auto;
+    gap: 0.55rem;
+}
+
+body.app-shell .browser-toolbar-group:last-child {
+    justify-self: end;
+    justify-content: flex-end;
+}
+
+body.app-shell .browser-toolbar-group:first-child {
+    justify-self: start;
+}
+
+body.app-shell .browser-chrome-icon-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.9rem;
+}
+
+body.app-shell #newInstanceBtn {
+    min-height: 2.5rem;
+    margin-left: 0 !important;
+    padding: 0.4rem 0.95rem !important;
+    border-radius: 0.95rem;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.16);
+}
+
+body.app-shell .plugin-drawer-toggle {
+    top: 8.1rem;
+    right: 0;
+    padding-inline: 0.85rem;
+}
+
+body.app-shell .browser-workspace.plugin-drawer-open .plugin-drawer-toggle {
+    right: var(--plugin-panel-width);
+    transform: translateX(100%);
+}
+
+@media (max-width: 1400px) {
+
+    body.app-shell .browser-tabstrip-controls,
+    body.app-shell .browser-toolbar-group {
+        width: auto;
+    }
+
+    body.app-shell .browser-toolbar-group:last-child {
+        justify-self: end;
+    }
+
+    body.app-shell .browser-omnibox {
+        order: -1;
+        width: 100%;
+    }
+}
+
+@media (max-width: 980px) {
+    body.app-shell .browser-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    body.app-shell .browser-toolbar-group,
+    body.app-shell .browser-toolbar-group:last-child {
+        width: 100%;
+        justify-self: stretch;
+        justify-content: flex-start;
+    }
+
+    body.app-shell .plugin-drawer-toggle {
+        top: 8.45rem;
+    }
+}
+
+/* Make plugin toggle a toolbar button (not a floating bookmark) */
+body.app-shell .plugin-drawer-toggle {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    z-index: auto !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.5rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 0.95rem;
+    border: 1px solid #c5d5ea;
+    background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%);
+    color: #1d4ed8;
+    box-shadow: none !important;
+}
+
+body.app-shell .plugin-drawer-toggle:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #e5efff 100%);
+    color: #1e40af;
+}
+
+/* When plugin panel is open, indicate active state but don't float */
+body.app-shell .browser-workspace.plugin-drawer-open .plugin-drawer-toggle {
+    right: auto !important;
+    transform: none !important;
+    border-radius: 0.95rem;
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    color: #ffffff;
+    box-shadow: none !important;
+}

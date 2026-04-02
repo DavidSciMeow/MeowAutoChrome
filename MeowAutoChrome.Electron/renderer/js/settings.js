@@ -4,8 +4,6 @@
     const navLinks = document.getElementById("settingsNavLinks");
     if (!form) return;
     const fields = form.querySelectorAll("input, textarea, select");
-    const pluginPanelWidthInput = document.getElementById("PluginPanelWidth");
-    const pluginPanelWidthValue = document.getElementById("pluginPanelWidthValue");
     const settingsFilePath = document.getElementById("settingsFilePath");
     const defaultUserDataDirectory = document.getElementById("defaultUserDataDirectory");
     let saveTimer = null;
@@ -77,17 +75,13 @@
         saveTimer = setTimeout(() => { saveSettings().catch(() => { }); }, 500);
     }
 
-    function renderPluginPanelWidth() {
-        if (!pluginPanelWidthInput || !pluginPanelWidthValue) return;
-        pluginPanelWidthValue.textContent = pluginPanelWidthInput.value + " px";
-    }
+    // Plugin panel width control removed from settings UI.
 
     function applySettings(payload) {
         if (!payload) return;
         const byId = {
             SearchUrlTemplate: payload.searchUrlTemplate,
             ScreencastFps: payload.screencastFps,
-            PluginPanelWidth: payload.pluginPanelWidth,
             UserDataDirectory: payload.userDataDirectory,
             UserAgent: payload.userAgent
         };
@@ -102,12 +96,10 @@
         const allowInstanceOverride = document.getElementById("AllowInstanceUserAgentOverride");
         if (allowInstanceOverride) allowInstanceOverride.checked = !!payload.allowInstanceUserAgentOverride;
 
-        const headless = document.getElementById("Headless");
-        if (headless) headless.checked = !!payload.headless;
+        // Headless control removed from settings UI — browser toolbar handles it now.
 
         if (settingsFilePath) settingsFilePath.textContent = payload.settingsFilePath || "未知";
         if (defaultUserDataDirectory) defaultUserDataDirectory.textContent = payload.defaultUserDataDirectory || "未知";
-        renderPluginPanelWidth();
         lastSavedState = new URLSearchParams(new FormData(form)).toString();
         setStatus("已加载设置", "success");
     }
@@ -124,13 +116,29 @@
     }
 
     fields.forEach(field => { field.addEventListener("input", scheduleSave); field.addEventListener("change", scheduleSave); });
-    pluginPanelWidthInput?.addEventListener("input", renderPluginPanelWidth);
-    pluginPanelWidthInput?.addEventListener("change", renderPluginPanelWidth);
-    pluginPanelWidthInput?.addEventListener("input", () => {
-        document.documentElement.style.setProperty("--plugin-panel-width", pluginPanelWidthInput.value + "px");
+    // Plugin panel width control removed — no event bindings.
+
+    // Open UserData directory button (opens folder in OS file explorer)
+    const userDataOpenBtn = document.getElementById('UserDataDirectoryOpenBtn');
+    userDataOpenBtn?.addEventListener('click', async () => {
+        const pathEl = document.getElementById('UserDataDirectory');
+        const target = (pathEl?.value?.trim()) || (defaultUserDataDirectory?.textContent?.trim()) || '';
+        if (!target) {
+            setStatus('目录为空。', 'error');
+            return;
+        }
+        try {
+            const result = await window.meow?.openPath?.(target);
+            if (!result?.ok) {
+                setStatus(result?.message || '打开目录失败。', 'error');
+                return;
+            }
+            window.showNotification?.('目录已打开。', 'success');
+        } catch (err) {
+            setStatus('打开目录失败。', 'error');
+        }
     });
 
     buildSettingsNav();
-    renderPluginPanelWidth();
     loadSettings().catch(() => { });
 })();
