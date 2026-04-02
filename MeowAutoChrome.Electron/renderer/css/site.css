@@ -1302,3 +1302,18 @@ body.app-shell .browser-workspace.plugin-drawer-open .plugin-drawer-toggle {
     color: #ffffff;
     box-shadow: none !important;
 }
+
+/* Remove rounded corners for browser stage and center tabs status text */
+.browser-stage,
+body.app-shell .browser-stage {
+    border-radius: 0 !important;
+}
+
+.tabs-status-panel {
+    border-radius: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1rem;
+}
