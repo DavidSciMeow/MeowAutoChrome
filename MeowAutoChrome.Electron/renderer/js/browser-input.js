@@ -31,10 +31,13 @@
     function createSender(connection, canvas) {
         return {
             sendMouse(type, event, extra) {
-                if (!connection || connection.state !== signalR.HubConnectionState.Connected)
+                if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                    console.debug('BrowserInput.sendMouse: hub not connected', connection && connection.state);
                     return;
+                }
 
                 const point = toChromium(canvas, event);
+                console.debug('BrowserInput.sendMouse', type, point.x, point.y, 'button', event.button, 'mods', modifiers(event));
                 const isClick = type === "mousePressed" || type === "mouseReleased";
                 const isWheel = type === "mouseWheel";
                 connection.invoke("SendMouseEvent", {
@@ -50,9 +53,12 @@
                 }).catch(() => { });
             },
             sendKey(type, event, text = "") {
-                if (!connection || connection.state !== signalR.HubConnectionState.Connected)
+                if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                    console.debug('BrowserInput.sendKey: hub not connected', connection && connection.state);
                     return;
+                }
 
+                console.debug('BrowserInput.sendKey', type, event.key, 'code', event.code, 'mods', modifiers(event));
                 connection.invoke("SendKeyEvent", {
                     type,
                     key: event.key,
@@ -84,6 +90,7 @@
 
             try {
                 const sender = createSender(connection, canvasEl);
+                console.debug('BrowserInput init', { canvas: !!canvasEl, connectionState: connection && connection.state });
                 let lastMove = 0;
                 let canvasKeyboardCaptureActive = false;
 

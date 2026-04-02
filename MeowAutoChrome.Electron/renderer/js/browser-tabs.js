@@ -56,6 +56,21 @@
             groupSettingsBtn.addEventListener('click', async e => { e.stopPropagation(); await window.BrowserUI.openInstanceSettings?.(group.instanceId, group.instanceName); });
             groupHeader.appendChild(groupSettingsBtn);
 
+            // per-instance new-tab button (matches style of settings / close)
+            const groupNewTabBtn = document.createElement('button');
+            groupNewTabBtn.type = 'button';
+            groupNewTabBtn.className = 'browser-tab-instance-close btn btn-sm btn-light border-0';
+            groupNewTabBtn.title = '为该实例新建 TAB';
+            groupNewTabBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+            groupNewTabBtn.addEventListener('click', async e => {
+                e.stopPropagation();
+                try {
+                    await postJson('tabsNew', { instanceId: group.instanceId, url: 'about:blank' });
+                    await window.BrowserUI.refreshStatus?.();
+                } catch (err) { console.warn('create tab for instance failed', err); }
+            });
+            groupHeader.appendChild(groupNewTabBtn);
+
             const groupCloseBtn = document.createElement('button'); groupCloseBtn.type = 'button'; groupCloseBtn.className = 'browser-tab-instance-close btn btn-sm btn-light border-0'; groupCloseBtn.title = '关闭整个实例'; groupCloseBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
             groupCloseBtn.addEventListener('click', async e => { e.stopPropagation(); try { await window.BrowserUI.closeInstance(group.instanceId); } catch (ex) { console.warn(ex); } });
             groupHeader.appendChild(groupCloseBtn);

@@ -272,6 +272,11 @@
         pluginDrawerBackdrop?.classList.toggle('d-none', !pluginDrawerOpen);
         pluginDrawerOpenBtn?.setAttribute('aria-expanded', pluginDrawerOpen ? 'true' : 'false');
         pluginDrawerPane?.setAttribute('aria-hidden', pluginDrawerOpen ? 'false' : 'true');
+        // Plugin pane opened/closed affects available canvas size — force viewport sync.
+        if (selectedInstanceId) {
+            // small timeout to allow layout to settle
+            setTimeout(() => { scheduleInstanceViewportSync(true); scheduleScreencastSync(true); }, 50);
+        }
     }
 
     function syncPluginDrawerMode() {
@@ -326,8 +331,11 @@
             try {
                 const stored = localStorage.getItem('autoResize:' + selectedInstanceId);
                 const should = (instanceAutoResizeViewportInput?.checked) || (stored === 'true');
-                if (!should) return;
+                // If not explicitly enabled, allow force to override and perform sync.
+                if (!should && !force) return;
                 const viewport = getCanvasViewportSize();
+                // Resize local canvas buffer immediately to match computed viewport
+                try { resizeCanvasBuffer(viewport.width, viewport.height); } catch (e) { /* ignore */ }
                 await postJson(resolveApi('instancesViewport', '/api/instances/viewport'), { width: viewport.width, height: viewport.height });
             } catch (err) {
                 console.debug('instance viewport sync failed', err && (err.message || err));
@@ -694,6 +702,11 @@
                 window.removeEventListener('pointermove', onMove);
                 window.removeEventListener('pointerup', onUp);
                 // No persistence call — user requested settings not be saved client-side.
+                // After user finishes resizing the pane, force instance viewport sync so backend matches new canvas size.
+                if (selectedInstanceId) {
+                    scheduleInstanceViewportSync(true);
+                    scheduleScreencastSync(true);
+                }
             };
 
             window.addEventListener('pointermove', onMove);
@@ -804,12 +817,11 @@
     window.addEventListener('resize', () => {
         if (pointerResizeActive) return;
         applyPluginPanelWidth(pluginPanelWidth);
-        // Schedule instance viewport sync (debounced) if instance selected and auto-resize enabled
+        // Always schedule a forced instance viewport sync when resizing so backend viewport
+        // matches the visible canvas. This overrides per-instance UI toggle for now.
         if (selectedInstanceId) {
-            scheduleInstanceViewportSync(false);
-            if (instanceAutoResizeViewportInput?.checked) {
-                scheduleScreencastSync(false);
-            }
+            scheduleInstanceViewportSync(true);
+            scheduleScreencastSync(false);
         }
     });
 

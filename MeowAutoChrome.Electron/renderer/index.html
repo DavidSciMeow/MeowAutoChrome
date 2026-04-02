@@ -30,6 +30,7 @@
                                             id="tabsScrollLeftBtn" title="向左滚动" aria-label="向左滚动">
                                             <i class="fa-solid fa-chevron-left"></i>
                                         </button>
+                                        <!-- 全局新建 TAB 按钮已移除；按实例的新建按钮在标签组头部实现 -->
                                         <div id="tabsBar" class="browser-tabs"></div>
                                         <button type="button"
                                             class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn"
@@ -79,9 +80,7 @@
                                         <button type="button" class="btn btn-outline-primary browser-chrome-icon-btn"
                                             id="shotBtn" title="Screenshot" aria-label="Screenshot"><i
                                                 class="fa-solid fa-camera"></i></button>
-                                        <button type="button" class="btn btn-outline-secondary browser-chrome-icon-btn"
-                                            id="newTabBtn" title="新建 TAB" aria-label="新建 TAB"><i
-                                                class="fa-solid fa-plus"></i></button>
+                                        <!-- newTabBtn moved into tabs shell -->
                                         <button type="button" class="btn btn-primary btn-md ms-2" id="newInstanceBtn"
                                             title="新建实例" aria-label="新建实例"
                                             style="font-weight:600;padding:.35rem .85rem"><i
@@ -102,6 +101,7 @@
                         <div class="browser-stage">
                             <canvas id="browserCanvas" tabindex="0">
                             </canvas>
+                            <div id="noSignal" class="no-signal" style="display:flex;">实时画面未就绪或未连接</div>
                             <div id="tabsStatusPanel" class="tabs-status-panel d-none"></div>
                         </div>
                     </div>
