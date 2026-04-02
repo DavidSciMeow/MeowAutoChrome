@@ -4,12 +4,12 @@
     const browserStage = canvas ? canvas.closest('.browser-stage') : null;
     const browserWorkspace = document.getElementById('browserWorkspace');
     const browserPaneDivider = document.getElementById('browserPaneDivider');
+    const pluginDrawerPane = document.getElementById('pluginDrawerPane');
+    const pluginDrawerOpenBtn = document.getElementById('pluginDrawerOpenBtn');
+    const pluginDrawerCloseBtn = document.getElementById('pluginDrawerCloseBtn');
+    const pluginDrawerBackdrop = document.getElementById('pluginDrawerBackdrop');
     const statusBadge = document.getElementById('connStatus');
     const noSignal = document.getElementById('noSignal');
-    const browserModeSummary = document.getElementById('browserModeSummary');
-    const browserQuickStatus = document.getElementById('browserQuickStatus');
-    const browserViewportStatus = document.getElementById('browserViewportStatus');
-    const browserEmptyBadge = document.getElementById('browserEmptyBadge');
     const browserEmptyTitle = document.getElementById('browserEmptyTitle');
     const browserEmptyCopy = document.getElementById('browserEmptyCopy');
     const cpuDisplay = document.getElementById('cpuDisplay');
@@ -66,6 +66,7 @@
     let applyingScreencastSettings = false;
     let pointerResizeActive = false;
     let pluginPanelWidth = Number(config.defaultPluginPanelWidth) || 320;
+    let pluginDrawerOpen = true;
     let selectedInstanceId = null;
     let currentViewport = null;
     let currentHeadless = false;
@@ -187,31 +188,6 @@
         const supportsScreencast = !!options?.supportsScreencast;
         const headless = !!options?.headless;
 
-        if (browserModeSummary) {
-            if (!hasInstance) {
-                browserModeSummary.textContent = '当前还没有浏览器实例，先创建实例再开始浏览。';
-            } else if (headless && supportsScreencast) {
-                browserModeSummary.textContent = '当前是 Headless 实时画面模式，画布会持续接收后端推流。';
-            } else if (!headless) {
-                browserModeSummary.textContent = '当前是 Headful 模式，浏览器运行在真实窗口中，这里显示 TAB 状态与控制面板。';
-            } else {
-                browserModeSummary.textContent = '实例已启动，但当前运行模式暂不提供实时画面。';
-            }
-        }
-
-        if (browserQuickStatus) {
-            browserQuickStatus.textContent = !hasInstance ? '未启动' : headless ? 'Headless 实时模式' : 'Headful 本地窗口';
-            browserQuickStatus.className = 'page-shell-chip ' + (!hasInstance ? 'page-shell-chip-muted' : headless ? 'page-shell-chip-primary' : 'page-shell-chip-success');
-        }
-
-        if (browserViewportStatus) {
-            browserViewportStatus.textContent = currentViewport ? `视口 ${currentViewport.width} × ${currentViewport.height}` : '视口 --';
-        }
-
-        if (browserEmptyBadge) {
-            browserEmptyBadge.textContent = !hasInstance ? '等待实例' : headless ? 'Headless' : 'Headful';
-        }
-
         if (browserEmptyTitle) {
             browserEmptyTitle.textContent = !hasInstance
                 ? '还没有浏览器实例'
@@ -248,6 +224,21 @@
         const minWidth = 240;
         const maxWidth = workspaceWidth > 0 ? Math.max(minWidth, workspaceWidth - 360) : 520;
         return Math.max(minWidth, Math.min(maxWidth, Math.round(Number(width) || pluginPanelWidth)));
+    }
+
+    function setPluginDrawerOpen(open) {
+        pluginDrawerOpen = !!open;
+        browserWorkspace?.classList.toggle('plugin-drawer-open', pluginDrawerOpen);
+        pluginDrawerBackdrop?.classList.toggle('d-none', !pluginDrawerOpen);
+        pluginDrawerOpenBtn?.setAttribute('aria-expanded', pluginDrawerOpen ? 'true' : 'false');
+        pluginDrawerPane?.setAttribute('aria-hidden', pluginDrawerOpen ? 'false' : 'true');
+    }
+
+    function syncPluginDrawerMode() {
+        browserWorkspace?.classList.add('plugin-drawer-mode');
+        pluginDrawerOpenBtn?.classList.remove('d-none');
+        pluginDrawerCloseBtn?.classList.remove('d-none');
+        setPluginDrawerOpen(pluginDrawerOpen);
     }
 
     function applyPluginPanelWidth(width) {
@@ -692,6 +683,10 @@
         }
     });
 
+    pluginDrawerOpenBtn?.addEventListener('click', () => setPluginDrawerOpen(!pluginDrawerOpen));
+    pluginDrawerCloseBtn?.addEventListener('click', () => setPluginDrawerOpen(false));
+    pluginDrawerBackdrop?.addEventListener('click', () => setPluginDrawerOpen(false));
+
     window.addEventListener('meow:pagechange', event => {
         if (event.detail?.page === 'browser') {
             refreshStatus().catch(() => { });
@@ -700,6 +695,7 @@
     });
 
     bindPaneResize();
+    syncPluginDrawerMode();
     applyPluginPanelWidth(pluginPanelWidth);
 
     window.BrowserIndex = Object.assign(window.BrowserIndex || {}, { showError, clearError });

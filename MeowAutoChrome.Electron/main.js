@@ -9,12 +9,9 @@ const PROJECT_FILE = path.join(__dirname, '..', 'MeowAutoChrome.WebAPI', 'MeowAu
 
 let serverProc = null;
 let spawnedByApp = false;
-let pageMenuItems = [];
 
 function updatePageMenuSelection(page) {
-    for (const item of pageMenuItems) {
-        item.checked = item.id === `page:${page}`;
-    }
+    return page;
 }
 
 function buildAppMenu(win) {
@@ -37,8 +34,6 @@ function buildAppMenu(win) {
             submenu: pages.map(item => ({
                 id: `page:${item.page}`,
                 label: item.label,
-                type: 'radio',
-                checked: item.page === 'browser',
                 accelerator: item.accelerator,
                 click: () => navigateToPage(item.page)
             }))
@@ -56,20 +51,11 @@ function buildAppMenu(win) {
             label: '窗口',
             role: 'windowMenu'
         },
-        {
-            label: '帮助',
-            submenu: [
-                { label: '打开浏览器页', click: () => navigateToPage('browser') },
-                { label: '打开设置页', click: () => navigateToPage('settings') }
-            ]
-        }
+        // Help menu removed per user request
     ];
 
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
-    pageMenuItems = pages
-        .map(item => menu.getMenuItemById(`page:${item.page}`))
-        .filter(Boolean);
 }
 
 // Lightweight HTTP health probe. Returns an object describing result.
@@ -235,8 +221,8 @@ function createWindow(apiBase) {
     const win = new BrowserWindow({
         width: 1400,
         height: 900,
-        minWidth: 1000,
-        minHeight: 700,
+        minWidth: 1280,
+        minHeight: 720,
         icon: iconPath || undefined,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),

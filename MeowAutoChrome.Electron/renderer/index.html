@@ -18,17 +18,12 @@
     <main class="app-content px-3 px-xl-4">
         <div class="app-main">
             <section class="app-page app-page-browser" data-page="browser">
-                <div class="page-shell-heading browser-page-heading">
-                    <div>
-                        <h1 class="page-shell-title">浏览器工作区</h1>
-                        <p class="page-shell-copy" id="browserModeSummary">准备创建实例并开始浏览。</p>
-                    </div>
-                    <div class="page-shell-meta">
-                        <span class="page-shell-chip page-shell-chip-muted" id="browserQuickStatus">未启动</span>
-                        <span class="page-shell-chip page-shell-chip-muted" id="browserViewportStatus">视口 --</span>
-                    </div>
-                </div>
                 <div class="browser-workspace" id="browserWorkspace">
+                    <button type="button" class="btn btn-primary plugin-drawer-toggle d-none" id="pluginDrawerOpenBtn"
+                        aria-controls="pluginDrawerPane" aria-expanded="false">
+                        <i class="fa-solid fa-puzzle-piece me-2"></i>插件区
+                    </button>
+                    <div class="plugin-drawer-backdrop d-none" id="pluginDrawerBackdrop"></div>
                     <div class="browser-pane browser-pane-left">
                         <div class="browser-control-panel mb-3">
                             <div class="browser-chrome">
@@ -107,19 +102,6 @@
                             <canvas id="browserCanvas" tabindex="0">
                             </canvas>
                             <div id="tabsStatusPanel" class="tabs-status-panel d-none"></div>
-                            <div id="noSignal" class="browser-empty-state">
-                                <div class="browser-empty-card">
-                                    <div class="browser-empty-badge" id="browserEmptyBadge">等待实例</div>
-                                    <div class="browser-empty-icon"><i class="fa-solid fa-window-maximize"></i></div>
-                                    <h2 class="browser-empty-title" id="browserEmptyTitle">还没有浏览器实例</h2>
-                                    <p class="browser-empty-copy" id="browserEmptyCopy">先创建一个实例，再开始打开页面、截图和执行插件动作。</p>
-                                    <div class="browser-empty-actions">
-                                        <button type="button" class="btn btn-primary" id="emptyStateCreateInstanceBtn">
-                                            <i class="fa-solid fa-plus me-2"></i>新建实例
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
 
@@ -249,9 +231,15 @@
                     </div>
                     <div class="browser-pane-divider" id="browserPaneDivider" role="separator"
                         aria-orientation="vertical" aria-label="调整浏览器区与插件区宽度" tabindex="0"></div>
-                    <div class="browser-pane browser-pane-right">
+                    <div class="browser-pane browser-pane-right" id="pluginDrawerPane">
                         <div class="card h-100 plugin-panel">
-                            <div class="card-header">插件区</div>
+                            <div class="card-header plugin-panel-header">
+                                <span>插件区</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary d-none"
+                                    id="pluginDrawerCloseBtn" aria-label="收起插件区">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
                             <div class="card-body">
                                 <div id="pluginHost" class="vstack gap-3 small text-muted"></div>
                             </div>
