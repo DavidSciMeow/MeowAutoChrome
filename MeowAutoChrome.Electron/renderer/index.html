@@ -42,7 +42,9 @@
                                             id="liveToggleBtn">实时画面</button>
                                         <small class="browser-tabstrip-metric" id="cpuDisplay">CPU --</small>
                                         <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
-                                        <small class="browser-tabstrip-metric" id="fpsDisplay">FPS --</small>
+                                        <small class="browser-tabstrip-metric browser-tabstrip-metric-action"
+                                            id="fpsDisplay" role="button" tabindex="0" title="点击设置推流 FPS"
+                                            aria-label="设置推流 FPS">FPS --</small>
                                         <span id="connStatus" class="badge bg-secondary">未连接</span>
                                         <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
                                             id="headlessToggleBtn" title="切换 Headless 模式">
@@ -412,16 +414,6 @@
                                     </div>
                                 </section>
 
-                                <section id="screencastSettingsCard" class="card shadow-sm settings-card">
-                                    <div class="card-header fw-semibold">实时画面</div>
-                                    <div class="card-body">
-                                        <label class="form-label" for="ScreencastFps">推流 FPS</label>
-                                        <input id="ScreencastFps" name="ScreencastFps" type="number" min="1" max="60"
-                                            class="form-control" />
-                                        <div class="form-text">设置浏览器实时画面的目标推流 FPS。</div>
-                                    </div>
-                                </section>
-
                                 <section id="profileSettingsCard" class="card shadow-sm settings-card">
                                     <div class="card-header fw-semibold">浏览器用户数据</div>
                                     <div class="card-body">
@@ -548,6 +540,26 @@
                     </div>
                 </div>
             </section>
+
+            <div class="modal fade" id="screencastFpsModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-sm">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">推流 FPS</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <label class="form-label" for="screencastFpsQuickInput">目标 FPS</label>
+                            <input id="screencastFpsQuickInput" type="number" min="1" max="60" class="form-control" />
+                            <div class="form-text">这里设置的是实时画面的目标推流 FPS，范围 1 到 60。</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="screencastFpsQuickSaveBtn">保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 

@@ -81,7 +81,6 @@
         if (!payload) return;
         const byId = {
             SearchUrlTemplate: payload.searchUrlTemplate,
-            ScreencastFps: payload.screencastFps,
             UserDataDirectory: payload.userDataDirectory,
             UserAgent: payload.userAgent
         };

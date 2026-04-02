@@ -14,6 +14,7 @@
     const browserEmptyCopy = document.getElementById('browserEmptyCopy');
     const cpuDisplay = document.getElementById('cpuDisplay');
     const memoryDisplay = document.getElementById('memoryDisplay');
+    const fpsDisplay = document.getElementById('fpsDisplay');
     const browserError = document.getElementById('browserError');
     const urlInput = document.getElementById('urlInput');
     const liveToggleBtn = document.getElementById('liveToggleBtn');
@@ -60,6 +61,10 @@
     const instancePreserveAspectRatioInput = document.getElementById('instancePreserveAspectRatioInput');
     const instanceAutoResizeViewportInput = document.getElementById('instanceAutoResizeViewportInput');
     const instanceSettingsSubmitBtn = document.getElementById('instanceSettingsSubmitBtn');
+    const screencastFpsModalElement = document.getElementById('screencastFpsModal');
+    const screencastFpsQuickInput = document.getElementById('screencastFpsQuickInput');
+    const screencastFpsQuickSaveBtn = document.getElementById('screencastFpsQuickSaveBtn');
+    const screencastFpsModal = screencastFpsModalElement ? new bootstrap.Modal(screencastFpsModalElement) : null;
 
     let statusBusy = false;
     let isEditingUrl = false;
@@ -77,6 +82,27 @@
     // `globalHeadless` tracks the globally saved Headless setting (from /api/settings).
     let globalHeadless = false;
     let screenshotPreviewUrl = null;
+    let currentScreencastTargetFps = 10;
+
+    function clampScreencastFps(value) {
+        return Math.max(1, Math.min(60, Math.round(Number(value) || 10)));
+    }
+
+    function fpsToFrameIntervalMs(value) {
+        return Math.max(16, Math.round(1000 / clampScreencastFps(value)));
+    }
+
+    function frameIntervalMsToFps(value) {
+        const interval = Math.max(16, Number(value) || 100);
+        return clampScreencastFps(1000 / interval);
+    }
+
+    function updateFpsControlMetadata() {
+        if (!fpsDisplay) return;
+        const label = '点击设置推流 FPS，当前目标 ' + currentScreencastTargetFps;
+        fpsDisplay.title = label;
+        fpsDisplay.setAttribute('aria-label', label);
+    }
 
     function buildAbsoluteUrl(url) {
         if (!url) return url;
@@ -248,7 +274,9 @@
             if (!r.ok) throw new Error('读取设置失败: ' + r.status);
             const payload = await r.json();
             const head = getValue(payload, 'headless', 'Headless', getValue(payload, 'isHeadless', 'IsHeadless', false));
+            currentScreencastTargetFps = clampScreencastFps(getValue(payload, 'screencastFps', 'ScreencastFps', currentScreencastTargetFps));
             setGlobalHeadlessUi(!!head);
+            updateFpsControlMetadata();
         } catch (error) {
             // Silent failure is acceptable for UI init; keep console trace for debugging.
             console.debug('loadGlobalSettings error', error && (error.message || error));
@@ -307,13 +335,59 @@
                 enabled: liveDisplayEnabled,
                 maxWidth: viewport.width,
                 maxHeight: viewport.height,
-                frameIntervalMs: 100
+                frameIntervalMs: fpsToFrameIntervalMs(currentScreencastTargetFps)
             });
         } catch (error) {
             if (force) showError(error.message || '画面设置同步失败。', 'warning');
         } finally {
             applyingScreencastSettings = false;
         }
+    }
+
+    function openScreencastFpsModal() {
+        if (!screencastFpsModal || !screencastFpsQuickInput) return;
+        screencastFpsQuickInput.value = String(currentScreencastTargetFps);
+        screencastFpsModal.show();
+        setTimeout(() => {
+            screencastFpsQuickInput.focus();
+            screencastFpsQuickInput.select();
+        }, 120);
+    }
+
+    async function saveScreencastFps() {
+        const nextFps = clampScreencastFps(screencastFpsQuickInput?.value);
+        const settingsUrl = resolveApi('settings', '/api/settings');
+        const r = await fetch(settingsUrl, { cache: 'no-store' });
+        if (!r.ok) throw new Error('读取设置失败: ' + r.status);
+
+        const payload = await r.json();
+        const form = new FormData();
+        form.append('SearchUrlTemplate', payload.searchUrlTemplate || '');
+        form.append('ScreencastFps', String(nextFps));
+        form.append('PluginPanelWidth', String(payload.pluginPanelWidth ?? (pluginPanelWidth || 320)));
+        form.append('UserDataDirectory', payload.userDataDirectory || '');
+        if (payload.userAgent) form.append('UserAgent', payload.userAgent);
+        form.append('AllowInstanceUserAgentOverride', payload.allowInstanceUserAgentOverride ? 'true' : 'false');
+        form.append('Headless', payload.headless ? 'true' : 'false');
+
+        const autosaveUrl = resolveApi('settingsAutosave', '/api/settings/autosave');
+        const saveResp = await fetch(autosaveUrl, {
+            method: 'POST',
+            body: form,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!saveResp.ok) {
+            const err = await saveResp.json().catch(() => null);
+            throw new Error(err?.message || 'FPS 保存失败: ' + saveResp.status);
+        }
+
+        currentScreencastTargetFps = nextFps;
+        updateFpsControlMetadata();
+        screencastFpsModal?.hide();
+        await refreshStatus();
+        await loadGlobalSettings();
+        scheduleScreencastSync(true);
+        window.showNotification?.('推流 FPS 已保存。', 'success');
     }
 
     function scheduleScreencastSync(force) {
@@ -634,6 +708,8 @@
         const tabs = getValue(data, 'tabs', 'Tabs', []);
         const hasInstance = !!getValue(data, 'currentInstanceId', 'CurrentInstanceId', null);
         const pluginWidth = Number(getValue(data, 'pluginPanelWidth', 'PluginPanelWidth', pluginPanelWidth));
+        currentScreencastTargetFps = frameIntervalMsToFps(getValue(data, 'screencastFrameIntervalMs', 'ScreencastFrameIntervalMs', fpsToFrameIntervalMs(currentScreencastTargetFps)));
+        updateFpsControlMetadata();
         selectedInstanceId = getValue(data, 'currentInstanceId', 'CurrentInstanceId', null);
         currentViewport = readViewportFromStatus(data);
         // Preserve instance-level headless state separately from the global UI state.
@@ -811,6 +887,21 @@
             window.showNotification?.('目录已打开。', 'success');
         } catch (err) {
             showError('打开目录失败。', 'warning');
+        }
+    });
+
+    fpsDisplay?.addEventListener('click', () => openScreencastFpsModal());
+    fpsDisplay?.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openScreencastFpsModal();
+        }
+    });
+    screencastFpsQuickSaveBtn?.addEventListener('click', () => saveScreencastFps().catch(error => showError(error.message || 'FPS 保存失败。')));
+    screencastFpsQuickInput?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            saveScreencastFps().catch(error => showError(error.message || 'FPS 保存失败。'));
         }
     });
 

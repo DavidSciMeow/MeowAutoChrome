@@ -455,6 +455,20 @@ body {
     color: #475569;
 }
 
+.browser-tabstrip-metric-action {
+    cursor: pointer;
+    border-radius: 0.65rem;
+    padding-inline: 0.35rem;
+    transition: background-color 160ms ease, color 160ms ease;
+}
+
+.browser-tabstrip-metric-action:hover,
+.browser-tabstrip-metric-action:focus-visible {
+    background: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+    outline: none;
+}
+
 .browser-tabstrip-controls {
     display: inline-flex;
     align-items: center;
@@ -958,6 +972,10 @@ body.app-shell .browser-tabstrip-metric {
     padding: 0.15rem 0;
     color: #475569;
     font-weight: 500;
+}
+
+body.app-shell .browser-tabstrip-metric-action {
+    padding: 0.15rem 0.4rem;
 }
 
 body.app-shell .browser-live-toggle {
