@@ -136,7 +136,18 @@ body {
 }
 
 .plugin-drawer-backdrop {
+
     /* keep but hidden; ensure no blur or visible overlay */
+    /* Styling for moved toolbar controls placed next to Headful badge */
+    .browser-tabstrip-controls .moved-controls .btn {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.875rem;
+    }
+
+    .browser-tabstrip-controls .moved-controls .btn .fa-solid {
+        margin-right: 0.35rem;
+    }
+
     display: none !important;
     position: absolute;
     inset: 0;
@@ -433,11 +444,13 @@ body {
 }
 
 .browser-chrome {
-    background: linear-gradient(180deg, #dbe5f4 0%, #edf3fb 100%);
-    border: 1px solid var(--app-border);
-    border-radius: 1.2rem;
-    padding: 0.9rem;
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+    /* Outer chrome frame removed to make the toolbar area flat.
+       Keep minimal vertical spacing so layout doesn't collapse. */
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0.3rem 0;
+    box-shadow: none;
 }
 
 .browser-tabstrip-meta {
@@ -650,6 +663,102 @@ body {
     border-radius: 999px;
 }
 
+/* Small framed panel that contains nav buttons and the omnibox */
+.address-panel {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    /* remove the small frame: no border/background on the outer wrapper */
+    padding: 0;
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.address-panel .browser-nav-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+}
+
+.address-panel .browser-nav-buttons .browser-chrome-icon-btn {
+    padding: 0.35rem 0.45rem;
+    font-size: 0.95rem;
+    height: 40px;
+    min-width: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.6rem;
+}
+
+.address-panel .browser-omnibox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    /* make the omnibox itself the visible white rounded box */
+    padding: 0.18rem 0.5rem;
+    border-radius: 0.9rem;
+    background: #ffffff;
+    border: 1px solid var(--app-border);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.03);
+}
+
+.address-panel .browser-omnibox .form-control {
+    height: 40px;
+    border: 0;
+    background: transparent;
+    padding: 0 0.25rem;
+    width: 100%;
+}
+
+.address-panel .browser-omnibox .browser-omnibox-icon {
+    flex: 0 0 auto;
+}
+
+/* Force layout: ensure nav buttons are left and omnibox fills remaining space.
+   Use !important to override other rules (responsive helpers or body.app-shell overrides). */
+.address-panel {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+}
+
+.address-panel .browser-nav-buttons {
+    order: 0 !important;
+    flex: 0 0 auto !important;
+    margin-right: 0.5rem !important;
+}
+
+.address-panel .browser-omnibox {
+    order: 1 !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+}
+
+.address-panel .browser-omnibox .form-control {
+    width: 100% !important;
+}
+
+/* Ensure the right-side toolbar group is pushed to the far right so
+   the address-panel can fill the remaining space. */
+.browser-toolbar-group {
+    margin-left: auto !important;
+}
+
+/* Make the address-panel itself allowed to grow to available space. */
+.address-panel {
+    flex: 1 1 auto !important;
+    width: auto !important;
+}
+
 .browser-toolbar-footer {
     margin-top: 0.6rem;
     color: #5f6368;
@@ -758,10 +867,25 @@ body {
 .tabs-status-list .tabs-status-item.active {
     background: rgba(26, 115, 232, 0.06);
     font-weight: 600;
+    border-color: #1a73e8;
+    box-shadow: 0 6px 18px rgba(26, 115, 232, 0.06);
 }
 
 .tabs-status-list .tabs-status-item:hover {
-    background: rgba(37, 99, 235, 0.05);
+    background: rgba(37, 99, 235, 0.03);
+}
+
+/* Add visible border and spacing for each tab item */
+.tabs-status-list .tabs-status-item {
+    border: 1px solid #dbe3ef;
+    background: #ffffff;
+    margin-bottom: 0.5rem;
+    transition: box-shadow 0.18s ease, transform 0.12s ease, border-color 0.12s ease;
+}
+
+.tabs-status-list .tabs-status-item:hover {
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    transform: translateY(-1px);
 }
 
 .tabs-instance-group {
@@ -1283,6 +1407,13 @@ body.app-shell .browser-toolbar-group {
 body.app-shell .browser-toolbar-group:last-child {
     justify-self: end;
     justify-content: flex-end;
+}
+
+/* High-specificity overrides to ensure the address panel fills available width
+   and the nav buttons stay to the left while the toolbar group stays right. */
+body.app-shell .browser-toolbar {
+    display: flex !important;
+    align-items: center !important;
 }
 
 body.app-shell .browser-toolbar-group:first-child {

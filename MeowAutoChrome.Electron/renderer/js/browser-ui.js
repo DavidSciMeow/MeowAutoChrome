@@ -66,6 +66,35 @@
     const screencastFpsQuickSaveBtn = document.getElementById('screencastFpsQuickSaveBtn');
     const screencastFpsModal = screencastFpsModalElement ? new bootstrap.Modal(screencastFpsModalElement) : null;
 
+    // Move certain toolbar buttons (screenshot, new instance, plugin drawer)
+    // next to the Headful/Headless badge so they're easier to reach.
+    (function relocateTopButtons() {
+        try {
+            const tabstripControls = document.querySelector('.browser-tabstrip-controls');
+            const headlessToggle = document.getElementById('headlessToggleBtn');
+            if (!tabstripControls) return;
+
+            // Create a container and move existing buttons into it.
+            const container = document.createElement('div');
+            container.className = 'moved-controls d-flex align-items-center gap-2 ms-2';
+
+            // Buttons defined above: shotBtn, newInstanceBtn, pluginDrawerOpenBtn
+            [shotBtn, newInstanceBtn, pluginDrawerOpenBtn].forEach(btn => {
+                if (!btn) return;
+                // Ensure the element is removed from its previous parent when appended
+                try { container.appendChild(btn); } catch { }
+            });
+
+            // Insert the container after the headless toggle when possible
+            if (headlessToggle && headlessToggle.parentElement === tabstripControls) {
+                tabstripControls.insertBefore(container, headlessToggle.nextSibling);
+            } else {
+                tabstripControls.appendChild(container);
+            }
+        }
+        catch (e) { console.warn('relocateTopButtons failed', e); }
+    })();
+
     let statusBusy = false;
     let isEditingUrl = false;
     let liveDisplayEnabled = true;
