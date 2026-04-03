@@ -462,17 +462,122 @@ body {
     color: #5f6368;
 }
 
-.browser-tabstrip-metric {
-    flex: 0 0 auto;
-    font-size: 0.85rem;
-    color: #475569;
+.toolbar-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 1rem;
+    border-radius: 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    background: #ffffff;
+    line-height: 1;
+    min-height: 40px;
+    white-space: nowrap;
+    transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 80ms ease;
+    border: 1px solid rgba(216, 224, 234, 0.85);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.toolbar-pill.pill-muted {
+    background: rgba(247, 249, 250, 0.9);
+    color: #0f172a;
+}
+
+.toolbar-pill.pill-success {
+    background: #198754;
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 10px 26px rgba(25, 135, 84, 0.08);
+}
+
+.toolbar-pill.pill-secondary {
+    background: #6c757d;
+    color: #fff;
+    border-color: transparent;
+}
+
+/* Primary variant for live toggle / important actions */
+.toolbar-pill.pill-primary {
+    background: linear-gradient(180deg, #1e6dfc 0%, #2563eb 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 12px 30px rgba(37, 99, 235, 0.12);
+}
+
+.toolbar-pill.toolbar-pill--action {
+    cursor: pointer;
+}
+
+.toolbar-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.09);
+}
+
+/* Strong override: make live toggle exactly match New Instance pill sizing/weight */
+#liveToggleBtn.toolbar-pill,
+.toolbar-pill#liveToggleBtn {
+    padding: 0.35rem 1rem !important;
+    padding-top: 0.33rem !important;
+    padding-bottom: 0.33rem !important;
+    min-height: 44px !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08) !important;
+    border: 1px solid rgba(37, 99, 235, 0.06) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.6rem !important;
+}
+
+/* Ensure icon inside wrapper aligns with pill text */
+#liveToggleBtn .fa-solid {
+    margin-right: 0.45rem !important;
+}
+
+/* Footer inline system info button (non-floating, bordered) */
+.system-info-btn {
+    position: static;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    min-width: 0;
+    padding: 0.28rem 0.7rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    background: transparent;
+    color: #0f172a;
+    border: 1px solid rgba(216, 224, 234, 0.85);
+    box-shadow: none;
+    margin-top: 0;
+}
+
+.system-info-btn:hover {
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.system-info-btn .fa-solid {
+    margin-right: 0.35rem;
+}
+
+
+/* Default background for metrics that don't use Bootstrap bg- utilities */
+.browser-tabstrip-metric:not([class*="bg-"]) {
+    background: rgba(148, 163, 184, 0.06);
 }
 
 .browser-tabstrip-metric-action {
     cursor: pointer;
-    border-radius: 0.65rem;
+    /* interactive variant of the same capsule */
+    border-radius: 999px;
     padding-inline: 0.35rem;
-    transition: background-color 160ms ease, color 160ms ease;
+    transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .browser-tabstrip-metric-action:hover,
@@ -480,6 +585,7 @@ body {
     background: rgba(37, 99, 235, 0.12);
     color: #1d4ed8;
     outline: none;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
 }
 
 .browser-tabstrip-controls {
@@ -827,6 +933,50 @@ body {
     overflow-wrap: anywhere;
 }
 
+/* Ensure badges that use Bootstrap bg-* still render as the unified capsule */
+.browser-tabstrip-metric.badge {
+    /* keep capsule shape and spacing for elements that also use Bootstrap bg-* */
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 36px;
+    border: 1px solid rgba(216, 224, 234, 0.75);
+    box-shadow: none;
+}
+
+/* Make the headless toggle outer button transparent so the inner capsule shows consistently */
+#headlessToggleBtn {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+#headlessToggleBtn .fa-solid {
+    margin-right: 0.35rem;
+}
+
+#headlessToggleBtn .browser-tabstrip-metric {
+    margin: 0;
+}
+
+/* Badges that use Bootstrap bg-* keep their color but use the unified capsule shape. */
+.browser-tabstrip-metric.badge {
+    /* shape and spacing only; do NOT override bg-* colors */
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 32px;
+    border: 1px solid rgba(216, 224, 234, 0.6);
+}
+
 .tabs-status-empty {
     color: #64748b;
 }
@@ -1089,7 +1239,7 @@ body.app-shell {
 }
 
 body.app-shell .app-content {
-    padding: 0.9rem 1rem 0.75rem;
+    padding: 0.9rem 1rem 0.25rem;
 }
 
 body.app-shell .app-main,
@@ -1200,6 +1350,16 @@ body.app-shell .browser-live-toggle {
     font-weight: 600;
 }
 
+/* Ensure the live toggle uses the unified toolbar-pill metrics when present */
+body.app-shell .toolbar-pill.browser-live-toggle {
+    padding-inline: 1rem;
+    padding-block: 0.35rem;
+    font-weight: 600;
+    min-height: 40px;
+    border-radius: 1rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
 body.app-shell .browser-toolbar {
     gap: 0.65rem;
     padding: 0.55rem;
@@ -1227,6 +1387,26 @@ body.app-shell .browser-omnibox {
     border: 1px solid #d5dfeb;
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+/* Make screenshot button a square rounded icon inside the omnibox */
+.browser-omnibox #shotBtn,
+#shotBtn {
+    width: 2.6rem !important;
+    height: 2.6rem !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 0.8rem !important;
+    line-height: 1 !important;
+    font-size: 1.05rem !important;
+}
+
+/* Slightly reduce icon margin inside the small square */
+.browser-omnibox #shotBtn .fa-solid,
+#shotBtn .fa-solid {
+    margin: 0 !important;
 }
 
 body.app-shell .browser-omnibox-icon {
@@ -1318,7 +1498,7 @@ body.app-shell .plugin-drawer-backdrop {
 }
 
 body.app-shell .app-footer {
-    padding: 0.4rem 0 0.6rem;
+    padding: 0.15rem 0 0.25rem;
     color: #6b7280;
 }
 

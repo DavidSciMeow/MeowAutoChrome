@@ -12,8 +12,7 @@
     const noSignal = document.getElementById('noSignal');
     const browserEmptyTitle = document.getElementById('browserEmptyTitle');
     const browserEmptyCopy = document.getElementById('browserEmptyCopy');
-    const cpuDisplay = document.getElementById('cpuDisplay');
-    const memoryDisplay = document.getElementById('memoryDisplay');
+    const systemInfoBtn = document.getElementById('systemInfoBtn');
     const fpsDisplay = document.getElementById('fpsDisplay');
     const browserError = document.getElementById('browserError');
     const urlInput = document.getElementById('urlInput');
@@ -78,8 +77,9 @@
             const container = document.createElement('div');
             container.className = 'moved-controls d-flex align-items-center gap-2 ms-2';
 
-            // Buttons defined above: shotBtn, newInstanceBtn, pluginDrawerOpenBtn
-            [shotBtn, newInstanceBtn, pluginDrawerOpenBtn].forEach(btn => {
+            // Buttons defined above: newInstanceBtn, pluginDrawerOpenBtn
+            // (don't move shotBtn here; it's placed within the omnibox now)
+            [newInstanceBtn, pluginDrawerOpenBtn].forEach(btn => {
                 if (!btn) return;
                 // Ensure the element is removed from its previous parent when appended
                 try { container.appendChild(btn); } catch { }
@@ -210,13 +210,10 @@
     }
 
     function renderResourceMetrics(data) {
-        if (cpuDisplay) {
-            const cpu = Number(getValue(data, 'cpuUsagePercent', 'CpuUsagePercent', 0));
-            cpuDisplay.textContent = 'CPU ' + cpu.toFixed(1) + '%';
-        }
-        if (memoryDisplay) {
-            const memory = Number(getValue(data, 'memoryUsageMb', 'MemoryUsageMb', 0));
-            memoryDisplay.textContent = 'RAM ' + memory.toFixed(1) + ' MB';
+        const cpu = Number(getValue(data, 'cpuUsagePercent', 'CpuUsagePercent', 0));
+        const memory = Number(getValue(data, 'memoryUsageMb', 'MemoryUsageMb', 0));
+        if (systemInfoBtn) {
+            systemInfoBtn.textContent = 'CPU ' + cpu.toFixed(1) + '% · RAM ' + memory.toFixed(1) + ' MB';
         }
     }
 
@@ -225,14 +222,27 @@
         // statusBadge (`connStatus`) represents backend connection state.
         // When applyStatus is called (after a successful status fetch) mark the connection as established.
         statusBadge.textContent = '已连接';
-        statusBadge.className = 'badge ' + (screencastAvailable && liveDisplayEnabled ? 'bg-success' : 'bg-secondary');
+        try {
+            statusBadge.classList.remove('pill-success', 'pill-secondary');
+            statusBadge.classList.add(screencastAvailable && liveDisplayEnabled ? 'pill-success' : 'pill-secondary');
+            statusBadge.classList.add('toolbar-pill');
+        } catch (e) {
+            statusBadge.className = 'toolbar-pill ' + (screencastAvailable && liveDisplayEnabled ? 'pill-success' : 'pill-secondary');
+        }
     }
 
     function setLiveDisplayEnabled(enabled) {
         liveDisplayEnabled = !!enabled;
         if (liveToggleBtn) {
             liveToggleBtn.textContent = liveDisplayEnabled ? '实时画面' : 'TAB 状态';
-            liveToggleBtn.className = 'btn btn-sm browser-live-toggle ' + (liveDisplayEnabled ? 'btn-primary' : 'btn-danger');
+            // Use unified toolbar-pill classes rather than Bootstrap btn classes
+            try {
+                liveToggleBtn.classList.remove('pill-primary', 'pill-muted', 'pill-success', 'pill-secondary');
+                liveToggleBtn.classList.add('toolbar-pill');
+                liveToggleBtn.classList.add(liveDisplayEnabled ? 'pill-primary' : 'pill-muted');
+            } catch (e) {
+                liveToggleBtn.className = 'toolbar-pill ' + (liveDisplayEnabled ? 'pill-primary' : 'pill-muted');
+            }
         }
         canvas?.classList.toggle('d-none', !liveDisplayEnabled);
         tabsStatusPanel?.classList.toggle('d-none', liveDisplayEnabled);
@@ -288,13 +298,16 @@
         globalHeadless = !!headless;
         if (headlessBadge) {
             headlessBadge.textContent = globalHeadless ? 'Headless' : 'Headful';
-            headlessBadge.className = 'badge ' + (globalHeadless ? 'bg-secondary' : 'bg-success');
+            try {
+                headlessBadge.classList.remove('pill-secondary', 'pill-success');
+                headlessBadge.classList.add(globalHeadless ? 'pill-secondary' : 'pill-success');
+                headlessBadge.classList.add('toolbar-pill');
+            } catch (e) {
+                headlessBadge.className = 'toolbar-pill ' + (globalHeadless ? 'pill-secondary' : 'pill-success');
+            }
         }
-        if (headlessToggleBtn) {
-            headlessToggleBtn.classList.remove('btn-primary', 'btn-outline-secondary');
-            if (globalHeadless) headlessToggleBtn.classList.add('btn-outline-secondary');
-            else headlessToggleBtn.classList.add('btn-primary');
-        }
+        // keep the outer toggle button as an unstyled wrapper; only the inner
+        // `headlessBadge` controls the visual state (bg-success/bg-secondary).
     }
 
     // Load global settings (used to initialize and confirm the toolbar state).

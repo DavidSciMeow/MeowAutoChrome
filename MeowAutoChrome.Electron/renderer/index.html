@@ -38,18 +38,16 @@
                                         </button>
                                     </div>
                                     <div class="browser-tabstrip-controls">
-                                        <button type="button" class="btn btn-sm btn-primary browser-live-toggle"
+                                        <button type="button" class="toolbar-pill pill-primary browser-live-toggle"
                                             id="liveToggleBtn">实时画面</button>
-                                        <small class="browser-tabstrip-metric" id="cpuDisplay">CPU --</small>
-                                        <small class="browser-tabstrip-metric" id="memoryDisplay">RAM --</small>
-                                        <small class="browser-tabstrip-metric browser-tabstrip-metric-action"
-                                            id="fpsDisplay" role="button" tabindex="0" title="点击设置推流 FPS"
-                                            aria-label="设置推流 FPS">FPS --</small>
-                                        <span id="connStatus" class="badge bg-secondary">未连接</span>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                                        <small class="toolbar-pill pill-muted toolbar-pill--action" id="fpsDisplay"
+                                            role="button" tabindex="0" title="点击设置推流 FPS" aria-label="设置推流 FPS">FPS
+                                            --</small>
+                                        <span id="connStatus" class="toolbar-pill pill-secondary">未连接</span>
+                                        <button type="button" class="ms-2 d-inline-flex align-items-center"
                                             id="headlessToggleBtn" title="切换 Headless 模式">
                                             <i id="headlessToggleIcon" class="fa-solid fa-eye-slash me-1"></i>
-                                            <span id="headlessBadge" class="badge bg-secondary">Headless</span>
+                                            <span id="headlessBadge" class="toolbar-pill pill-success">Headful</span>
                                         </button>
                                     </div>
                                 </div>
@@ -74,6 +72,11 @@
                                         <div class="browser-omnibox">
                                             <span class="browser-omnibox-icon"><i class="fa-solid fa-globe"></i></span>
                                             <input id="urlInput" class="form-control" />
+                                            <!-- screenshot button moved into the omnibox, next to the go button -->
+                                            <button type="button"
+                                                class="btn btn-outline-primary browser-chrome-icon-btn ms-2"
+                                                id="shotBtn" title="Screenshot" aria-label="Screenshot"><i
+                                                    class="fa-solid fa-camera"></i></button>
                                             <button type="button" class="btn btn-primary browser-omnibox-go" id="goBtn"
                                                 title="Go" aria-label="Go"><i
                                                     class="fa-solid fa-up-right-from-square"></i></button>
@@ -81,9 +84,6 @@
                                     </div>
 
                                     <div class="browser-toolbar-group">
-                                        <button type="button" class="btn btn-outline-primary browser-chrome-icon-btn"
-                                            id="shotBtn" title="Screenshot" aria-label="Screenshot"><i
-                                                class="fa-solid fa-camera"></i></button>
                                         <button type="button" class="btn btn-primary btn-md ms-2" id="newInstanceBtn"
                                             title="新建实例" aria-label="新建实例"
                                             style="font-weight:600;padding:.35rem .85rem"><i
@@ -565,7 +565,13 @@
     </main>
 
     <footer class="app-footer text-muted">
-        <div class="container-fluid px-3 px-xl-4">@Electronicute 萌喵电子</div>
+        <div class="container-fluid px-3 px-xl-4 d-flex align-items-center justify-content-between">
+            <div>@Electronicute 萌喵电子</div>
+            <div>
+                <button id="systemInfoBtn" class="toolbar-pill pill-muted system-info-btn" title="系统信息"
+                    aria-label="系统信息" type="button">CPU -- · RAM --</button>
+            </div>
+        </div>
     </footer>
 
     <!-- Core libs (CDN) -->
