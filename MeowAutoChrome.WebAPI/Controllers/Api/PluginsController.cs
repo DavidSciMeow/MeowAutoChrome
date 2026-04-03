@@ -91,6 +91,25 @@ public class PluginsController : ControllerBase
     }
 
     /// <summary>
+    /// 返回配置的插件根目录（支持多个根路径分隔）。
+    /// Return configured plugin root path(s).
+    /// </summary>
+    [HttpGet("root")]
+    public IActionResult Root()
+    {
+        try
+        {
+            var raw = pluginHost.PluginRootPath ?? string.Empty;
+            var roots = raw.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray();
+            return Ok(new { roots });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "无法读取插件目录", detail = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// 按指定路径加载单个插件程序集。<br/>
     /// Load a single plugin assembly from the specified path.
     /// </summary>

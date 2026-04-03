@@ -63,20 +63,6 @@
             const actions = document.createElement('div'); actions.className = 'd-flex gap-2 align-items-center';
             const state = document.createElement('span'); state.className = stateClass(plugin.state || ''); state.textContent = plugin.state || ''; actions.appendChild(state);
 
-            const unloadBtn = document.createElement('button'); unloadBtn.type = 'button'; unloadBtn.className = 'btn btn-sm btn-outline-danger'; unloadBtn.textContent = '卸载';
-            unloadBtn.addEventListener('click', async () => {
-                if (!confirm('确认卸载插件：' + plugin.name + '？')) return;
-                try {
-                    unloadBtn.disabled = true;
-                    const url = (window.__apiEndpoints && window.__apiEndpoints.plugins) ? window.__apiEndpoints.plugins.replace(/\/$/, '') + '/unload' : '/api/plugins/unload';
-                    const res = await postJsonUrl(url, { pluginId: plugin.id });
-                    showToast('卸载', res?.success ? '卸载成功' : '卸载返回: ' + JSON.stringify(res), !res?.success);
-                    await (window.BrowserUI.loadPlugins?.() || Promise.resolve());
-                } catch (e) { showToast('卸载失败', e.message || String(e), true); }
-                finally { unloadBtn.disabled = false; }
-            });
-            actions.appendChild(unloadBtn);
-
             header.appendChild(actions);
             card.appendChild(header);
 
@@ -87,8 +73,20 @@
             // controls
             if ((plugin.controls || []).length) {
                 const controlsWrap = document.createElement('div'); controlsWrap.className = 'd-flex flex-wrap gap-2 mb-2';
+                const stateLower = (plugin.state || '').toLowerCase();
                 for (const c of plugin.controls) {
+                    const cmd = (c.command || '').toLowerCase();
                     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn btn-sm btn-outline-secondary'; btn.textContent = c.name || c.command;
+
+                    // Enable/disable standard lifecycle controls based on plugin state
+                    if (cmd === 'start') {
+                        btn.disabled = (stateLower === 'running');
+                    } else if (cmd === 'stop' || cmd === 'pause') {
+                        btn.disabled = (stateLower !== 'running');
+                    } else if (cmd === 'resume') {
+                        btn.disabled = (stateLower !== 'paused');
+                    }
+
                     btn.addEventListener('click', async () => {
                         try { btn.disabled = true; const url = api('pluginsControl', '/api/plugins/control'); const res = await postJsonUrl(url, { pluginId: plugin.id, command: c.command, arguments: {} }); showToast('控制', '已发送: ' + (res?.status ?? 'ok'), false); await (window.BrowserUI.loadPlugins?.() || Promise.resolve()); } catch (e) { showToast('控制失败', e.message || String(e), true); } finally { btn.disabled = false; }
                     });

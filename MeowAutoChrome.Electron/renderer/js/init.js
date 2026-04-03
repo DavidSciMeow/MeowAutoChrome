@@ -36,6 +36,7 @@
         pluginsControl: mk('/api/plugins/control'),
         pluginsRun: mk('/api/plugins/run'),
         pluginsUpload: mk('/api/plugins/upload'),
+        pluginsRoot: mk('/api/plugins/root'),
         pluginsLoad: mk('/api/plugins/load'),
         pluginsUnload: mk('/api/plugins/unload'),
         pluginsDelete: mk('/api/plugins/delete'),
@@ -85,6 +86,13 @@
         });
         conn.on('ScreencastDisabled', () => { const noSig = document.getElementById('noSignal'); if (noSig) { noSig.textContent = '实时画面已关闭'; noSig.style.display = 'flex'; } });
         conn.on('ReceivePluginOutput', update => { try { window.BrowserPlugins?.applyPluginOutputUpdate?.(update); } catch (e) { console.warn(e); } });
+
+        // TabsUpdated removed — clients should rely on StatusUpdated for full state
+
+        // Receive full status payload and apply immediately (preferred)
+        conn.on('StatusUpdated', (status) => {
+            try { window.BrowserUI?.applyStatus?.(status); } catch (e) { console.warn(e); }
+        });
 
         conn.onreconnecting(() => { const status = document.getElementById('connStatus'); if (status) { status.textContent = '重连中...'; status.className = 'badge bg-warning text-dark'; } });
         conn.onreconnected(connectionId => {

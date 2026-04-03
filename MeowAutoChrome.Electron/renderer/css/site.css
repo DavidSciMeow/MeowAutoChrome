@@ -740,12 +740,95 @@ body {
     box-shadow: 0 0 0 1px rgba(26, 115, 232, 0.15), 0 10px 24px rgba(26, 115, 232, 0.12);
 }
 
+/* Simple list mode for TAB status (titles only, no URLs) */
+.tabs-status-list {
+    padding-left: 0;
+    margin: 0 0 0.75rem 0;
+}
+
+.tabs-status-list .tabs-status-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+
+.tabs-status-list .tabs-status-item.active {
+    background: rgba(26, 115, 232, 0.06);
+    font-weight: 600;
+}
+
+.tabs-status-list .tabs-status-item:hover {
+    background: rgba(37, 99, 235, 0.05);
+}
+
 .tabs-instance-group {
     margin-bottom: 1rem;
     padding: 0.85rem;
     border-radius: 1rem;
     border: 1px solid color-mix(in srgb, var(--instance-color, #2563eb) 28%, #dbe3ef);
     background: color-mix(in srgb, var(--instance-color, #2563eb) 6%, #fff);
+}
+
+/* When there are no tabs, center the placeholder content */
+.tabs-empty-centered {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: calc(100% - 2rem);
+    text-align: center;
+}
+
+.tabs-empty-centered .tabs-status-header {
+    margin-bottom: 0.5rem;
+}
+
+.tabs-empty-centered .tabs-status-title {
+    font-size: 1.05rem;
+}
+
+.tabs-empty-centered .tabs-status-empty {
+    color: #64748b;
+}
+
+/* When tabs exist, make the list container and groups fill available width */
+.tabs-status-list-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.tabs-status-list-container .tabs-instance-group {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.tabs-status-list {
+    padding-left: 0;
+    margin: 0 0 0.75rem 0;
+}
+
+.tabs-status-list .tabs-status-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    width: 100%;
+}
+
+.tabs-status-list .tabs-status-item.active {
+    background: rgba(26, 115, 232, 0.06);
+    font-weight: 600;
+}
+
+.tabs-status-list .tabs-status-item:hover {
+    background: rgba(37, 99, 235, 0.05);
 }
 
 .tabs-instance-group-header {
@@ -1303,30 +1386,26 @@ body.app-shell .browser-workspace.plugin-drawer-open .plugin-drawer-toggle {
     box-shadow: none !important;
 }
 
-/* Remove rounded corners for browser stage and center tabs status text */
+/* Remove rounded corners for browser stage */
 .browser-stage,
 body.app-shell .browser-stage {
     border-radius: 0 !important;
 }
 
-/* Stack tabs status header and message vertically and center them */
+/* Tabs status panel: do not center content by default.
+   Empty-state centering is handled via the `.tabs-empty-centered` wrapper. */
 .tabs-status-panel {
     border-radius: 0 !important;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 0.25rem;
     padding: 1rem;
+    text-align: left;
 }
 
-/* When inside the status panel, center the header (override space-between) */
-.tabs-status-panel .tabs-status-header {
+/* Center header only in the explicit empty-state wrapper */
+.tabs-empty-centered .tabs-status-header {
     justify-content: center;
     width: 100%;
 }
 
-.tabs-status-panel .tabs-status-title {
+.tabs-empty-centered .tabs-status-title {
     margin-bottom: 0.25rem;
 }

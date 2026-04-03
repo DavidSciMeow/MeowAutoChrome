@@ -62,7 +62,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
             // Demonstrate requesting a fresh browser instance from the host.
             if (HostContext is not null)
             {
-                var opts = new BrowserCreationOptions(OwnerId: "example.minimal", UserDataDirectory: null, BrowserType: "chromium", Headless: true, UserAgent: null, DisplayName: "ExamplePluginInstance");
+                var opts = new BrowserCreationOptions(OwnerId: "example.minimal", UserDataDirectory: null, BrowserType: "chromium", Headless: false, UserAgent: null, DisplayName: "ExamplePluginInstance");
                 var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
                 if (!string.IsNullOrWhiteSpace(instanceId))
                 {

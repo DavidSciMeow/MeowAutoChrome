@@ -2,6 +2,10 @@
 using Microsoft.Extensions.Logging;
 // using MeowAutoChrome.Core.Services; // not required in this file
 using System.Collections.Concurrent;
+using System.Linq;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MeowAutoChrome.Core.Interface;
 
 namespace MeowAutoChrome.Core;
@@ -65,10 +69,19 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
     public IReadOnlyList<IPage> Pages => _pagesById.Values.ToList().AsReadOnly();
 
     /// <summary>
-    /// 当前实例中所有标签页 Id 的只读列表。<br/>
-    /// Read-only list of all page/tab ids for this instance.
+    /// 当前实例中所有标签页 Id 的只读列表。会过滤已经关闭的 Page。
+    /// Read-only list of all page/tab ids for this instance. Closed pages are filtered out.
     /// </summary>
-    public IReadOnlyList<string> TabIds => _pagesById.Keys.ToList().AsReadOnly();
+    public IReadOnlyList<string> TabIds => _pagesById.Where(kv =>
+    {
+        try { return !(kv.Value?.IsClosed ?? true); }
+        catch { return true; }
+    }).Select(kv => kv.Key).ToList().AsReadOnly();
+
+    private CancellationTokenSource? _monitorCts;
+    private Task? _monitorTask;
+    public event Action<string>? TabClosed;
+    public event Action<string>? TabOpened;
 
     /// <summary>
     /// 根据标签页 Id 获取对应的页面对象（若存在）。<br/>
@@ -76,7 +89,23 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
     /// </summary>
     /// <param name="tabId">标签页 Id / tab id.</param>
     /// <returns>匹配的页面或 null。<br/>The matching page or null if not found.</returns>
-    public IPage? GetPageById(string tabId) => _pagesById.TryGetValue(tabId, out var p) ? p : null;
+    public IPage? GetPageById(string tabId)
+    {
+        if (!_pagesById.TryGetValue(tabId, out var p)) return null;
+        try
+        {
+            if (p is null) { _pagesById.TryRemove(tabId, out _); return null; }
+            if (p.IsClosed)
+            {
+                _pagesById.TryRemove(tabId, out _);
+                if (SelectedPageId == tabId) SelectedPageId = _pagesById.Keys.FirstOrDefault();
+                return null;
+            }
+        }
+        catch { }
+
+        return p;
+    }
 
     /// <summary>
     /// 创建一个新的 <see cref="PlaywrightInstance"/> 实例。<br/>
@@ -168,8 +197,59 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
             _pagesById[id] = page;
         }
 
+        // Listen for pages created after initialization (e.g. popups/window.open)
+        try
+        {
+            _context.Page += (_, page) =>
+            {
+                try
+                {
+                    var id = Guid.NewGuid().ToString("N");
+                    _pagesById[id] = page;
+                    SelectedPageId = id;
+                    try { TabOpened?.Invoke(id); } catch { }
+                }
+                catch { }
+            };
+        }
+        catch { }
+
         IsHeadless = headless;
         _logger.LogInformation("Playwright instance initialized {InstanceId} headless={Headless}", InstanceId, IsHeadless);
+
+        // Start background monitor to detect externally closed pages and raise TabClosed
+        try
+        {
+            _monitorCts = new CancellationTokenSource();
+            var token = _monitorCts.Token;
+            _monitorTask = Task.Run(async () =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var keys = _pagesById.Keys.ToArray();
+                        foreach (var key in keys)
+                        {
+                            if (!_pagesById.TryGetValue(key, out var pg)) continue;
+                            bool closed = true;
+                            try { closed = pg == null || pg.IsClosed; } catch { closed = true; }
+                            if (closed)
+                            {
+                                if (_pagesById.TryRemove(key, out _))
+                                {
+                                    if (SelectedPageId == key) SelectedPageId = _pagesById.Keys.FirstOrDefault();
+                                    try { TabClosed?.Invoke(key); } catch { }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                    try { await Task.Delay(500, token); } catch { break; }
+                }
+            }, token);
+        }
+        catch { }
     }
 
     private static Task<IPlaywright> GetSharedPlaywrightAsync() => _sharedPlaywrightLazy.Value;
@@ -183,6 +263,8 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
     {
         try
         {
+            try { _monitorCts?.Cancel(); } catch { }
+            try { if (_monitorTask != null) await _monitorTask; } catch { }
             if (_context != null)
                 await _context.CloseAsync();
             _pagesById.Clear();
@@ -243,6 +325,7 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
         if (!_pagesById.TryRemove(tabId, out var page)) return false;
         try { await page.CloseAsync(); } catch { }
         if (SelectedPageId == tabId) SelectedPageId = _pagesById.Keys.FirstOrDefault();
+        try { TabClosed?.Invoke(tabId); } catch { }
         return true;
     }
 

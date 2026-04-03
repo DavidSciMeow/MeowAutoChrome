@@ -31,13 +31,44 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
     /// 确保插件目录已存在（若不存在则创建）。<br/>
     /// Ensure the plugin directory exists (create if missing).
     /// </summary>
-    public void EnsurePluginDirectoryExists() => Directory.CreateDirectory(_pluginRootPath);
+    public void EnsurePluginDirectoryExists()
+    {
+        var separators = new[] { ';', '|' };
+        var roots = _pluginRootPath.Split(separators, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim());
+        foreach (var root in roots)
+        {
+            try { if (!string.IsNullOrWhiteSpace(root)) Directory.CreateDirectory(root); } catch { }
+        }
+    }
 
     /// <summary>
     /// 枚举插件根目录下所有的程序集文件路径（递归）。<br/>
     /// Enumerate all assembly file paths under the plugin root directory (recursive).
     /// </summary>
-    public IEnumerable<string> EnumeratePluginAssemblies() => Directory.EnumerateFiles(_pluginRootPath, "*.dll", SearchOption.AllDirectories);
+    public IEnumerable<string> EnumeratePluginAssemblies()
+    {
+        // Support multiple plugin root paths separated by ';' or '|' in the configured _pluginRootPath.
+        var separators = new[] { ';', '|' };
+        var roots = _pluginRootPath.Split(separators, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim());
+
+        var files = new List<string>();
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            try
+            {
+                if (!Directory.Exists(root)) continue;
+                files.AddRange(Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories));
+            }
+            catch
+            {
+                // ignore directories we cannot access and continue with others
+                continue;
+            }
+        }
+
+        return files;
+    }
 
     /// <summary>
     /// 发现插件根目录下的所有插件并返回聚合快照。<br/>

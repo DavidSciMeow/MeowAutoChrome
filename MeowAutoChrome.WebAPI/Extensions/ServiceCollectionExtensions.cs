@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Contracts.SignalR;
 using MeowAutoChrome.Core;
+using System.Threading.Tasks;
+using MeowAutoChrome.WebAPI.Models;
+using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
 using MeowAutoChrome.WebAPI.Services;
@@ -27,9 +30,116 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<AppLogService>();
         services.AddSingleton<BrowserInstanceManagerCore>();
-        services.AddSingleton(sp => new BrowserInstanceManager(sp.GetRequiredService<BrowserInstanceManagerCore>(), sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>()));
+        services.AddSingleton(sp =>
+        {
+            var core = sp.GetRequiredService<BrowserInstanceManagerCore>();
+            var mgr = new BrowserInstanceManager(core, sp.GetRequiredService<IProgramSettingsProvider>(), sp.GetRequiredService<ILogger<BrowserInstanceManager>>());
+            var hub = sp.GetRequiredService<IHubContext<BrowserHub>>();
+            try
+            {
+                // capture additional services needed to build full status
+                var screencast = sp.GetRequiredService<ScreencastServiceCore>();
+                var metrics = sp.GetRequiredService<ResourceMetricsService>();
+                var settingsProv = sp.GetRequiredService<IProgramSettingsProvider>();
+
+                core.TabClosed += (tabId) =>
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // Build full status similar to StatusController.BuildStatusAsync
+                            var snapshot = metrics.GetSnapshot();
+                            core.TabOpened += (tabId) =>
+                            {
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        // Build full status similar to StatusController.BuildStatusAsync
+                                        var snapshot = metrics.GetSnapshot();
+                                        var settings = await settingsProv.GetAsync();
+                                        var hasInstance = core.GetInstances().Count > 0;
+                                        var supportsScreencast = hasInstance && core.IsHeadless;
+                                        var screencastEnabled = supportsScreencast && screencast.Enabled;
+
+                                        var currentUrl = mgr.CurrentUrl;
+                                        var title = await mgr.GetTitleAsync();
+                                        var tabs = await mgr.GetTabsAsync();
+                                        var viewport = await mgr.GetCurrentInstanceViewportSettingsAsync();
+
+                                        var status = new BrowserStatusResponse(
+                                            currentUrl,
+                                            title,
+                                            null,
+                                            supportsScreencast,
+                                            screencastEnabled,
+                                            screencast.MaxWidth,
+                                            screencast.MaxHeight,
+                                            screencast.FrameIntervalMs,
+                                            snapshot.CpuUsagePercent,
+                                            snapshot.MemoryUsageMb,
+                                            mgr.TotalPageCount,
+                                            settings.PluginPanelWidth,
+                                            tabs,
+                                            mgr.CurrentInstanceId,
+                                            viewport,
+                                            mgr.IsHeadless);
+
+                                        await hub.Clients.All.SendAsync("StatusUpdated", status);
+                                    }
+                                    catch { }
+                                });
+                            };
+                            var settings = await settingsProv.GetAsync();
+                            var hasInstance = core.GetInstances().Count > 0;
+                            var supportsScreencast = hasInstance && core.IsHeadless;
+                            var screencastEnabled = supportsScreencast && screencast.Enabled;
+
+                            var currentUrl = mgr.CurrentUrl;
+                            var title = await mgr.GetTitleAsync();
+                            var tabs = await mgr.GetTabsAsync();
+                            var viewport = await mgr.GetCurrentInstanceViewportSettingsAsync();
+
+                            var status = new BrowserStatusResponse(
+                                currentUrl,
+                                title,
+                                null,
+                                supportsScreencast,
+                                screencastEnabled,
+                                screencast.MaxWidth,
+                                screencast.MaxHeight,
+                                screencast.FrameIntervalMs,
+                                snapshot.CpuUsagePercent,
+                                snapshot.MemoryUsageMb,
+                                mgr.TotalPageCount,
+                                settings.PluginPanelWidth,
+                                tabs,
+                                mgr.CurrentInstanceId,
+                                viewport,
+                                mgr.IsHeadless);
+
+                            await hub.Clients.All.SendAsync("StatusUpdated", status);
+                        }
+                        catch { }
+                    });
+                };
+            }
+            catch { }
+
+            return mgr;
+        });
         services.AddSingleton<IProgramSettingsProvider, FileProgramSettingsProvider>();
-        services.AddSingleton<IPluginDiscoveryService, PluginDiscoveryService>();
+        // Allow overriding plugin root(s) via environment variable MEOW_PLUGIN_ROOTS (semicolon- or pipe-separated).
+        var envRoots = Environment.GetEnvironmentVariable("MEOW_PLUGIN_ROOTS");
+        if (!string.IsNullOrWhiteSpace(envRoots))
+        {
+            services.AddSingleton<IPluginDiscoveryService>(sp => new PluginDiscoveryService(envRoots));
+        }
+        else
+        {
+            services.AddSingleton<IPluginDiscoveryService, PluginDiscoveryService>();
+        }
         services.AddSingleton<IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>()));
 
         // Plugin host dependencies

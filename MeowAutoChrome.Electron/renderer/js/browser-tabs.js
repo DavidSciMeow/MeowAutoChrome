@@ -99,18 +99,29 @@
         tabsStatusPanel.replaceChildren();
 
         const groups = groupTabsByInstance(tabs || []);
-        const header = document.createElement('div');
-        header.className = 'tabs-status-header';
-        header.innerHTML = '<h3 class="tabs-status-title">当前 TAB 状态</h3>';
-        tabsStatusPanel.appendChild(header);
 
+        // Empty state: show centered title + message
         if (!groups.length) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'tabs-empty-centered';
+
+            const header = document.createElement('div');
+            header.className = 'tabs-status-header';
+            header.innerHTML = '<h3 class="tabs-status-title">当前 TAB 状态</h3>';
+            wrapper.appendChild(header);
+
             const empty = document.createElement('div');
             empty.className = 'tabs-status-empty';
             empty.textContent = '暂无实例或标签页。';
-            tabsStatusPanel.appendChild(empty);
+            wrapper.appendChild(empty);
+
+            tabsStatusPanel.appendChild(wrapper);
             return;
         }
+
+        // Non-empty: list groups (no top header), stretch to full width
+        const container = document.createElement('div');
+        container.className = 'tabs-status-list-container';
 
         for (const group of groups) {
             const groupNode = document.createElement('section');
@@ -149,22 +160,24 @@
             groupHeader.appendChild(actions);
             groupNode.appendChild(groupHeader);
 
+            // Render tabs as a simple list without showing URLs
+            const list = document.createElement('ul');
+            list.className = 'tabs-status-list list-unstyled mb-2';
+
             for (const tab of group.tabs) {
                 const tabId = tab.id || tab.Id;
-                const card = document.createElement('div');
-                card.className = 'tabs-status-card' + ((tab.isSelected || tab.IsSelected || tab.isActive || tab.IsActive) ? ' tabs-status-card-active' : '');
-                card.tabIndex = 0;
+                const li = document.createElement('li');
+                li.className = 'tabs-status-item' + ((tab.isSelected || tab.IsSelected || tab.isActive || tab.IsActive) ? ' active' : '');
+                li.tabIndex = 0;
 
-                const row = document.createElement('div');
-                row.className = 'tabs-status-row';
-
-                const name = document.createElement('div');
+                const name = document.createElement('span');
                 name.className = 'tabs-status-name';
                 name.textContent = tab.title || tab.Title || 'about:blank';
-                row.appendChild(name);
+                li.appendChild(name);
 
-                const rowActions = document.createElement('div');
-                rowActions.className = 'tabs-status-actions';
+                const btns = document.createElement('div');
+                btns.className = 'tabs-status-actions d-inline-block ms-2';
+
                 const closeTabButton = document.createElement('button');
                 closeTabButton.type = 'button';
                 closeTabButton.className = 'btn btn-sm btn-outline-secondary tabs-status-close';
@@ -174,29 +187,28 @@
                     await postJson('tabsClose', { tabId });
                     await window.BrowserUI.refreshStatus?.();
                 });
-                rowActions.appendChild(closeTabButton);
-                row.appendChild(rowActions);
+                btns.appendChild(closeTabButton);
 
-                const url = document.createElement('div');
-                url.className = 'tabs-status-url';
-                url.textContent = tab.url || tab.Url || 'about:blank';
+                li.appendChild(btns);
 
-                card.appendChild(row);
-                card.appendChild(url);
-                card.addEventListener('click', async () => {
+                li.addEventListener('click', async () => {
                     await window.BrowserUI.selectTab?.(tabId);
                 });
-                card.addEventListener('keydown', async event => {
+                li.addEventListener('keydown', async event => {
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         await window.BrowserUI.selectTab?.(tabId);
                     }
                 });
-                groupNode.appendChild(card);
+
+                list.appendChild(li);
             }
 
-            tabsStatusPanel.appendChild(groupNode);
+            groupNode.appendChild(list);
+            container.appendChild(groupNode);
         }
+
+        tabsStatusPanel.appendChild(container);
     }
 
     window.BrowserTabs = { renderTabs, renderTabsStatus, updateTabScrollButtons, groupTabsByInstance };

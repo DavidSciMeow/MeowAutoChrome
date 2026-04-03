@@ -238,15 +238,8 @@
                         aria-orientation="vertical" aria-label="调整浏览器区与插件区宽度" tabindex="0"></div>
                     <div class="browser-pane browser-pane-right" id="pluginDrawerPane">
                         <div class="card h-100 plugin-panel">
-                            <div class="card-header plugin-panel-header">
-                                <span>插件区</span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary d-none"
-                                    id="pluginDrawerCloseBtn" aria-label="收起插件区">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
-                            </div>
                             <div class="card-body">
-                                <div id="pluginHost" class="vstack gap-3 small text-muted"></div>
+                                <div id="pluginHost" class="vstack gap-3"></div>
                             </div>
                         </div>
                     </div>
@@ -479,6 +472,10 @@
                                                 type="button">上传并扫描</button>
                                             <button id="pluginClearBtn" type="button"
                                                 class="btn btn-outline-secondary">清除选择</button>
+                                            <button id="pluginOpenDirBtn" type="button"
+                                                class="btn btn-outline-secondary">
+                                                <i class="fa-solid fa-folder-open me-1"></i>打开插件目录
+                                            </button>
                                             <div id="uploadSpinner" class="spinner-border text-primary" role="status"
                                                 style="display:none; width:1.2rem; height:1.2rem;"></div>
                                         </div>

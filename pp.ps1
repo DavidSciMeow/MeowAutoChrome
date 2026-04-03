@@ -1,0 +1,1 @@
+dotnet publish .\MeowAutoChrome.ExamplePlugin\MeowAutoChrome.ExamplePlugin.csproj -c Release -o .\MeowAutoChrome.ExamplePlugin\publish

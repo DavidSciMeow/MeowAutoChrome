@@ -1,4 +1,5 @@
 ﻿using Microsoft.Playwright;
+using System;
 using MeowAutoChrome.Core.Struct;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Models;
@@ -19,6 +20,8 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     private readonly IProgramSettingsProvider? _settingsProvider;
     private readonly ConcurrentDictionary<string, ICoreBrowserInstance> _instances = new ConcurrentDictionary<string, ICoreBrowserInstance>();
     private string? _currentInstanceId;
+    public event Action<string>? TabClosed;
+    public event Action<string>? TabOpened;
 
     /// <summary>
     /// 构造函数，注入日志、日志工厂与可选的设置提供者。<br/>
@@ -201,6 +204,18 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
         var inst = new PlaywrightInstance(_loggerFactory?.CreateLogger<PlaywrightInstance>() ?? NullLogger<PlaywrightInstance>.Instance, id, displayName, ownerId);
         if (!_instances.TryAdd(id, inst))
             throw new InvalidOperationException("Failed to add instance");
+
+        // Subscribe to instance tab-closed notifications and re-raise at core level
+        try
+        {
+            inst.TabClosed += (tabId) => { try { TabClosed?.Invoke(tabId); } catch { } };
+        }
+        catch { }
+        try
+        {
+            inst.TabOpened += (tabId) => { try { TabOpened?.Invoke(tabId); } catch { } };
+        }
+        catch { }
         // Create a per-instance user-data directory to avoid Playwright conflicts when multiple
         // persistent contexts run simultaneously. Use a subfolder under the provided root.
         var instanceUserDataDir = Path.Combine(userDataDir, id);
@@ -473,7 +488,15 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
             foreach (var id in inst.TabIds)
             {
                 var page = inst.GetPageById(id);
-                tabs.Add(new BrowserTabInfo(id, page?.TitleAsync().GetAwaiter().GetResult(), page?.Url, inst.SelectedPageId == id, inst.OwnerId));
+                if (page is null) continue; // page was removed/closed
+
+                string? title = null;
+                try { title = await page.TitleAsync(); } catch { }
+
+                string? url = null;
+                try { url = page.Url; } catch { }
+
+                tabs.Add(new BrowserTabInfo(id, title, url, inst.SelectedPageId == id, inst.OwnerId));
             }
         }
 
