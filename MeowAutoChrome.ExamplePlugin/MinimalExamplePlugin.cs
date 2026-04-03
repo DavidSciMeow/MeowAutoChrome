@@ -261,4 +261,49 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
             return Result.Fail(ex.Message);
         }
     }
+
+    [PAction(Name = "OpenBaiduAndGetTitle")]
+    /// <summary>
+    /// 请求宿主创建新实例、在浏览器上下文中打开新页面并导航到 baidu.com，然后返回标题。<br/>
+    /// Request the host to create a new browser instance, open a page in the browser context, navigate to baidu.com and return the page title.
+    /// </summary>
+    public async Task<IResult> OpenBaiduAndGetTitleAsync()
+    {
+        if (HostContext is null) return Result.Fail("No host context available");
+
+        var opts = new BrowserCreationOptions(
+            OwnerId: HostContext.PluginId,
+            UserDataDirectory: null,
+            BrowserType: "chromium",
+            Headless: true,
+            UserAgent: "ExamplePlugin/1.0",
+            DisplayName: "Example-Baidu"
+        );
+
+        var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
+        if (string.IsNullOrWhiteSpace(instanceId))
+            return Result.Fail("Host refused to create a new browser instance.");
+
+        try
+        {
+            var browserContext = HostContext.BrowserContext;
+            if (browserContext is null) return Result.Fail("Host did not provide a browser context.");
+
+            var page = await browserContext.NewPageAsync();
+            try
+            {
+                await page.GotoAsync("https://www.baidu.com");
+                var title = await page.TitleAsync();
+                return Result.Ok(new { instanceId, title });
+            }
+            finally
+            {
+                try { await page.CloseAsync(); } catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
 }
