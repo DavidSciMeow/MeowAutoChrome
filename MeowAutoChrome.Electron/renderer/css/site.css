@@ -818,6 +818,15 @@ body {
     margin-bottom: 0;
 }
 
+/* Toast: allow long messages / paths to wrap instead of overflowing */
+.toast .toast-body {
+    /* In a flex row with a close button, allow body to grow and wrap */
+    flex: 1 1 auto;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
 .tabs-status-empty {
     color: #64748b;
 }

@@ -80,7 +80,11 @@ internal sealed class BrowserPluginDiscovery
         var errors = new List<string>();
         var errorsDetailed = new List<CoreModels.BrowserPluginErrorDescriptor>();
 
-        foreach (var pluginPath in Directory.EnumerateFiles(PluginRootPath, "*.dll", SearchOption.AllDirectories))
+        // Use the discovery service to enumerate assemblies so that multiple
+        // root paths (separated by ';' or '|') and other discovery policies
+        // are consistently respected. PluginDiscoveryService.EnumeratePluginAssemblies
+        // performs recursive enumeration under each configured root.
+        foreach (var pluginPath in _discovery.EnumeratePluginAssemblies())
         {
             string[] candidateTypeNames;
 

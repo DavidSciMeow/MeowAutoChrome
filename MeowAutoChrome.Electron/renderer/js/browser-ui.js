@@ -103,7 +103,8 @@
     let applyingScreencastSettings = false;
     let pointerResizeActive = false;
     let pluginPanelWidth = Number(config.defaultPluginPanelWidth) || 320;
-    let pluginDrawerOpen = true;
+    // 默认不展开插件区
+    let pluginDrawerOpen = false;
     let selectedInstanceId = null;
     let currentViewport = null;
     // `instanceHeadless` tracks the current instance's headless state (from /api/status).
