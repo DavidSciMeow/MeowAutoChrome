@@ -73,11 +73,12 @@ public sealed class ProgramSettings
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "instances");
 
     /// <summary>
-    /// 获取默认插件目录路径（相对于应用基目录）。<br/>
-    /// Get the default plugin directory path (relative to app base directory).
+    /// <summary>
+    /// 获取默认插件目录路径（基于本地应用数据的 AppData\Local\MeowAutoChrome\Plugins）。<br/>
+    /// Get the default plugin directory path (under LocalApplicationData\MeowAutoChrome\Plugins).
     /// </summary>
     public static string GetDefaultPluginDirectoryPath()
-        => Path.Combine(AppContext.BaseDirectory, "Plugins");
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "Plugins");
 
     /// <summary>
     /// 获取旧版用户数据目录路径（兼容旧布局）。<br/>

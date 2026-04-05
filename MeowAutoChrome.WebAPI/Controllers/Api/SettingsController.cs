@@ -18,12 +18,14 @@ public class SettingsController : ControllerBase
     private readonly IProgramSettingsProvider programSettingsService;
     private readonly ScreencastServiceCore screencastService;
     private readonly BrowserInstanceManager browserInstances;
+    private readonly IPluginHostCore pluginHost;
 
-    public SettingsController(IProgramSettingsProvider programSettingsService, ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances)
+    public SettingsController(IProgramSettingsProvider programSettingsService, ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances, IPluginHostCore pluginHost)
     {
         this.programSettingsService = programSettingsService;
         this.screencastService = screencastService;
         this.browserInstances = browserInstances;
+        this.pluginHost = pluginHost;
     }
 
     /// <summary>
@@ -35,6 +37,12 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> Get()
     {
         var settings = await programSettingsService.GetAsync();
+        // If plugin directory is missing or empty, set it to Core default and persist so clients see a valid path.
+        if (string.IsNullOrWhiteSpace(settings.PluginDirectory))
+        {
+            settings.PluginDirectory = ProgramSettings.GetDefaultPluginDirectoryPath();
+            try { await programSettingsService.SaveAsync(settings); } catch { }
+        }
         return Ok(new
         {
             settings.SearchUrlTemplate,
@@ -46,6 +54,8 @@ public class SettingsController : ControllerBase
             settings.Headless,
             settingsFilePath = ProgramSettings.GetSettingsFilePath(),
             defaultUserDataDirectory = ProgramSettings.GetDefaultUserDataDirectoryPath(),
+            pluginDirectory = settings.PluginDirectory,
+            defaultPluginDirectory = ProgramSettings.GetDefaultPluginDirectoryPath(),
             minPluginPanelWidth = ProgramSettings.MinPluginPanelWidth,
             maxPluginPanelWidth = ProgramSettings.MaxPluginPanelWidth
         });
@@ -66,12 +76,32 @@ public class SettingsController : ControllerBase
         try
         {
             var previousSettings = await programSettingsService.GetAsync();
+
+            // If plugin directory changed, attempt to update/move first. Only allow single-directory changes.
+            var pluginDirectoryChanged = !string.Equals(previousSettings.PluginDirectory, model.PluginDirectory, StringComparison.OrdinalIgnoreCase);
+            if (pluginDirectoryChanged)
+            {
+                try
+                {
+                    await pluginHost.UpdatePluginRootPathAsync(model.PluginDirectory);
+                }
+                catch (ArgumentException aex)
+                {
+                    return BadRequest(new { message = aex.Message });
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, new { message = ex.Message });
+                }
+            }
+
             var settings = new Core.Struct.ProgramSettings
             {
                 SearchUrlTemplate = model.SearchUrlTemplate,
                 ScreencastFps = model.ScreencastFps,
                 PluginPanelWidth = model.PluginPanelWidth,
                 UserDataDirectory = model.UserDataDirectory,
+                PluginDirectory = model.PluginDirectory,
                 UserAgent = model.UserAgent,
                 AllowInstanceUserAgentOverride = model.AllowInstanceUserAgentOverride,
                 Headless = model.Headless
@@ -97,6 +127,8 @@ public class SettingsController : ControllerBase
                 await screencastService.OnBrowserModeChangedAsync();
 
             var changes = new List<string>();
+            if (pluginDirectoryChanged)
+                changes.Add("插件根目录已切换并重新扫描");
             if (userDataDirectoryChanged)
                 changes.Add("浏览器用户数据目录已切换");
             if (headlessChanged)
@@ -105,6 +137,56 @@ public class SettingsController : ControllerBase
                 changes.Add("User-Agent 配置已同步到实例");
 
             return Ok(new { message = changes.Count > 0 ? $"设置已自动保存，{string.Join('，', changes)}。" : "设置已自动保存。" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 将所有程序设置重置为默认值并持久化。
+    /// Reset all program settings to defaults and persist.
+    /// </summary>
+    [HttpPost("reset")]
+    public async Task<IActionResult> Reset()
+    {
+        try
+        {
+            var defaultSettings = new Core.Struct.ProgramSettings();
+
+            // Ensure plugin host uses the default plugin directory (may trigger migration)
+            try
+            {
+                await pluginHost.UpdatePluginRootPathAsync(defaultSettings.PluginDirectory);
+            }
+            catch (ArgumentException aex)
+            {
+                return BadRequest(new { message = aex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
+
+            await programSettingsService.SaveAsync(defaultSettings);
+
+            return Ok(new
+            {
+                defaultSettings.SearchUrlTemplate,
+                defaultSettings.ScreencastFps,
+                defaultSettings.PluginPanelWidth,
+                defaultSettings.UserDataDirectory,
+                defaultSettings.UserAgent,
+                defaultSettings.AllowInstanceUserAgentOverride,
+                defaultSettings.Headless,
+                settingsFilePath = ProgramSettings.GetSettingsFilePath(),
+                defaultUserDataDirectory = ProgramSettings.GetDefaultUserDataDirectoryPath(),
+                pluginDirectory = defaultSettings.PluginDirectory,
+                defaultPluginDirectory = ProgramSettings.GetDefaultPluginDirectoryPath(),
+                minPluginPanelWidth = ProgramSettings.MinPluginPanelWidth,
+                maxPluginPanelWidth = ProgramSettings.MaxPluginPanelWidth
+            });
         }
         catch (Exception ex)
         {

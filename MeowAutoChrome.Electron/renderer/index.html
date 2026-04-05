@@ -387,8 +387,12 @@
                                     <div class="text-muted small">修改后会自动保存并立即应用。</div>
                                     <div class="text-muted small">设置文件位置：<span id="settingsFilePath">加载中...</span></div>
                                 </div>
-                                <div id="settingsAutoSaveStatus"
-                                    class="settings-autosave-status settings-autosave-status-success">已加载设置</div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div id="settingsAutoSaveStatus"
+                                        class="settings-autosave-status settings-autosave-status-success">已加载设置</div>
+                                    <button type="button" id="ResetSettingsBtn" class="btn btn-outline-danger btn-sm"
+                                        title="重置所有设置"><i class="fa-solid fa-rotate-left"></i>&nbsp;重置</button>
+                                </div>
                                 <div id="pageNotifications" class="toast-container p-3 position-fixed top-0 end-0"
                                     style="z-index:1050"></div>
                             </div>
@@ -425,6 +429,22 @@
                                         <div class="form-text">
                                             默认目录：<span id="defaultUserDataDirectory">加载中...</span>。
                                         </div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <label class="form-label" for="PluginDirectory">插件根目录</label>
+                                        <div class="input-group">
+                                            <input id="PluginDirectory" name="PluginDirectory" class="form-control" />
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="PluginDirectoryOpenBtn" title="打开目录"><i
+                                                    class="fa-solid fa-folder-open"></i></button>
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="PluginDirectoryChooseBtn" title="选择目录"><i
+                                                    class="fa-solid fa-folder-tree"></i></button>
+                                        </div>
+                                        <div class="form-text">默认目录：<span
+                                                id="defaultPluginDirectory">加载中...</span>。支持多个根路径，用分号或竖线分隔。</div>
+                                        <input id="PluginDirectoryPicker" type="file" webkitdirectory directory
+                                            style="display:none;" />
                                     </div>
                                 </section>
 
@@ -476,10 +496,7 @@
                                                 type="button">上传并扫描</button>
                                             <button id="pluginClearBtn" type="button"
                                                 class="btn btn-outline-secondary">清除选择</button>
-                                            <button id="pluginOpenDirBtn" type="button"
-                                                class="btn btn-outline-secondary">
-                                                <i class="fa-solid fa-folder-open me-1"></i>打开插件目录
-                                            </button>
+                                            <!-- 打开插件目录按钮已移除；请使用设置页中的插件目录控件 -->
                                             <div id="uploadSpinner" class="spinner-border text-primary" role="status"
                                                 style="display:none; width:1.2rem; height:1.2rem;"></div>
                                         </div>

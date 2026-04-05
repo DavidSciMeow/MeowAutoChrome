@@ -40,6 +40,13 @@ public sealed class ProgramSettingsViewModel
     public string UserDataDirectory { get; set; } = ProgramSettings.GetDefaultUserDataDirectoryPath();
 
     /// <summary>
+    /// 插件根目录（可多路径，使用分号或竖线分隔）。<br/>
+    /// Plugin root directory (multiple roots supported via ';' or '|').
+    /// </summary>
+    [Display(Name = "插件根目录")]
+    public string PluginDirectory { get; set; } = ProgramSettings.GetDefaultPluginDirectoryPath();
+
+    /// <summary>
     /// 全局 User-Agent。<br/>
     /// Global User-Agent.
     /// </summary>

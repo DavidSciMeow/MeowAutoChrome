@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -375,5 +375,15 @@ ipcMain.handle('meow:open-path', async (_event, targetPath) => {
         return { ok: true, openedPath: openTarget };
     } catch (error) {
         return { ok: false, message: error?.message || '打开文件夹失败。' };
+    }
+});
+
+ipcMain.handle('meow:choose-directory', async () => {
+    try {
+        const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) return { canceled: true };
+        return { canceled: false, path: result.filePaths[0] };
+    } catch (err) {
+        return { canceled: true, error: err?.message || '选择目录失败' };
     }
 });

@@ -87,7 +87,32 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
     private static void Normalize(Struct.ProgramSettings settings)
     {
         settings.SearchUrlTemplate = string.IsNullOrWhiteSpace(settings.SearchUrlTemplate) ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultSearchUrlTemplate : settings.SearchUrlTemplate.Trim();
-        settings.UserDataDirectory = string.IsNullOrWhiteSpace(settings.UserDataDirectory) ? MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultUserDataDirectoryPath() : Path.GetFullPath(settings.UserDataDirectory);
+
+        // Normalize UserDataDirectory: prefer default if empty, otherwise make absolute.
+        settings.UserDataDirectory = string.IsNullOrWhiteSpace(settings.UserDataDirectory)
+            ? MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultUserDataDirectoryPath()
+            : Path.GetFullPath(settings.UserDataDirectory);
+
+        // Normalize PluginDirectory: if empty use default under AppData; if it's not rooted,
+        // interpret it as relative to AppData directory (avoid resolving relative to current working dir).
+        if (string.IsNullOrWhiteSpace(settings.PluginDirectory))
+        {
+            settings.PluginDirectory = MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultPluginDirectoryPath();
+        }
+        else
+        {
+            var pluginDirRaw = settings.PluginDirectory.Trim();
+            if (Path.IsPathRooted(pluginDirRaw))
+            {
+                settings.PluginDirectory = Path.GetFullPath(pluginDirRaw);
+            }
+            else
+            {
+                var appDataBase = MeowAutoChrome.Core.Struct.ProgramSettings.GetAppDataDirectoryPath();
+                settings.PluginDirectory = Path.GetFullPath(Path.Combine(appDataBase, pluginDirRaw));
+            }
+        }
+
         settings.UserAgent = string.IsNullOrWhiteSpace(settings.UserAgent) ? null : settings.UserAgent.Trim();
         settings.ScreencastFps = Math.Clamp(settings.ScreencastFps <= 0 ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultScreencastFps : settings.ScreencastFps, 1, 60);
         settings.PluginPanelWidth = Math.Clamp(settings.PluginPanelWidth <= 0 ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultPluginPanelWidth : settings.PluginPanelWidth, MeowAutoChrome.Core.Struct.ProgramSettings.MinPluginPanelWidth, MeowAutoChrome.Core.Struct.ProgramSettings.MaxPluginPanelWidth);

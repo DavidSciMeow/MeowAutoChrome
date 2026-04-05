@@ -82,7 +82,8 @@
         const byId = {
             SearchUrlTemplate: payload.searchUrlTemplate,
             UserDataDirectory: payload.userDataDirectory,
-            UserAgent: payload.userAgent
+            UserAgent: payload.userAgent,
+            PluginDirectory: payload.pluginDirectory || payload.defaultPluginDirectory
         };
 
         Object.entries(byId).forEach(([id, value]) => {
@@ -99,6 +100,8 @@
 
         if (settingsFilePath) settingsFilePath.textContent = payload.settingsFilePath || "未知";
         if (defaultUserDataDirectory) defaultUserDataDirectory.textContent = payload.defaultUserDataDirectory || "未知";
+        const defaultPluginDirectory = document.getElementById('defaultPluginDirectory');
+        if (defaultPluginDirectory) defaultPluginDirectory.textContent = payload.defaultPluginDirectory || "未知";
         lastSavedState = new URLSearchParams(new FormData(form)).toString();
         setStatus("已加载设置", "success");
     }
@@ -109,6 +112,17 @@
             if (!response.ok) throw new Error("设置读取失败: " + response.status);
             applySettings(await response.json());
         } catch (error) {
+            // Try fallback to plugin roots endpoint (may be available even if full settings API is not)
+            try {
+                const r2 = await fetch(resolveApi("pluginsRoot", "/api/plugins/root"), { cache: "no-store" });
+                if (r2.ok) {
+                    const p = await r2.json();
+                    applySettings({ pluginDirectory: p.pluginDirectory, defaultPluginDirectory: p.defaultPluginDirectory, settingsFilePath: "未知" });
+                    setStatus("已加载插件根目录信息", "success");
+                    return;
+                }
+            } catch { }
+
             setStatus("设置加载失败。", "error");
             window.showNotification?.(error.message || "设置加载失败。", "danger");
         }
@@ -138,6 +152,54 @@
         }
     });
 
+    // Plugin directory open/choose buttons
+    const pluginDirOpenBtn = document.getElementById('PluginDirectoryOpenBtn');
+    pluginDirOpenBtn?.addEventListener('click', async () => {
+        const pathEl = document.getElementById('PluginDirectory');
+        const defaultEl = document.getElementById('defaultPluginDirectory');
+        const target = (pathEl?.value?.trim()) || (defaultEl?.textContent?.trim()) || '';
+        if (!target) { setStatus('插件目录为空。', 'error'); return; }
+        try {
+            const result = await window.meow?.openPath?.(target);
+            if (!result?.ok) { setStatus(result?.message || '打开目录失败。', 'error'); return; }
+            window.showNotification?.('目录已打开。', 'success');
+        } catch (err) { setStatus('打开目录失败。', 'error'); }
+    });
+
+    const pluginDirChooseBtn = document.getElementById('PluginDirectoryChooseBtn');
+    pluginDirChooseBtn?.addEventListener('click', async () => {
+        try {
+            const r = await window.meow?.chooseDirectory?.();
+            if (!r || r.canceled) return;
+            const el = document.getElementById('PluginDirectory');
+            if (el) { el.value = r.path; scheduleSave(); }
+        } catch (e) { setStatus('选择目录失败。', 'error'); }
+    });
+
     buildSettingsNav();
     loadSettings().catch(() => { });
+
+    // One-click reset button
+    const resetBtn = document.getElementById('ResetSettingsBtn');
+    resetBtn?.addEventListener('click', async () => {
+        if (!confirm('确定要将所有设置恢复为默认值吗？此操作会覆盖当前配置。')) return;
+        setStatus('正在重置设置...', 'saving');
+        try {
+            const r = await fetch(resolveApi('settingsReset', '/api/settings/reset'), { method: 'POST' });
+            if (!r.ok) {
+                const payload = await r.json().catch(() => null);
+                setStatus(payload?.message || '重置失败。', 'error');
+                window.showNotification?.(payload?.message || '重置失败。', 'danger');
+                return;
+            }
+            const payload = await r.json();
+            applySettings(payload);
+            setStatus('设置已重置为默认值。', 'success');
+            window.showNotification?.('设置已重置为默认值。', 'success');
+            try { window.BrowserUI?.refreshStatus?.(); window.BrowserUI?.loadPlugins?.(); } catch { }
+        } catch (e) {
+            setStatus('重置失败。', 'error');
+            window.showNotification?.('重置失败。', 'danger');
+        }
+    });
 })();

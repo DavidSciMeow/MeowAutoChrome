@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using MeowAutoChrome.Core.Models;
+using MeowAutoChrome.Core.Struct;
 
 namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 
@@ -9,7 +10,7 @@ namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 /// </summary>
 public sealed class PluginDiscoveryService : IPluginDiscoveryService
 {
-    private readonly string _pluginRootPath;
+    private string _pluginRootPath;
 
     /// <summary>
     /// 创建一个 PluginDiscoveryService 实例，可通过可选参数覆盖插件根路径。<br/>
@@ -18,7 +19,7 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
     /// <param name="pluginRootPath">可选的插件根目录路径 / optional plugin root path.</param>
     public PluginDiscoveryService(string? pluginRootPath = null)
     {
-        _pluginRootPath = pluginRootPath ?? Path.Combine(AppContext.BaseDirectory, "Plugins");
+        _pluginRootPath = pluginRootPath ?? ProgramSettings.GetDefaultPluginDirectoryPath();
     }
 
     /// <summary>
@@ -39,6 +40,17 @@ public sealed class PluginDiscoveryService : IPluginDiscoveryService
         {
             try { if (!string.IsNullOrWhiteSpace(root)) Directory.CreateDirectory(root); } catch { }
         }
+    }
+
+    /// <summary>
+    /// 在运行时设置插件根目录。<br/>
+    /// Set the plugin root path at runtime. Supports multiple roots separated by ';' or '|'.
+    /// </summary>
+    /// <param name="path">新的插件根路径 / new plugin root path.</param>
+    public void SetPluginRootPath(string path)
+    {
+        _pluginRootPath = string.IsNullOrWhiteSpace(path) ? ProgramSettings.GetDefaultPluginDirectoryPath() : path.Trim();
+        try { EnsurePluginDirectoryExists(); } catch { }
     }
 
     /// <summary>

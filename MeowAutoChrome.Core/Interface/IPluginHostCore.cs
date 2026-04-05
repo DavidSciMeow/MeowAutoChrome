@@ -55,6 +55,12 @@ public interface IPluginHostCore
     /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
     Task<BrowserPluginCatalogResponse> ScanPluginsAsync(CancellationToken cancellationToken = default);
     /// <summary>
+    /// 在运行时更新插件根目录并触发一次立即扫描，返回新的目录响应。<br/>
+    /// Update the plugin root path at runtime and trigger an immediate scan, returning the resulting catalog.
+    /// </summary>
+    /// <param name="newRoot">新的插件根路径 / new plugin root path.</param>
+    Task<BrowserPluginCatalogResponse> UpdatePluginRootPathAsync(string newRoot);
+    /// <summary>
     /// 从给定路径加载插件程序集并返回加载结果。<br/>
     /// Load a plugin assembly from the specified path and return the catalog response.
     /// </summary>

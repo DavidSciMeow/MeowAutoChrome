@@ -16,10 +16,12 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 public class PluginsController : ControllerBase
 {
     private readonly IPluginHostCore pluginHost;
+    private readonly IProgramSettingsProvider _settingsProvider;
 
-    public PluginsController(IPluginHostCore pluginHost)
+    public PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvider settingsProvider)
     {
         this.pluginHost = pluginHost;
+        _settingsProvider = settingsProvider;
     }
 
     /// <summary>
@@ -101,7 +103,12 @@ public class PluginsController : ControllerBase
         {
             var raw = pluginHost.PluginRootPath ?? string.Empty;
             var roots = raw.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray();
-            return Ok(new { roots });
+            // Also include current persisted pluginDirectory and the default path from Core so clients can synchronize UI
+            string persisted = string.Empty;
+            try { persisted = _settingsProvider.GetAsync().GetAwaiter().GetResult().PluginDirectory ?? string.Empty; } catch { }
+            var defaultPluginDir = MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultPluginDirectoryPath();
+            if (string.IsNullOrWhiteSpace(persisted)) persisted = defaultPluginDir;
+            return Ok(new { roots, pluginDirectory = persisted, defaultPluginDirectory = defaultPluginDir });
         }
         catch (Exception ex)
         {

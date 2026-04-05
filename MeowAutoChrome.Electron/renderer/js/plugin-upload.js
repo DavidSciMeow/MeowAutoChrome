@@ -8,7 +8,6 @@
     const spinner = document.getElementById('uploadSpinner');
     const installedList = document.getElementById('installedList');
     const installedPlaceholder = document.getElementById('installedPlaceholder');
-    const openDirBtn = document.getElementById('pluginOpenDirBtn');
 
     if (!input || !btn || !clearBtn || !selectedInfo || !resultList || !placeholder || !spinner || !openDirBtn) {
         return;
@@ -82,31 +81,7 @@
         }
     });
 
-    openDirBtn.addEventListener('click', async () => {
-        if (!openDirBtn) return;
-        openDirBtn.disabled = true;
-        try {
-            const res = await fetch(resolveApi('pluginsRoot', '/api/plugins/root'));
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data?.error || data?.detail || '无法获取插件目录');
-
-            const roots = data?.roots || (data?.root ? [data.root] : []);
-            if (!roots || roots.length === 0) throw new Error('未配置插件目录');
-            const target = Array.isArray(roots) ? roots[0] : roots;
-
-            const openRes = await window.meow.openPath(target);
-            if (!openRes) throw new Error('打开插件目录失败。');
-            if (openRes.ok) {
-                window.showNotification?.('已打开插件目录：' + openRes.openedPath, 'success');
-            } else {
-                window.showNotification?.(openRes.message || '打开插件目录失败。', 'danger');
-            }
-        } catch (err) {
-            window.showNotification?.(err?.message || String(err), 'danger');
-        } finally {
-            openDirBtn.disabled = false;
-        }
-    });
+    // "打开插件目录" 按钮已移除（设置页提供该功能），因此这里不再绑定打开目录的处理器。
 
     async function loadInstalledPlugins() {
         if (!installedList || !installedPlaceholder) {

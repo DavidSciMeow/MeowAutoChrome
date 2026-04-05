@@ -41,4 +41,11 @@ public interface IPluginDiscoveryService
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader used to load the assembly.</param>
     /// <returns>包含插件、错误摘要与详细错误信息的三元组 / tuple containing plugins, error messages and detailed descriptors.</returns>
     (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.ICorePluginAssemblyLoader assemblyLoader);
+
+    /// <summary>
+    /// 在运行时更新插件根目录路径并确保存储的目录存在。<br/>
+    /// Update the plugin root path at runtime and ensure the directory exists.
+    /// </summary>
+    /// <param name="path">新的插件根路径（支持多个路径以分号或竖线分隔）。</param>
+    void SetPluginRootPath(string path);
 }

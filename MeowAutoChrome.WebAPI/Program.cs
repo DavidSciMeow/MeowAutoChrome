@@ -5,6 +5,8 @@ using MeowAutoChrome.WebAPI.Hubs;
 using MeowAutoChrome.WebAPI.Extensions;
 using MeowAutoChrome.WebAPI.Services;
 using Microsoft.Extensions.DependencyInjection;
+using System.IO;
+using Microsoft.Extensions.Logging;
 
 var appLogService = new AppLogService();
 var originalConsoleOut = Console.Out;
@@ -56,6 +58,40 @@ try
 catch (Exception ex)
 {
     appLogService.WriteEntry(LogLevel.Error, ex.ToString(), "Startup");
+}
+
+// Startup check: ensure persisted PluginDirectory is inside AppData; if not, migrate to default AppData plugin directory.
+try
+{
+    var settingsProvider = app.Services.GetRequiredService<IProgramSettingsProvider>();
+    var settings = settingsProvider.GetAsync().GetAwaiter().GetResult();
+    var currentPluginDir = settings.PluginDirectory ?? string.Empty;
+    var appDataBase = MeowAutoChrome.Core.Struct.ProgramSettings.GetAppDataDirectoryPath();
+    var appDataBaseFull = Path.GetFullPath(appDataBase).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    var currentFull = string.Empty;
+    try { currentFull = Path.GetFullPath(currentPluginDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar; } catch { currentFull = currentPluginDir; }
+    if (!string.IsNullOrWhiteSpace(currentFull) && !currentFull.StartsWith(appDataBaseFull, StringComparison.OrdinalIgnoreCase))
+    {
+        try
+        {
+            var pluginHost = app.Services.GetRequiredService<IPluginHostCore>();
+            var defaultPluginDir = MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultPluginDirectoryPath();
+            // Attempt to move/copy existing plugins into the default AppData plugin folder and update discovery
+            pluginHost.UpdatePluginRootPathAsync(defaultPluginDir).GetAwaiter().GetResult();
+            // Persist the corrected setting
+            settings.PluginDirectory = defaultPluginDir;
+            settingsProvider.SaveAsync(settings).GetAwaiter().GetResult();
+            appLogService.WriteEntry(LogLevel.Information, $"PluginDirectory migrated to default AppData path: {defaultPluginDir}", "Startup.PluginDir");
+        }
+        catch (Exception ex)
+        {
+            appLogService.WriteEntry(LogLevel.Warning, ex.ToString(), "Startup.PluginDir.Migrate");
+        }
+    }
+}
+catch (Exception ex)
+{
+    appLogService.WriteEntry(LogLevel.Warning, ex.ToString(), "Startup.PluginDir.Check");
 }
 
 // Electron 宿主模式下强制启用 Headless，避免弹出额外浏览器窗口。 / Force headless mode when hosted by Electron to avoid opening an external browser window.

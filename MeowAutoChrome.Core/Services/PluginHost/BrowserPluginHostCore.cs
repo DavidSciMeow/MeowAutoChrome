@@ -3,6 +3,9 @@ using MeowAutoChrome.Contracts;
 using Microsoft.Extensions.Logging;
 using CoreModels = MeowAutoChrome.Core.Models;
 using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Struct;
+using System.IO;
+using System.Linq;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
@@ -152,6 +155,121 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             .Select(p => p!).ToArray();
         var errorsDetailed = snapshot.ErrorsDetailed ?? Array.Empty<CoreModels.BrowserPluginErrorDescriptor>();
         return new CoreModels.BrowserPluginCatalogResponse(plugins, errors, errorsDetailed);
+    }
+
+    /// <summary>
+    /// 更新插件根目录并立即触发一次扫描，返回新的目录响应。<br/>
+    /// Update the plugin root path and trigger an immediate scan, returning the resulting catalog.
+    /// </summary>
+    /// <param name="newRoot">新的插件根路径 / new plugin root path.</param>
+    public async Task<CoreModels.BrowserPluginCatalogResponse> UpdatePluginRootPathAsync(string newRoot)
+    {
+        // Normalize input and default
+        var separators = new[] { ';', '|' };
+        var candidate = string.IsNullOrWhiteSpace(newRoot) ? ProgramSettings.GetDefaultPluginDirectoryPath() : newRoot.Trim();
+
+        // Only allow single directory values
+        if (candidate.IndexOfAny(separators) >= 0)
+            throw new ArgumentException("只允许设置单个插件根目录。");
+
+        var newRootFull = Path.GetFullPath(candidate);
+
+        // Only allow paths under application data base to prevent arbitrary paths
+        var appDataBase = ProgramSettings.GetAppDataDirectoryPath();
+        var appDataBaseFull = Path.GetFullPath(appDataBase).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var newRootCheck = newRootFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!newRootCheck.StartsWith(appDataBaseFull, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"只允许在应用数据目录下设置插件目录：{appDataBase}");
+
+        // Ensure destination exists
+        try { Directory.CreateDirectory(newRootFull); } catch { }
+
+        // Collect existing roots and all dll paths under them before moving
+        var rawRoots = _discovery.PluginRootPath ?? string.Empty;
+        var oldRoots = rawRoots.Split(separators, StringSplitOptions.RemoveEmptyEntries).Select(r => r.Trim()).Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => Path.GetFullPath(r)).ToArray();
+        var oldDlls = new List<string>();
+        foreach (var root in oldRoots)
+        {
+            try { if (Directory.Exists(root)) oldDlls.AddRange(Directory.GetFiles(root, "*.dll", SearchOption.AllDirectories)); } catch { }
+        }
+
+        // Copy-then-delete files from old roots to new root preserving relative paths. Skip files already under new root.
+        // This ensures if the process is interrupted originals remain; subsequent attempts will overwrite the destination.
+        var newRootDirWithSep = newRootFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var oldRoot in oldRoots)
+        {
+            try
+            {
+                if (!Directory.Exists(oldRoot)) continue;
+                // don't operate if oldRoot equals newRoot
+                if (string.Equals(Path.GetFullPath(oldRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), newRootFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foreach (var file in Directory.GetFiles(oldRoot, "*", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var fileFull = Path.GetFullPath(file);
+                        if (fileFull.StartsWith(newRootDirWithSep, StringComparison.OrdinalIgnoreCase))
+                            continue; // already in new root
+
+                        var rel = Path.GetRelativePath(oldRoot, fileFull);
+                        var dest = Path.Combine(newRootFull, rel);
+                        var destDir = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrWhiteSpace(destDir)) Directory.CreateDirectory(destDir);
+
+                        var finalDest = dest;
+                        // Copy and overwrite to make the operation idempotent. Only delete original after successful copy.
+                        try
+                        {
+                            File.Copy(fileFull, finalDest, true);
+                            try { File.Delete(fileFull); }
+                            catch (Exception exDel) { _logger.LogWarning(exDel, "删除原始插件文件失败（保留原件）：{Src}", fileFull); }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "复制插件文件失败：{Src} -> {Dest}", fileFull, finalDest);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "处理插件文件时出错：{File}", file);
+                    }
+                }
+
+                // Attempt to delete empty subdirectories under oldRoot (best-effort)
+                try
+                {
+                    var dirs = Directory.GetDirectories(oldRoot, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length).ToArray();
+                    foreach (var d in dirs)
+                    {
+                        try { if (Directory.Exists(d) && !Directory.EnumerateFileSystemEntries(d).Any()) Directory.Delete(d); } catch { }
+                    }
+                    try { if (Directory.Exists(oldRoot) && !Directory.EnumerateFileSystemEntries(oldRoot).Any()) Directory.Delete(oldRoot); } catch { }
+                }
+                catch { }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "复制插件目录内容时出错：{Root}", oldRoot);
+            }
+        }
+
+        // Attempt to unregister/unload assemblies by their old paths so the loader doesn't keep stale contexts
+        try
+        {
+            foreach (var oldDll in oldDlls)
+            {
+                try { _assemblyLoader.UnregisterPlugins(oldDll); } catch { }
+                try { _assemblyLoader.Unload(oldDll); } catch { }
+            }
+        }
+        catch { }
+
+        // Finally update discovery root and rescan
+        try { _discovery.SetPluginRootPath(newRootFull); } catch { }
+
+        return await ScanPluginsAsync();
     }
 
     /// <summary>

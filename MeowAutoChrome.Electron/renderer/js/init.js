@@ -32,6 +32,7 @@
         status: mk('/api/status'),
         settings: mk('/api/settings'),
         settingsAutosave: mk('/api/settings/autosave'),
+        settingsReset: mk('/api/settings/reset'),
         plugins: mk('/api/plugins'),
         pluginsControl: mk('/api/plugins/control'),
         pluginsRun: mk('/api/plugins/run'),

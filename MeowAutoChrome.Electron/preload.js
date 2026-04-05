@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('meow', {
     apiBase,
     notifyPageChanged: (page) => ipcRenderer.send('meow:navigate-page', page),
     openPath: (targetPath) => ipcRenderer.invoke('meow:open-path', targetPath),
+    chooseDirectory: () => ipcRenderer.invoke('meow:choose-directory'),
     // helper to build absolute API urls
     getApiUrl: (path) => {
         if (!path) return apiBase || null;
