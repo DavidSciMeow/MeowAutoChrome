@@ -366,3 +366,5 @@ FodyWeavers.xsd
 /NDependOut
 *.ndproj
 /.github
+/Artifact
+/MeowAutoChrome.Electron/webapi

@@ -7,6 +7,51 @@ const http = require('http');
 const DEFAULT_URL = process.env.MEOW_WEBAPI_URL || 'http://127.0.0.1:5000';
 const PROJECT_FILE = path.join(__dirname, '..', 'MeowAutoChrome.WebAPI', 'MeowAutoChrome.WebAPI.csproj');
 
+// If packaging includes a bundled WebAPI executable under the `webapi` folder,
+// prefer that executable by setting `MEOW_WEBAPI_EXEC` so startWebApi() will use it.
+try {
+    if (!process.env.MEOW_WEBAPI_EXEC) {
+        const candidateDirs = [
+            path.join(__dirname, 'webapi'),
+            path.join(process.resourcesPath || '', 'webapi'),
+            path.join(process.resourcesPath || '', 'app', 'webapi'),
+            path.join(process.resourcesPath || '', 'app.asar.unpacked', 'webapi'),
+            path.join(__dirname, '..', 'webapi')
+        ];
+
+        const candidateNames = process.platform === 'win32'
+            ? ['MeowAutoChrome.WebAPI.exe', 'MeowAutoChrome.WebAPI']
+            : ['MeowAutoChrome.WebAPI', 'MeowAutoChrome.WebAPI.exe'];
+
+        let found = null;
+        for (const dir of candidateDirs) {
+            try {
+                if (!dir || !fs.existsSync(dir)) continue;
+            } catch (err) { continue; }
+
+            for (const name of candidateNames) {
+                const candidate = path.join(dir, name);
+                try {
+                    if (!fs.existsSync(candidate)) continue;
+
+                    // Ensure executable permission on POSIX platforms
+                    if (process.platform !== 'win32') {
+                        try { fs.chmodSync(candidate, 0o755); } catch (chmodErr) { console.warn('[main] chmod failed', chmodErr); }
+                    }
+
+                    process.env.MEOW_WEBAPI_EXEC = candidate;
+                    console.log('[main] using embedded WebAPI executable:', candidate);
+                    found = candidate;
+                    break;
+                } catch (e) {
+                    // ignore and try next candidate
+                }
+            }
+            if (found) break;
+        }
+    }
+} catch (e) { console.warn('[main] error while searching for embedded webapi', e); }
+
 let serverProc = null;
 let spawnedByApp = false;
 

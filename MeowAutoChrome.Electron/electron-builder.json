@@ -1,0 +1,14 @@
+{
+    "extraResources": [
+        {
+            "from": "webapi",
+            "to": "webapi",
+            "filter": [
+                "**/*"
+            ]
+        }
+    ],
+    "directories": {
+        "output": "../Artifact/Electron"
+    }
+}
