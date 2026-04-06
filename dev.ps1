@@ -1,18 +1,17 @@
 <#
 .SYNOPSIS
-    Start development mode: runs WebAPI (dotnet run) and Electron.
+    Start Electron in development mode (runs WebAPI via dotnet watch + Electron concurrently).
 .DESCRIPTION
-    A simplified development starter script. Modes:
-      - dev      : Publish/run the WebAPI using `dotnet run` in background, then start Electron UI.
-      - backend  : Run WebAPI only (foreground).
-      - electron : Start Electron only.
-.EXAMPLE
-    .\dev.ps1 -Mode dev
+    This script runs `npm run dev` inside `MeowAutoChrome.Electron` which (per package.json)
+    runs `concurrently "dotnet watch --project ../MeowAutoChrome.WebAPI/..." "electron ."`.
+
+    Usage:
+      .\dev.ps1            # ensure deps and run dev
+      .\dev.ps1 -SkipInstall # skip npm install even if node_modules missing
 #>
 
 param(
-    [ValidateSet("dev","backend","electron")]
-    [string]$Mode = "dev"
+    [switch]$SkipInstall
 )
 
 function Ensure-Command($cmd, $hint) {
@@ -25,43 +24,24 @@ function Ensure-Command($cmd, $hint) {
 $RepoRoot = $PSScriptRoot
 $ElectronDir = Join-Path $RepoRoot 'MeowAutoChrome.Electron'
 
-switch ($Mode) {
-    'dev' {
-        Ensure-Command dotnet 'Please install .NET SDK: https://dotnet.microsoft.com'
-        Ensure-Command npm 'Please install Node.js + npm: https://nodejs.org'
+Ensure-Command dotnet 'Please install .NET SDK: https://dotnet.microsoft.com'
+Ensure-Command npm 'Please install Node.js + npm: https://nodejs.org'
 
-        if (-not (Test-Path (Join-Path $ElectronDir 'node_modules'))) {
-            Write-Host 'Installing npm dependencies...' -ForegroundColor Cyan
-            npm --prefix $ElectronDir install
-        }
+if (-not (Test-Path (Join-Path $ElectronDir 'package.json'))) {
+    Write-Host "Electron project not found at: $ElectronDir" -ForegroundColor Red
+    exit 1
+}
 
-        Write-Host 'Starting backend (dotnet run)...' -ForegroundColor Green
-        # Start backend in background so we can run Electron in foreground.
-        $backendArgs = @('run','--project','MeowAutoChrome.WebAPI/MeowAutoChrome.WebAPI.csproj','--urls','http://127.0.0.1:5000')
-        Start-Process -FilePath 'dotnet' -ArgumentList $backendArgs -WorkingDirectory $RepoRoot -NoNewWindow -PassThru | Out-Null
+if (-not $SkipInstall -and -not (Test-Path (Join-Path $ElectronDir 'node_modules'))) {
+    Write-Host 'Installing npm dependencies for Electron...' -ForegroundColor Cyan
+    npm --prefix $ElectronDir install
+}
 
-        Start-Sleep -Seconds 1
-        Write-Host 'Starting Electron...' -ForegroundColor Green
-        npm --prefix $ElectronDir start
-    }
-
-    'backend' {
-        Ensure-Command dotnet 'Please install .NET SDK: https://dotnet.microsoft.com'
-        Write-Host 'Starting backend (dotnet run)...' -ForegroundColor Green
-        dotnet run --project MeowAutoChrome.WebAPI/MeowAutoChrome.WebAPI.csproj --urls http://127.0.0.1:5000
-    }
-
-    'electron' {
-        Ensure-Command npm 'Please install Node.js + npm: https://nodejs.org'
-        if (-not (Test-Path (Join-Path $ElectronDir 'node_modules'))) {
-            Write-Host 'Installing npm dependencies...' -ForegroundColor Cyan
-            npm --prefix $ElectronDir install
-        }
-        Write-Host 'Starting Electron...' -ForegroundColor Green
-        npm --prefix $ElectronDir start
-    }
-
-    default {
-        Write-Host "Unknown mode: $Mode" -ForegroundColor Red
-    }
+Write-Host 'Starting Electron (dev): running `npm run dev` in MeowAutoChrome.Electron' -ForegroundColor Cyan
+Push-Location $ElectronDir
+try {
+    # This runs the `dev` script from package.json and will block here showing output.
+    & npm run dev
+} finally {
+    Pop-Location
 }
