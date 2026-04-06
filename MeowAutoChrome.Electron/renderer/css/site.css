@@ -73,7 +73,20 @@ body {
     border-radius: 1.2rem;
     box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
     padding: 1rem;
-    overflow: auto;
+    /* Make this a column flex container so children can stretch vertically */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* child should handle scrolling */
+    min-height: 0;
+}
+
+/* Ensure the immediate container fills the surface so inner logs page can stretch */
+.app-page-surface>.container-fluid {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .browser-workspace {
@@ -395,34 +408,139 @@ body {
     flex-direction: column;
 }
 
-.logs-page>.vstack {
-    flex: 1 1 auto;
-    min-height: 0;
+/* Logs page styles */
+.logs-page #logsContainer {
+    background: #fff;
+    color: #0f172a;
+    font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-size: 0.9rem;
 }
 
-.logs-card {
-    flex: 1 1 auto;
-    min-height: 0;
+.logs-page .log-row {
+    color: #0f172a;
+}
+
+.logs-page .log-row .badge {
+    color: #fff;
+    background-color: #6c757d;
+}
+
+.logs-page .log-row code {
+    color: #0f172a;
+    background: transparent;
+    font-family: inherit;
+}
+
+.logs-page .log-row .text-muted {
+    color: #6c757d !important;
+}
+
+/* Single-line log message with ellipsis */
+.logs-page .log-row {
+    align-items: center;
+}
+
+.logs-page .log-message {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+/* Category capsule (pill) */
+.logs-page .log-category {
+    display: inline-block;
+    padding: 0.18rem 0.6rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.09) 0%, rgba(99, 102, 241, 0.06) 100%);
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 0.82rem;
+    border: 1px solid rgba(99, 102, 241, 0.12);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Tighter, compact layout for timestamp and rows */
+.logs-page .log-row {
+    padding-top: 0.18rem;
+    padding-bottom: 0.18rem;
+    gap: 0.5rem;
+}
+
+.logs-page .log-ts {
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--app-border);
-    border-radius: 1rem;
-    overflow: hidden;
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.04);
+    justify-content: center;
+    line-height: 1;
 }
 
-.logs-card>.card-body {
-    /* Ensure the body fills remaining space and can contain a scrollable viewer */
+.logs-page .log-ts-date {
+    font-size: 0.82rem;
+    color: rgba(0, 0, 0, 0.82);
+    margin: 0;
+}
+
+.logs-page .log-ts-time {
+    font-size: 0.72rem;
+    color: rgba(0, 0, 0, 0.48);
+    margin: 0;
+}
+
+/* Slightly tighten category pill and message fonts for compact rows */
+.logs-page .log-category {
+    padding: 0.14rem 0.45rem;
+    font-size: 0.8rem;
+}
+
+.logs-page .log-message {
+    font-size: 0.9rem;
+}
+
+/* Make sure the logs container never introduces a horizontal scrollbar and fills available space */
+.logs-page #logsContainer {
     flex: 1 1 auto;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* keep monospace font for log readability */
+    font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-size: 0.9rem;
 }
 
-.log-viewer {
-    flex: 1 1 auto;
-    min-height: 18rem;
-    overflow: auto;
+/* Single-line timestamp and ensure level/category behave (no overlap) */
+/* Allow flex children to shrink; prevent left-to-right overlapping */
+.logs-page .log-row>div {
+    min-width: 0;
 }
+
+.logs-page .log-ts {
+    font-size: 0.82rem;
+    /* slightly smaller so timestamps fit better */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.logs-page .log-category {
+    padding: 0.12rem .5rem;
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+}
+
+.logs-page .log-row {
+    padding-top: 0.18rem;
+    padding-bottom: 0.18rem;
+    line-height: 1;
+}
+
 
 @media (max-width: 991.98px) {
     .settings-page {
@@ -433,6 +551,19 @@ body {
         flex: 1 1 auto;
         max-width: none;
         width: 100%;
+
+        .logs-page .log-row {
+            cursor: pointer;
+        }
+
+        .logs-page .log-message {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .logs-page #logsContainer {
+            overflow-x: hidden;
+        }
     }
 
     .settings-sidebar-card {

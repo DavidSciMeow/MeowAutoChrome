@@ -393,18 +393,4 @@ body {
     background: #fee2e2;
 }
 
-.logs-page {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.logs-page>.vstack {
-    flex: 1 1 auto;
-    min-height: 0;
-}
-
-.logs-card {
-    /* truncated: keep the rest of original file in Web project if needed */
-}
+/* Logs page styles removed */

@@ -4,53 +4,86 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
-const DEFAULT_URL = process.env.MEOW_WEBAPI_URL || 'http://127.0.0.1:5000';
+const DEFAULT_URL = 'http://127.0.0.1:0';
 const PROJECT_FILE = path.join(__dirname, '..', 'MeowAutoChrome.WebAPI', 'MeowAutoChrome.WebAPI.csproj');
 
-// If packaging includes a bundled WebAPI executable under the `webapi` folder,
-// prefer that executable by setting `MEOW_WEBAPI_EXEC` so startWebApi() will use it.
-try {
-    if (!process.env.MEOW_WEBAPI_EXEC) {
-        const candidateDirs = [
-            path.join(__dirname, 'webapi'),
-            path.join(process.resourcesPath || '', 'webapi'),
-            path.join(process.resourcesPath || '', 'app', 'webapi'),
-            path.join(process.resourcesPath || '', 'app.asar.unpacked', 'webapi'),
-            path.join(__dirname, '..', 'webapi')
-        ];
-
-        const candidateNames = process.platform === 'win32'
-            ? ['MeowAutoChrome.WebAPI.exe', 'MeowAutoChrome.WebAPI']
-            : ['MeowAutoChrome.WebAPI', 'MeowAutoChrome.WebAPI.exe'];
-
-        let found = null;
-        for (const dir of candidateDirs) {
-            try {
-                if (!dir || !fs.existsSync(dir)) continue;
-            } catch (err) { continue; }
-
-            for (const name of candidateNames) {
-                const candidate = path.join(dir, name);
-                try {
-                    if (!fs.existsSync(candidate)) continue;
-
-                    // Ensure executable permission on POSIX platforms
-                    if (process.platform !== 'win32') {
-                        try { fs.chmodSync(candidate, 0o755); } catch (chmodErr) { console.warn('[main] chmod failed', chmodErr); }
-                    }
-
-                    process.env.MEOW_WEBAPI_EXEC = candidate;
-                    console.log('[main] using embedded WebAPI executable:', candidate);
-                    found = candidate;
-                    break;
-                } catch (e) {
-                    // ignore and try next candidate
-                }
+// Configuration comes exclusively from command-line args passed to Electron.
+// Supported args (use dashes, e.g. --webapi-exec=path):
+//   --webapi-exec <path>        Path to a packaged backend executable (optional)
+//   --skip-start                If present, do not start backend; use --webapi-url instead
+//   --webapi-url <url>          URL of an externally-managed backend (used with --skip-start)
+//   --webapi-host <host>        Host to bind (default 127.0.0.1)
+//   --webapi-base-port <port>   Starting port to try (default 5000)
+//   --webapi-port-range <n>     Number of consecutive ports to try (default 20)
+function parseArgs(argv) {
+    const out = {};
+    const a = argv.slice(2);
+    for (let i = 0; i < a.length; i++) {
+        let s = a[i];
+        if (!s) continue;
+        if (s.startsWith('--')) {
+            s = s.slice(2);
+            const eq = s.indexOf('=');
+            if (eq !== -1) {
+                const k = s.slice(0, eq).replace(/-/g, '_');
+                out[k] = s.slice(eq + 1);
+            } else {
+                const k = s.replace(/-/g, '_');
+                const next = a[i + 1];
+                if (next && !next.startsWith('--')) { out[k] = next; i++; } else { out[k] = true; }
             }
-            if (found) break;
         }
     }
-} catch (e) { console.warn('[main] error while searching for embedded webapi', e); }
+    return out;
+}
+
+const ARGS = parseArgs(process.argv);
+const CONFIG = {
+    webapi_exec: ARGS.webapi_exec || null,
+    skip_start: !!ARGS.skip_start,
+    webapi_url: ARGS.webapi_url || null,
+    host: ARGS.webapi_host || null,
+    base_port: ARGS.webapi_base_port ? Number(ARGS.webapi_base_port) : undefined,
+    port_range: ARGS.webapi_port_range ? Number(ARGS.webapi_port_range) : 20,
+    passive_attempts: ARGS.webapi_passive_attempts ? Number(ARGS.webapi_passive_attempts) : 10
+};
+
+// Attempt to find a packaged/published WebAPI executable in likely locations
+function findPackagedWebApiExec() {
+    const candidateDirs = [
+        path.join(__dirname, 'webapi'),
+        path.join(process.resourcesPath || '', 'webapi'),
+        path.join(process.resourcesPath || '', 'app', 'webapi'),
+        path.join(process.resourcesPath || '', 'app.asar.unpacked', 'webapi'),
+        path.join(__dirname, '..', 'webapi')
+    ];
+
+    const candidateNames = process.platform === 'win32'
+        ? ['MeowAutoChrome.WebAPI.exe', 'MeowAutoChrome.WebAPI']
+        : ['MeowAutoChrome.WebAPI', 'MeowAutoChrome.WebAPI.exe'];
+
+    for (const dir of candidateDirs) {
+        try {
+            if (!dir || !fs.existsSync(dir)) continue;
+        } catch (err) { continue; }
+
+        for (const name of candidateNames) {
+            const candidate = path.join(dir, name);
+            try {
+                if (!fs.existsSync(candidate)) continue;
+                if (process.platform !== 'win32') {
+                    try { fs.chmodSync(candidate, 0o755); } catch (chmodErr) { console.warn('[main] chmod failed', chmodErr); }
+                }
+                console.log('[main] found packaged WebAPI executable:', candidate);
+                return candidate;
+            } catch (e) {
+                // ignore and try next candidate
+            }
+        }
+    }
+
+    return null;
+}
 
 let serverProc = null;
 let spawnedByApp = false;
@@ -102,116 +135,222 @@ function buildAppMenu(win) {
     Menu.setApplicationMenu(menu);
 }
 
-// Lightweight HTTP health probe. Returns an object describing result.
-function probeHealth(url, timeoutMs = 500) {
-    return new Promise((resolve) => {
+// Instead of probing ports, start the local entry-point executable (or dotnet run)
+// and parse its stdout/stderr for the "Now listening on:" message to learn the
+// actual bound address. This avoids probing /health and lets the OS pick a
+// free port (we request port 0).
+
+function waitForListeningFromStdout(proc, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+        const regex = /Now listening on:\s*(https?:\/\/\S+)/i;
+        let resolved = false;
         const timer = setTimeout(() => {
-            resolve({ ok: false, err: 'TIMEOUT' });
+            if (resolved) return;
+            resolved = true;
+            cleanup();
+            reject(new Error('timeout waiting for listening message'));
         }, timeoutMs);
-        try {
-            const req = http.get(url, (res) => {
-                clearTimeout(timer);
-                const ok = res.statusCode === 200;
-                // consume body
-                res.resume();
-                resolve({ ok, status: res.statusCode });
-            });
-            req.on('error', (err) => {
-                clearTimeout(timer);
-                resolve({ ok: false, err: err && err.code ? err.code : 'ERROR' });
-            });
-        } catch (e) {
+
+        const onData = (data) => {
+            const s = String(data);
+            process.stdout.write(`[webapi] ${s}`);
+            const m = s.match(regex);
+            if (m && m[1]) {
+                if (resolved) return;
+                resolved = true;
+                cleanup();
+                resolve(m[1]);
+            }
+        };
+
+        const onErr = (data) => {
+            const s = String(data);
+            process.stderr.write(`[webapi] ${s}`);
+            const m = s.match(regex);
+            if (m && m[1]) {
+                if (resolved) return;
+                resolved = true;
+                cleanup();
+                resolve(m[1]);
+            }
+        };
+
+        const onExit = (code) => {
+            if (resolved) return;
+            resolved = true;
+            cleanup();
+            reject(new Error('process exited before reporting listening'));
+        };
+
+        function cleanup() {
             clearTimeout(timer);
-            resolve({ ok: false, err: 'ERROR' });
+            try { proc.stdout?.removeListener('data', onData); } catch (e) { }
+            try { proc.stderr?.removeListener('data', onErr); } catch (e) { }
+            try { proc.removeListener('exit', onExit); } catch (e) { }
         }
+
+        proc.stdout?.on('data', onData);
+        proc.stderr?.on('data', onErr);
+        proc.on('exit', onExit);
     });
 }
 
 async function startWebApi() {
-    // Try to find an existing healthy WebAPI or a free port to start one.
+    // Main process chooses a port and passes it to the backend via args.
     const urlObj = new URL(DEFAULT_URL);
-    const baseHost = urlObj.hostname || '127.0.0.1';
-    const startPort = Number(urlObj.port) || 5000;
-    const maxPort = startPort + 20;
+    const host = CONFIG.host || urlObj.hostname || '127.0.0.1';
+    let startPort = Number(CONFIG.base_port || urlObj.port || 5000);
+    const portRange = Number(CONFIG.port_range || 20);
+    let maxPort = startPort + portRange;
 
-    console.log(`startWebApi: probing for existing WebAPI on ${baseHost} ports ${startPort}-${maxPort}`);
-
-    // 1) check if any existing port already has a healthy service
-    for (let p = startPort; p <= maxPort; p++) {
-        const health = `http://${baseHost}:${p}/health`;
-        console.debug(`[startWebApi] probe ${health}`);
-        const r = await probeHealth(health, 300);
-        if (r.ok) {
-            const base = `http://${baseHost}:${p}`;
-            console.log('[startWebApi] found existing healthy WebAPI at', base);
-            return base; // reuse existing healthy server
-        }
+    if (CONFIG.skip_start) {
+        const useUrl = CONFIG.webapi_url || DEFAULT_URL;
+        console.log('[startWebApi] skip_start set, using existing backend at', useUrl);
+        return useUrl;
     }
 
-    // 2) find first free port (ECONNREFUSED) to bind a new WebAPI
-    let chosenPort = null;
-    for (let p = startPort; p <= maxPort; p++) {
-        const health = `http://${baseHost}:${p}/health`;
-        const r = await probeHealth(health, 200);
-        if (r.err === 'ECONNREFUSED' || r.err === 'TIMEOUT') {
-            chosenPort = p; break;
-        }
-    }
-
-    if (chosenPort === null) throw new Error('No available port found to start WebAPI');
-
-    const base = `http://${baseHost}:${chosenPort}`;
-    const health = base + '/health';
-
-    const spawnAndWatch = (proc) => {
-        serverProc = proc;
-        spawnedByApp = true;
-        console.log('[spawnAndWatch] spawned WebAPI pid=', serverProc.pid);
-        serverProc.stdout?.on('data', d => process.stdout.write(`[webapi] ${d}`));
-        serverProc.stderr?.on('data', d => process.stderr.write(`[webapi] ${d}`));
-        serverProc.on('exit', (code, signal) => {
-            console.log('WebAPI exited', code, signal);
-            serverProc = null;
-            // If the backend we launched exited unexpectedly, quit the app because UI depends on backend
-            if (!app.isQuitting) {
-                try { app.quit(); } catch (e) { /* ignore */ }
+    const killProc = (proc) => new Promise((resolve) => {
+        if (!proc || !proc.pid) return resolve();
+        try {
+            if (process.platform === 'win32') {
+                const killer = spawn('taskkill', ['/PID', String(proc.pid), '/T', '/F']);
+                killer.on('exit', () => resolve());
+            } else {
+                try { process.kill(-proc.pid, 'SIGTERM'); } catch (e) { try { process.kill(proc.pid, 'SIGTERM'); } catch (ee) { /* ignore */ } }
+                setTimeout(resolve, 300);
             }
-        });
-        serverProc.on('error', err => console.error('WebAPI process error', err));
-    };
+        } catch (e) { resolve(); }
+    });
 
-    if (process.env.MEOW_WEBAPI_EXEC) {
-        console.log('[startWebApi] using MEOW_WEBAPI_EXEC:', process.env.MEOW_WEBAPI_EXEC);
-        const execEnv = Object.assign({}, process.env);
-        execEnv.MEOW_ELECTRON = '1';
-        execEnv.ASPNETCORE_URLS = base;
-        const opts = { cwd: path.dirname(process.env.MEOW_WEBAPI_EXEC), env: execEnv, stdio: ['ignore', 'pipe', 'pipe'] };
-        if (process.platform !== 'win32') opts.detached = true;
-        console.log('[startWebApi] spawning executable with opts.detached=', !!opts.detached);
-        const proc = spawn(process.env.MEOW_WEBAPI_EXEC, [], opts);
-        if (opts.detached) proc.unref();
-        spawnAndWatch(proc);
-        console.log('[startWebApi] waiting for health at', health);
-        await waitForReady(health, 30000);
-        console.log('[startWebApi] backend ready at', base);
-        return base;
+    // Attempt to resolve a packaged executable if script did not supply one.
+    let execCandidate = CONFIG.webapi_exec || findPackagedWebApiExec();
+
+    // If startPort is 0, choose a random passive port and try a few attempts.
+    // This avoids using port 0 (OS-chosen) but still keeps the main-process
+    // selecting an ephemeral port.
+    if (startPort === 0) {
+        const attempts = Number(CONFIG.passive_attempts || 10);
+        const tried = new Set();
+        const low = 49152, high = 65535;
+        let succeeded = false;
+
+        for (let attempt = 0; attempt < attempts; attempt++) {
+            // pick a random port in the ephemeral range not tried yet
+            let port;
+            do { port = Math.floor(Math.random() * (high - low + 1)) + low; } while (tried.has(port));
+            tried.add(port);
+
+            const base = `http://${host}:${port}`;
+            console.log(`[startWebApi] passive attempt ${attempt + 1}/${attempts}: trying ${base}`);
+
+            let proc = null;
+            try {
+                if (execCandidate) {
+                    const execPath = execCandidate;
+                    const opts = { cwd: path.dirname(execPath), env: process.env, stdio: ['ignore', 'pipe', 'pipe'] };
+                    if (process.platform !== 'win32') opts.detached = true;
+                    proc = spawn(execPath, ['--urls', base], opts);
+                    if (opts.detached) proc.unref();
+                } else {
+                    const args = ['run', '--project', PROJECT_FILE, '--urls', base];
+                    const opts = { cwd: path.dirname(PROJECT_FILE), env: process.env, stdio: ['ignore', 'pipe', 'pipe'] };
+                    if (process.platform !== 'win32') opts.detached = true;
+                    proc = spawn('dotnet', args, opts);
+                    if (opts.detached) proc.unref();
+                }
+
+                proc.stdout?.on('data', d => process.stdout.write(`[webapi] ${d}`));
+                proc.stderr?.on('data', d => process.stderr.write(`[webapi] ${d}`));
+
+                const health = base + '/health';
+                try {
+                    await waitForReady(health, 10000);
+                    // success
+                    serverProc = proc;
+                    spawnedByApp = true;
+                    serverProc.on('exit', (code, signal) => {
+                        console.log('WebAPI exited', code, signal);
+                        serverProc = null;
+                        if (!app.isQuitting) {
+                            try { app.quit(); } catch (e) { /* ignore */ }
+                        }
+                    });
+                    serverProc.on('error', err => console.error('WebAPI process error', err));
+                    console.log('[startWebApi] passive backend ready at', base);
+                    return base;
+                } catch (err) {
+                    console.warn('[startWebApi] passive attempt failed for', base, err?.message || err);
+                    try { await killProc(proc); } catch (e) { }
+                    proc = null;
+                    // try next random port
+                }
+            } catch (ex) {
+                console.warn('[startWebApi] failed to spawn backend on', base, ex?.message || ex);
+                if (proc) await killProc(proc);
+                proc = null;
+            }
+        }
+
+        // If we reach here, passive attempts failed — fall back to explicit iteration
+        console.warn('[startWebApi] passive attempts exhausted, falling back to explicit port iteration');
+        startPort = Number(CONFIG.base_port || 5000);
+        maxPort = startPort + portRange;
     }
 
-    // Fallback to dotnet run (development).
-    const args = ['run', '--project', PROJECT_FILE, '--urls', base];
-    const env = Object.assign({}, process.env);
-    env.MEOW_ELECTRON = '1';
-    env.ASPNETCORE_URLS = base;
-    const opts = { cwd: path.dirname(PROJECT_FILE), env: env, stdio: ['ignore', 'pipe', 'pipe'] };
-    if (process.platform !== 'win32') opts.detached = true;
-    console.log('[startWebApi] spawning dotnet with args=', args.join(' '), 'cwd=', opts.cwd, 'detached=', !!opts.detached);
-    const proc = spawn('dotnet', args, opts);
-    if (opts.detached) proc.unref();
-    spawnAndWatch(proc);
-    console.log('[startWebApi] waiting for health at', health);
-    await waitForReady(health, 30000);
-    console.log('[startWebApi] backend ready at', base);
-    return base;
+    // Re-evaluate packaged exec candidate (in case it appears after passive attempt)
+    execCandidate = CONFIG.webapi_exec || findPackagedWebApiExec();
+
+    for (let port = startPort; port <= maxPort; port++) {
+        const base = `http://${host}:${port}`;
+        console.log('[startWebApi] attempting to start backend at', base);
+
+        let proc = null;
+        try {
+            if (execCandidate) {
+                const execPath = execCandidate;
+                const opts = { cwd: path.dirname(execPath), env: process.env, stdio: ['ignore', 'pipe', 'pipe'] };
+                if (process.platform !== 'win32') opts.detached = true;
+                proc = spawn(execPath, ['--urls', base], opts);
+                if (opts.detached) proc.unref();
+            } else {
+                const args = ['run', '--project', PROJECT_FILE, '--urls', base];
+                const opts = { cwd: path.dirname(PROJECT_FILE), env: process.env, stdio: ['ignore', 'pipe', 'pipe'] };
+                if (process.platform !== 'win32') opts.detached = true;
+                proc = spawn('dotnet', args, opts);
+                if (opts.detached) proc.unref();
+            }
+
+            proc.stdout?.on('data', d => process.stdout.write(`[webapi] ${d}`));
+            proc.stderr?.on('data', d => process.stderr.write(`[webapi] ${d}`));
+
+            const health = base + '/health';
+            try {
+                await waitForReady(health, 10000);
+                serverProc = proc;
+                spawnedByApp = true;
+                serverProc.on('exit', (code, signal) => {
+                    console.log('WebAPI exited', code, signal);
+                    serverProc = null;
+                    if (!app.isQuitting) {
+                        try { app.quit(); } catch (e) { /* ignore */ }
+                    }
+                });
+                serverProc.on('error', err => console.error('WebAPI process error', err));
+                console.log('[startWebApi] backend ready at', base);
+                return base;
+            } catch (e) {
+                console.warn('[startWebApi] backend did not become healthy at', base, e?.message || e);
+                await killProc(proc);
+                proc = null;
+            }
+        } catch (ex) {
+            console.warn('[startWebApi] failed to spawn backend on', base, ex?.message || ex);
+            if (proc) await killProc(proc);
+            proc = null;
+        }
+    }
+
+    throw new Error('No available port found to start WebAPI');
 }
 
 function stopBackend() {
@@ -315,8 +454,6 @@ app.whenReady().then(async () => {
     console.log('Electron app ready, starting WebAPI...');
     try {
         const apiBase = await startWebApi();
-        // expose to renderer preload via env before creating the window
-        try { process.env.MEOW_WEBAPI_URL = apiBase; } catch (e) { /* ignore */ }
         createWindow(apiBase);
     } catch (e) {
         console.error('Failed to start WebAPI', e);

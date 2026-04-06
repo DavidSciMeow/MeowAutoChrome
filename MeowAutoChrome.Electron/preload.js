@@ -1,9 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose a small safe API to the renderer. Preload runs before any web
-// scripts, so exposing `apiBase` here ensures renderer code can build
-// absolute URLs even when served from file://
-const apiBase = process.env.MEOW_WEBAPI_URL || null;
+// scripts. Prefer an `apiBase` passed as a query param when the page is
+// loaded (Electron `loadFile(..., { query: { apiBase } })`). Do not read
+// configuration from environment variables here.
+function readApiBaseFromSearch() {
+    try {
+        const u = new URL(window.location.href);
+        const p = u.searchParams.get('apiBase');
+        return p || null;
+    } catch (e) {
+        return null;
+    }
+}
+const apiBase = readApiBaseFromSearch();
 
 contextBridge.exposeInMainWorld('meow', {
     ping: () => 'pong',
@@ -20,3 +30,4 @@ contextBridge.exposeInMainWorld('meow', {
         return apiBase + p;
     }
 });
+

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Core.Services;
+using System.Linq;
 using MeowAutoChrome.Contracts.SignalR;
 using MeowAutoChrome.Core;
 using System.Threading.Tasks;
@@ -28,7 +29,21 @@ public static class ServiceCollectionExtensions
     {
         services.AddSignalR();
 
-        services.AddSingleton<AppLogService>();
+        // Ensure AppLogService is registered only once. If the caller already
+        // registered an instance (e.g. Program created one for early logging),
+        // avoid adding another transient instance here.
+        try
+        {
+            if (!services.Any(sd => sd.ServiceType == typeof(AppLogService)))
+            {
+                services.AddSingleton<AppLogService>();
+            }
+        }
+        catch
+        {
+            // In case LINQ/Any isn't available for some reason, fall back to adding.
+            services.AddSingleton<AppLogService>();
+        }
         services.AddSingleton<BrowserInstanceManagerCore>();
         services.AddSingleton(sp =>
         {

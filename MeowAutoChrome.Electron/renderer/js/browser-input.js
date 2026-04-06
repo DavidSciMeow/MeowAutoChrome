@@ -131,6 +131,18 @@
                 });
 
                 canvasEl.addEventListener("wheel", event => {
+                    // Only intercept wheel events when the canvas is actively capturing
+                    // keyboard/mouse input or the canvas is focused. Otherwise allow
+                    // default scrolling to proceed (e.g. scrolling nearby UI like logs).
+                    const overCanvas = canvasEl.contains(event.target);
+                    const canvasFocused = document.activeElement === canvasEl;
+                    if (!canvasKeyboardCaptureActive && !canvasFocused && !overCanvas)
+                        return;
+
+                    // If the canvas isn't focused and capture isn't active, don't block scroll.
+                    if (!canvasKeyboardCaptureActive && !canvasFocused)
+                        return;
+
                     event.preventDefault();
                     sender.sendMouse("mouseWheel", event, { deltaX: event.deltaX, deltaY: event.deltaY });
                 }, { passive: false });

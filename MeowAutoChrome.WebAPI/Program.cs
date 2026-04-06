@@ -22,10 +22,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new AppLogLoggerProvider(appLogService));
 
+// Ensure the instance used for early logging is the same one injected into controllers/services.
+builder.Services.AddSingleton<AppLogService>(appLogService);
+
 // 注册 WebAPI 所需的核心服务与 SignalR。 / Register the core services and SignalR infrastructure for WebAPI.
 builder.Services.AddMeowAutoChromeServices();
 // 仅注册 API 控制器；桌面前端由 Electron 承担。 / Register API controllers only; the desktop UI is hosted by Electron.
 builder.Services.AddControllers();
+// 启动后台 tail 服务，负责监控日志文件并通过 SignalR 推送新增行。
+builder.Services.AddHostedService<LogTailHostedService>();
 
 var app = builder.Build();
 app.Lifetime.ApplicationStarted.Register(() => appLogService.WriteEntry(LogLevel.Information, "WebAPI started.", "System"));
@@ -49,6 +54,7 @@ app.UseAuthorization();
 app.UseStaticFiles();
 
 app.MapHub<BrowserHub>("/browserHub");
+app.MapHub<LogHub>("/logHub");
 app.MapControllers();
 
 try

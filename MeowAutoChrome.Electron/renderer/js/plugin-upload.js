@@ -9,7 +9,7 @@
     const installedList = document.getElementById('installedList');
     const installedPlaceholder = document.getElementById('installedPlaceholder');
 
-    if (!input || !btn || !clearBtn || !selectedInfo || !resultList || !placeholder || !spinner || !openDirBtn) {
+    if (!input || !btn || !clearBtn || !selectedInfo || !resultList || !placeholder || !spinner) {
         return;
     }
 

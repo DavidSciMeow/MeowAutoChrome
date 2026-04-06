@@ -6,6 +6,7 @@
     "scripts": {
         "start": "electron .",
         "dev": "concurrently \"dotnet watch --project ../MeowAutoChrome.WebAPI/MeowAutoChrome.WebAPI.csproj\" \"electron .\"",
+        "dev:managed": "electron .",
         "pack": "electron-builder --dir",
         "dist": "electron-builder"
     },
