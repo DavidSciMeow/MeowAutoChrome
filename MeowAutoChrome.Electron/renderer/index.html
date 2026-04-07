@@ -280,6 +280,21 @@
                                 </div>
                                 <div class="modal-body">
                                     <div id="pluginOutputModalSummary" class="text-muted small mb-3 d-none"></div>
+                                    <div class="plugin-output-filters mb-3">
+                                        <div>
+                                            <label for="pluginOutputFilterInput"
+                                                class="form-label small text-muted mb-1">搜索消息</label>
+                                            <input id="pluginOutputFilterInput" type="search"
+                                                class="form-control form-control-sm" placeholder="按消息、字段、值筛选" />
+                                        </div>
+                                        <div>
+                                            <label for="pluginOutputFilterTarget"
+                                                class="form-label small text-muted mb-1">目标</label>
+                                            <select id="pluginOutputFilterTarget" class="form-select form-select-sm">
+                                                <option value="">全部目标</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                     <div class="border rounded p-3 bg-light-subtle mb-3">
                                         <div class="fw-semibold small mb-2">当前返回值</div>
                                         <div id="pluginOutputModalData" class="vstack gap-2 small"></div>

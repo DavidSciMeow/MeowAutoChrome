@@ -17,8 +17,37 @@
     const pluginOutputModalSummary = document.getElementById('pluginOutputModalSummary');
     const pluginOutputModalData = document.getElementById('pluginOutputModalData');
     const pluginOutputModalEntries = document.getElementById('pluginOutputModalEntries');
+    const pluginOutputFilterInput = document.getElementById('pluginOutputFilterInput');
+    const pluginOutputFilterTarget = document.getElementById('pluginOutputFilterTarget');
     let pendingPluginInvocation = null;
     let activePluginOutputPluginId = null;
+
+    function getPluginOutputMode(pluginId) {
+        try {
+            const mode = window.localStorage.getItem('meow.pluginOutputMode.' + pluginId);
+            return mode === 'toast' ? 'toast' : 'inline';
+        } catch {
+            return 'inline';
+        }
+    }
+
+    function setPluginOutputMode(pluginId, mode) {
+        try {
+            window.localStorage.setItem('meow.pluginOutputMode.' + pluginId, mode === 'toast' ? 'toast' : 'inline');
+        } catch { }
+    }
+
+    function getPluginName(pluginId) {
+        return pluginCatalog.get(pluginId)?.name || pluginId || '插件';
+    }
+
+    function showPluginToast(pluginId, summary) {
+        if (typeof window.showNotification === 'function') {
+            window.showNotification('[' + getPluginName(pluginId) + '] ' + summary, 'success');
+            return;
+        }
+        console.log('[' + getPluginName(pluginId) + ']', summary);
+    }
 
     function showError(msg) {
         if (window.BrowserIndex && window.BrowserIndex.showError) return window.BrowserIndex.showError(msg);
@@ -43,7 +72,25 @@
     }
 
     function syncPluginOutputUi(pluginId) {
-        const ui = pluginOutputUi.get(pluginId); if (!ui) return; const output = pluginOutputStore.get(pluginId); ui.button.disabled = !output; if (!output) { ui.badge.classList.add('d-none'); return; } const unread = Math.min(Number(output.unreadCount ?? (output.entries || []).length) || 0, 99); ui.badge.textContent = unread > 0 ? String(unread) : ''; ui.badge.classList.toggle('d-none', unread === 0);
+        const ui = pluginOutputUi.get(pluginId);
+        if (!ui)
+            return;
+
+        const output = pluginOutputStore.get(pluginId);
+        const mode = getPluginOutputMode(pluginId);
+        const unread = Math.min(Number(output?.unreadCount ?? (output?.entries || []).length) || 0, 99);
+        ui.badge.textContent = unread > 0 ? String(unread) : '';
+        ui.badge.classList.toggle('d-none', unread === 0);
+        ui.previewMode.textContent = mode === 'toast' ? 'Toast 展示' : '面板展示';
+
+        if (!output) {
+            ui.previewSummary.textContent = '暂无消息。点击查看完整消息记录。';
+            ui.previewMeta.textContent = mode === 'toast' ? '收到新消息时会以 Toast 提示。' : '新消息会优先显示在这里。';
+            return;
+        }
+
+        ui.previewSummary.textContent = summarizePluginOutput(output.message, output.data);
+        ui.previewMeta.textContent = [formatPluginOutputTime(output.updatedAt), unread > 0 ? '未读 ' + unread + ' 条' : '已读'].filter(Boolean).join(' · ');
     }
 
     function renderPluginOutputModal(pluginId) {
@@ -51,15 +98,93 @@
         pluginOutputModalTitle.textContent = plugin?.name ? plugin.name + (target?.name ? ' · ' + target.name : '') : '插件输出';
         pluginOutputModalSummary.textContent = [formatPluginOutputTime(output.updatedAt), summarizePluginOutput(output.message, output.data)].filter(Boolean).join(' · ');
         pluginOutputModalSummary.classList.toggle('d-none', !pluginOutputModalSummary.textContent);
+        const targetOptions = Array.from(new Set((output.entries || []).map(entry => entry.targetId).filter(Boolean)));
+        const selectedTarget = pluginOutputFilterTarget?.value || '';
+        if (pluginOutputFilterTarget) {
+            pluginOutputFilterTarget.replaceChildren();
+            const firstOption = document.createElement('option');
+            firstOption.value = '';
+            firstOption.textContent = '全部目标';
+            pluginOutputFilterTarget.appendChild(firstOption);
+            for (const optionValue of targetOptions) {
+                const option = document.createElement('option');
+                option.value = optionValue;
+                option.textContent = getPluginTarget(plugin, optionValue)?.name || optionValue;
+                pluginOutputFilterTarget.appendChild(option);
+            }
+            pluginOutputFilterTarget.value = targetOptions.includes(selectedTarget) ? selectedTarget : '';
+        }
         renderPluginOutputRows(pluginOutputModalData, output.data, '当前还没有结构化返回值。');
         pluginOutputModalEntries.replaceChildren();
-        if (!(output.entries || []).length) { const empty = document.createElement('div'); empty.className = 'plugin-output-empty'; empty.textContent = '还没有输出记录。'; pluginOutputModalEntries.appendChild(empty); return; }
-        for (const entry of output.entries) { const item = document.createElement('div'); item.className = 'plugin-output-entry'; const header = document.createElement('div'); header.className = 'd-flex justify-content-between align-items-start gap-2 mb-2'; const name = document.createElement('div'); name.className = 'fw-semibold small'; name.textContent = getPluginTarget(plugin, entry.targetId)?.name || entry.targetId || '插件输出'; const time = document.createElement('div'); time.className = 'text-muted small'; time.textContent = formatPluginOutputTime(entry.timestampUtc); header.appendChild(name); header.appendChild(time); item.appendChild(header); if (entry.message) { const message = document.createElement('div'); message.className = 'plugin-output-value mb-2'; message.textContent = entry.message; item.appendChild(message); } const dataContainer = document.createElement('div'); renderPluginOutputRows(dataContainer, entry.data, '本次输出没有附加字段。'); item.appendChild(dataContainer); pluginOutputModalEntries.appendChild(item); }
+        const keyword = (pluginOutputFilterInput?.value || '').trim().toLowerCase();
+        const targetFilter = pluginOutputFilterTarget?.value || '';
+        const entries = (output.entries || []).filter(entry => {
+            if (targetFilter && entry.targetId !== targetFilter)
+                return false;
+            if (!keyword)
+                return true;
+            const haystack = [
+                entry.message || '',
+                entry.targetId || '',
+                ...Object.entries(entry.data || {}).flatMap(([key, value]) => [key || '', value || ''])
+            ].join(' ').toLowerCase();
+            return haystack.includes(keyword);
+        });
+        if (!entries.length) { const empty = document.createElement('div'); empty.className = 'plugin-output-empty'; empty.textContent = '没有匹配的输出记录。'; pluginOutputModalEntries.appendChild(empty); return; }
+        for (const entry of entries) {
+            const item = document.createElement('div'); item.className = 'plugin-output-entry';
+            const header = document.createElement('div'); header.className = 'd-flex justify-content-between align-items-start gap-2 mb-2';
+            const name = document.createElement('div'); name.className = 'fw-semibold small'; name.textContent = getPluginTarget(plugin, entry.targetId)?.name || entry.targetId || '插件输出';
+            const time = document.createElement('div'); time.className = 'text-muted small'; time.textContent = formatPluginOutputTime(entry.timestampUtc);
+            header.appendChild(name); header.appendChild(time); item.appendChild(header);
+            if (entry.message) { const message = document.createElement('div'); message.className = 'plugin-output-entry-message mb-2'; message.textContent = entry.message; item.appendChild(message); }
+            const dataContainer = document.createElement('div'); renderPluginOutputRows(dataContainer, entry.data, '本次输出没有附加字段。'); item.appendChild(dataContainer); pluginOutputModalEntries.appendChild(item);
+        }
     }
 
     function openPluginOutputModal(pluginId) { const output = pluginOutputStore.get(pluginId); if (!output || !pluginOutputModal) return; activePluginOutputPluginId = pluginId; try { const updated = { ...(output || {}) }; updated.unreadCount = 0; pluginOutputStore.set(pluginId, updated); } catch { } renderPluginOutputModal(pluginId); syncPluginOutputUi(pluginId); pluginOutputModal.show(); }
 
-    function applyPluginOutputUpdate(update) { if (!update?.pluginId) return; const existing = pluginOutputStore.get(update.pluginId); const mergedData = { ...(existing?.data || {}), ...(update.data || {}) }; const isCurrentModal = activePluginOutputPluginId === update.pluginId && pluginOutputModalElement.classList.contains('show'); const next = { pluginId: update.pluginId, targetId: update.targetId || existing?.targetId || '', message: update.message ?? existing?.message ?? '', data: mergedData, updatedAt: update.timestampUtc || new Date().toISOString(), entries: existing?.entries ? [...existing.entries] : [], targetStates: existing?.targetStates ? { ...existing.targetStates } : {}, unreadCount: Number(existing?.unreadCount || 0) }; if (update.message || Object.keys(update.data || {}).length) { next.entries.unshift({ targetId: next.targetId, message: update.message || '', data: update.data || {}, timestampUtc: next.updatedAt }); next.entries = next.entries.slice(0, 30); if (!isCurrentModal) next.unreadCount = (Number(existing?.unreadCount || 0) || 0) + 1; else next.unreadCount = 0; } if (update.state) next.targetStates[next.targetId] = update.state; pluginOutputStore.set(update.pluginId, next); syncPluginOutputUi(update.pluginId); if (isCurrentModal) renderPluginOutputModal(update.pluginId); }
+    function applyPluginOutputUpdate(update) {
+        if (!update?.pluginId)
+            return;
+
+        const existing = pluginOutputStore.get(update.pluginId);
+        const mergedData = { ...(existing?.data || {}), ...(update.data || {}) };
+        const isCurrentModal = activePluginOutputPluginId === update.pluginId && pluginOutputModalElement.classList.contains('show');
+        const next = {
+            pluginId: update.pluginId,
+            targetId: update.targetId || existing?.targetId || '',
+            message: update.message ?? existing?.message ?? '',
+            data: mergedData,
+            updatedAt: update.timestampUtc || new Date().toISOString(),
+            entries: existing?.entries ? [...existing.entries] : [],
+            targetStates: existing?.targetStates ? { ...existing.targetStates } : {},
+            unreadCount: Number(existing?.unreadCount || 0)
+        };
+
+        if (update.message || Object.keys(update.data || {}).length) {
+            next.entries.unshift({ targetId: next.targetId, message: update.message || '', data: update.data || {}, timestampUtc: next.updatedAt });
+            next.entries = next.entries.slice(0, 100);
+            if (!isCurrentModal) next.unreadCount = (Number(existing?.unreadCount || 0) || 0) + 1;
+            else next.unreadCount = 0;
+        }
+
+        if (update.state)
+            next.targetStates[next.targetId] = update.state;
+
+        pluginOutputStore.set(update.pluginId, next);
+        syncPluginOutputUi(update.pluginId);
+
+        const summary = summarizePluginOutput(update.message, update.data || {});
+        const outputMode = getPluginOutputMode(update.pluginId);
+        if ((update.message || Object.keys(update.data || {}).length) && outputMode === 'toast')
+            showPluginToast(update.pluginId, summary);
+
+        if (isCurrentModal)
+            renderPluginOutputModal(update.pluginId);
+        else if (update.openModal && outputMode !== 'toast')
+            openPluginOutputModal(update.pluginId);
+    }
 
     function createPluginParameterField(parameter, parameterInputs) { const field = document.createElement('div'); const label = document.createElement('label'); label.className = 'form-label mb-1'; label.textContent = parameter.label + (parameter.required ? ' *' : ''); field.appendChild(label); let input; if (parameter.inputType === 'checkbox') { input = document.createElement('input'); input.type = 'checkbox'; input.className = 'form-check-input'; input.checked = String(parameter.defaultValue || 'false').toLowerCase() === 'true'; const wrapper = document.createElement('div'); wrapper.className = 'form-check'; wrapper.appendChild(input); field.appendChild(wrapper); } else if (parameter.inputType === 'select') { input = document.createElement('select'); input.className = 'form-select form-select-sm'; if (!parameter.required) { const emptyOption = document.createElement('option'); emptyOption.value = ''; emptyOption.textContent = '请选择'; input.appendChild(emptyOption); } for (const option of parameter.options || []) { const element = document.createElement('option'); element.value = option.value; element.textContent = option.label; if ((parameter.defaultValue ?? '') === option.value) element.selected = true; input.appendChild(element); } field.appendChild(input); } else { input = document.createElement('input'); input.type = parameter.inputType === 'number' ? 'number' : parameter.inputType === 'datetime-local' ? 'datetime-local' : 'text'; input.className = 'form-control form-control-sm'; input.value = parameter.defaultValue ?? ''; input.placeholder = parameter.description || parameter.label; if (parameter.inputType === 'number') input.step = 'any'; if (parameter.inputType === 'datetime-local') input.step = '1'; if (parameter.inputType === 'guid') { input.placeholder = parameter.description || '00000000-0000-0000-0000-000000000000'; input.pattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; input.spellcheck = false; input.autocomplete = 'off'; } field.appendChild(input); } if (parameter.description) { const help = document.createElement('div'); help.className = 'form-text mt-1'; help.textContent = parameter.description; field.appendChild(help); } parameterInputs[parameter.name] = { input, parameter }; return field; }
 
@@ -72,8 +197,26 @@
         if (!pendingPluginInvocation) return; const argumentsPayload = collectPluginArguments(pendingPluginInvocation.parameterInputs); if (argumentsPayload === null) return; pluginArgumentSubmitBtn.disabled = true; try { await pendingPluginInvocation.onSubmit(argumentsPayload); pluginArgumentModal.hide(); } catch (e) { showError(e.message || '插件执行失败。'); } finally { pluginArgumentSubmitBtn.disabled = false; }
     });
 
+    pluginOutputFilterInput?.addEventListener('input', () => {
+        if (activePluginOutputPluginId)
+            renderPluginOutputModal(activePluginOutputPluginId);
+    });
+
+    pluginOutputFilterTarget?.addEventListener('change', () => {
+        if (activePluginOutputPluginId)
+            renderPluginOutputModal(activePluginOutputPluginId);
+    });
+
+    pluginOutputModalElement?.addEventListener('hidden.bs.modal', () => {
+        activePluginOutputPluginId = null;
+        if (pluginOutputFilterInput)
+            pluginOutputFilterInput.value = '';
+        if (pluginOutputFilterTarget)
+            pluginOutputFilterTarget.value = '';
+    });
+
     // expose plugin API
-    window.BrowserPlugins = { renderPluginOutputModal, openPluginArgumentModal, applyPluginOutputUpdate, syncPluginOutputUi, pluginCatalog, pluginOutputStore, pluginOutputUi };
+    window.BrowserPlugins = { renderPluginOutputModal, openPluginOutputModal, openPluginArgumentModal, applyPluginOutputUpdate, syncPluginOutputUi, getPluginOutputMode, setPluginOutputMode, pluginCatalog, pluginOutputStore, pluginOutputUi };
 
     // listen for plugin output from hub
     if (window.signalR && window.signalR.HubConnectionBuilder) {

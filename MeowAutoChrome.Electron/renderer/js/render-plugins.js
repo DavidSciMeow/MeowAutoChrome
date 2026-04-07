@@ -47,6 +47,7 @@
         pluginHost.replaceChildren();
         window.BrowserUI = window.BrowserUI || {};
         window.BrowserUI.pluginCatalog = window.BrowserUI.pluginCatalog || new Map();
+        window.BrowserUI.pluginOutputUi = window.BrowserUI.pluginOutputUi || new Map();
 
         if (!plugins || plugins.length === 0) {
             const empty = document.createElement('div'); empty.className = 'text-muted'; empty.textContent = '未发现可用插件。'; pluginHost.appendChild(empty); return;
@@ -61,6 +62,28 @@
             const title = document.createElement('div'); title.className = 'fw-semibold'; title.textContent = plugin.name || plugin.id; header.appendChild(title);
 
             const actions = document.createElement('div'); actions.className = 'd-flex gap-2 align-items-center';
+            const outputBtn = document.createElement('button'); outputBtn.type = 'button'; outputBtn.className = 'btn btn-sm btn-outline-secondary position-relative'; outputBtn.textContent = '消息';
+            const outputBadge = document.createElement('span'); outputBadge.className = 'plugin-output-badge position-absolute top-0 start-0 translate-middle text-bg-danger d-none';
+            outputBtn.appendChild(outputBadge);
+            outputBtn.addEventListener('click', () => window.BrowserPlugins?.openPluginOutputModal?.(plugin.id));
+            actions.appendChild(outputBtn);
+
+            const outputModeBtn = document.createElement('button'); outputModeBtn.type = 'button'; outputModeBtn.className = 'btn btn-sm btn-outline-secondary';
+            const syncOutputModeText = () => {
+                const mode = window.BrowserPlugins?.getPluginOutputMode?.(plugin.id) || 'inline';
+                outputModeBtn.textContent = mode === 'toast' ? 'Toast' : '面板';
+                outputModeBtn.title = mode === 'toast' ? '当前新消息使用 Toast 展示，点击切回面板展示' : '当前新消息显示在卡片内，点击切换到 Toast';
+            };
+            syncOutputModeText();
+            outputModeBtn.addEventListener('click', () => {
+                const currentMode = window.BrowserPlugins?.getPluginOutputMode?.(plugin.id) || 'inline';
+                const nextMode = currentMode === 'toast' ? 'inline' : 'toast';
+                window.BrowserPlugins?.setPluginOutputMode?.(plugin.id, nextMode);
+                syncOutputModeText();
+                window.BrowserPlugins?.syncPluginOutputUi?.(plugin.id);
+            });
+            actions.appendChild(outputModeBtn);
+
             const state = document.createElement('span'); state.className = stateClass(plugin.state || ''); state.textContent = plugin.state || ''; actions.appendChild(state);
 
             header.appendChild(actions);
@@ -69,6 +92,38 @@
             if (plugin.description) {
                 const desc = document.createElement('div'); desc.className = 'text-muted mb-2'; desc.textContent = plugin.description; card.appendChild(desc);
             }
+
+            const outputPreview = document.createElement('button');
+            outputPreview.type = 'button';
+            outputPreview.className = 'plugin-output-preview plugin-output-preview-button mb-2';
+            outputPreview.addEventListener('click', () => window.BrowserPlugins?.openPluginOutputModal?.(plugin.id));
+            const outputPreviewHeader = document.createElement('div');
+            outputPreviewHeader.className = 'plugin-output-preview-header';
+            const outputPreviewTitle = document.createElement('div');
+            outputPreviewTitle.className = 'plugin-output-preview-title';
+            outputPreviewTitle.textContent = '消息';
+            const outputPreviewMode = document.createElement('div');
+            outputPreviewMode.className = 'plugin-output-preview-mode';
+            outputPreviewHeader.appendChild(outputPreviewTitle);
+            outputPreviewHeader.appendChild(outputPreviewMode);
+            const outputPreviewSummary = document.createElement('div');
+            outputPreviewSummary.className = 'plugin-output-preview-summary';
+            const outputPreviewMeta = document.createElement('div');
+            outputPreviewMeta.className = 'plugin-output-preview-meta';
+            outputPreview.appendChild(outputPreviewHeader);
+            outputPreview.appendChild(outputPreviewSummary);
+            outputPreview.appendChild(outputPreviewMeta);
+            card.appendChild(outputPreview);
+
+            window.BrowserUI.pluginOutputUi.set(plugin.id, {
+                button: outputBtn,
+                badge: outputBadge,
+                preview: outputPreview,
+                previewMode: outputPreviewMode,
+                previewSummary: outputPreviewSummary,
+                previewMeta: outputPreviewMeta
+            });
+            window.BrowserPlugins?.syncPluginOutputUi?.(plugin.id);
 
             // controls
             if ((plugin.controls || []).length) {
