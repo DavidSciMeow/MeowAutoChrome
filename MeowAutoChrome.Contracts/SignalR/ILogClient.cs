@@ -11,8 +11,17 @@ namespace MeowAutoChrome.Contracts.SignalR
         string Category,
         string Message);
 
+    /// <summary>
+    /// SignalR 日志客户端契约。<br/>
+    /// SignalR client contract for log streaming.
+    /// </summary>
     public interface ILogClient
     {
+        /// <summary>
+        /// 接收一条新增日志。<br/>
+        /// Receive a newly appended log entry.
+        /// </summary>
+        /// <param name="entry">日志条目。<br/>Log entry payload.</param>
         Task ReceiveLog(LogMessageDto entry);
     }
 }

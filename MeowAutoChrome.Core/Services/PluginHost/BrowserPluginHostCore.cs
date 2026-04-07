@@ -343,8 +343,9 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
+        var browserContext = _browserInstances.BrowserContext ?? throw new InvalidOperationException("Browser context is not available");
         var hostContext = new PluginHostContextCore(
-            _browserInstances.BrowserContext,
+            browserContext,
             _browserInstances.ActivePage,
             _browserInstances.CurrentInstanceId,
             normalizedArguments,

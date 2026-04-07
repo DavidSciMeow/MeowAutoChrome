@@ -64,9 +64,10 @@ internal static class PluginTypeIntrospector
 
             var legacyParameterMetadata = method
                 .GetCustomAttributes<PInputAttribute>()
-                .Where(item => !string.IsNullOrWhiteSpace(item.Name) || !string.IsNullOrWhiteSpace(item.Label))
-                .GroupBy(item => item.Name ?? item.Label, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+                .Select(item => new { Attribute = item, Key = item.Name ?? item.Label })
+                .Where(item => !string.IsNullOrWhiteSpace(item.Key))
+                .GroupBy(item => item.Key!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Last().Attribute, StringComparer.OrdinalIgnoreCase);
 
             var parameters = method
                 .GetParameters()

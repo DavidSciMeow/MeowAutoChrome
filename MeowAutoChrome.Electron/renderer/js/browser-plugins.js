@@ -19,6 +19,7 @@
     const pluginOutputModalEntries = document.getElementById('pluginOutputModalEntries');
     const pluginOutputFilterInput = document.getElementById('pluginOutputFilterInput');
     const pluginOutputFilterTarget = document.getElementById('pluginOutputFilterTarget');
+    const pluginOutputClearBtn = document.getElementById('pluginOutputClearBtn');
     let pendingPluginInvocation = null;
     let activePluginOutputPluginId = null;
 
@@ -71,6 +72,31 @@
         for (const [k, v] of filtered) { const row = document.createElement('div'); row.className = 'plugin-output-row'; const label = document.createElement('div'); label.className = 'plugin-output-label'; label.textContent = k; const content = document.createElement('div'); content.className = 'plugin-output-value'; content.textContent = v || ''; row.appendChild(label); row.appendChild(content); container.appendChild(row); }
     }
 
+    function renderEmptyPluginOutputModal(pluginId) {
+        const plugin = pluginCatalog.get(pluginId);
+        pluginOutputModalTitle.textContent = plugin?.name || '插件输出';
+        pluginOutputModalSummary.textContent = '还没有输出记录。';
+        pluginOutputModalSummary.classList.remove('d-none');
+        renderPluginOutputRows(pluginOutputModalData, {}, '当前还没有结构化返回值。');
+        pluginOutputModalEntries.replaceChildren();
+        const empty = document.createElement('div');
+        empty.className = 'plugin-output-empty';
+        empty.textContent = '还没有输出记录。';
+        pluginOutputModalEntries.appendChild(empty);
+        if (pluginOutputFilterInput)
+            pluginOutputFilterInput.value = '';
+        if (pluginOutputFilterTarget) {
+            pluginOutputFilterTarget.replaceChildren();
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = '全部目标';
+            pluginOutputFilterTarget.appendChild(option);
+            pluginOutputFilterTarget.value = '';
+        }
+        if (pluginOutputClearBtn)
+            pluginOutputClearBtn.disabled = true;
+    }
+
     function syncPluginOutputUi(pluginId) {
         const ui = pluginOutputUi.get(pluginId);
         if (!ui)
@@ -94,10 +120,17 @@
     }
 
     function renderPluginOutputModal(pluginId) {
-        const output = pluginOutputStore.get(pluginId); if (!output) return; const plugin = pluginCatalog.get(pluginId); const target = getPluginTarget(plugin, output.targetId);
+        const output = pluginOutputStore.get(pluginId);
+        if (!output) {
+            renderEmptyPluginOutputModal(pluginId);
+            return;
+        }
+        const plugin = pluginCatalog.get(pluginId); const target = getPluginTarget(plugin, output.targetId);
         pluginOutputModalTitle.textContent = plugin?.name ? plugin.name + (target?.name ? ' · ' + target.name : '') : '插件输出';
         pluginOutputModalSummary.textContent = [formatPluginOutputTime(output.updatedAt), summarizePluginOutput(output.message, output.data)].filter(Boolean).join(' · ');
         pluginOutputModalSummary.classList.toggle('d-none', !pluginOutputModalSummary.textContent);
+        if (pluginOutputClearBtn)
+            pluginOutputClearBtn.disabled = !(output.entries || []).length && !output.message && !Object.keys(output.data || {}).length;
         const targetOptions = Array.from(new Set((output.entries || []).map(entry => entry.targetId).filter(Boolean)));
         const selectedTarget = pluginOutputFilterTarget?.value || '';
         if (pluginOutputFilterTarget) {
@@ -213,6 +246,15 @@
             pluginOutputFilterInput.value = '';
         if (pluginOutputFilterTarget)
             pluginOutputFilterTarget.value = '';
+    });
+
+    pluginOutputClearBtn?.addEventListener('click', () => {
+        if (!activePluginOutputPluginId)
+            return;
+
+        pluginOutputStore.delete(activePluginOutputPluginId);
+        syncPluginOutputUi(activePluginOutputPluginId);
+        renderEmptyPluginOutputModal(activePluginOutputPluginId);
     });
 
     // expose plugin API

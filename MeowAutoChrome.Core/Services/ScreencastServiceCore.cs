@@ -105,7 +105,11 @@ public sealed class ScreencastServiceCore(BrowserInstanceManagerCore browserInst
             // recreate session for new target
             try
             {
-                _session = await browserInstances.BrowserContext.NewCDPSessionAsync(page);
+                var browserContext = browserInstances.BrowserContext;
+                if (browserContext is null)
+                    return;
+
+                _session = await browserContext.NewCDPSessionAsync(page);
                 _targetPageId = browserInstances.SelectedPageId;
                 _session.Event("Page.screencastFrame").OnEvent += OnFrame;
             }

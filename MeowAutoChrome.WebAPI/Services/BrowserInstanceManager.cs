@@ -11,6 +11,7 @@ namespace MeowAutoChrome.WebAPI.Services;
 /// </summary>
 public class BrowserInstanceManager(BrowserInstanceManagerCore core, IProgramSettingsProvider settingsProvider, ILogger<BrowserInstanceManager> logger)
 {
+    private readonly ILogger<BrowserInstanceManager> _logger = logger;
 
     /// <summary>
     /// 当前选中的实例 ID。<br/>

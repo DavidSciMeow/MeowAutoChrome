@@ -382,7 +382,7 @@ public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logg
     public async Task<bool> UpdateInstanceSettingsAsync(BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
     {
         if (!_instances.TryGetValue(request.InstanceId, out var inst)) return false;
-        inst.UserDataDirectoryPath = request.UserDataDirectory;
+        inst.UserDataDirectoryPath = request.UserDataDirectory ?? string.Empty;
         // Note: real migration/viewport handling omitted for brevity
         return true;
     }
@@ -512,7 +512,17 @@ public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logg
     /// </summary>
     /// <param name="id">实例 id / instance id.</param>
     /// <param name="inst">输出参数，当返回 true 时包含实例 / out parameter that will contain the instance when true.</param>
-    public bool TryGet(string id, out ICoreBrowserInstance inst) => _instances.TryGetValue(id, out inst);
+    public bool TryGet(string id, out ICoreBrowserInstance inst)
+    {
+        if (_instances.TryGetValue(id, out var current) && current is not null)
+        {
+            inst = current;
+            return true;
+        }
+
+        inst = null!;
+        return false;
+    }
 
     /// <summary>
     /// 获取指定 id 的实例或返回 null。<br/>

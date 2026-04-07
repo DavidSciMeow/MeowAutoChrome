@@ -62,4 +62,14 @@ public interface IPluginContext
     /// <param name="category">可选日志类别；若为空，宿主将使用插件 ID 作为类别。</param>
     /// <returns>异步完成任务。</returns>
     Task WriteLogAsync(string level, string message, string? category = null);
+
+    /// <summary>
+    /// 向宿主推送插件运行过程中的消息或结构化数据更新。<br/>
+    /// Publish an in-progress plugin message or structured data update to the host.
+    /// </summary>
+    /// <param name="message">可选消息文本。<br/>Optional message text.</param>
+    /// <param name="data">可选结构化数据。<br/>Optional structured data payload.</param>
+    /// <param name="openModal">是否建议宿主直接打开消息窗口。<br/>Whether the host should prefer opening the message modal immediately.</param>
+    /// <returns>异步完成任务。<br/>Asynchronous completion task.</returns>
+    Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = true);
 }

@@ -14,6 +14,9 @@ namespace MeowAutoChrome.ExamplePlugin;
 /// </remarks>
 public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
 {
+    private Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = false)
+        => HostContext?.PublishUpdateAsync(message, data, openModal) ?? Task.CompletedTask;
+
     /// <summary>
     /// 插件状态。<br/>
     /// Plugin state.
@@ -40,6 +43,11 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     public async Task<IResult> StartAsync()
     {
         State = PluginState.Running;
+        await PublishUpdateAsync("插件已启动。", new Dictionary<string, string?>
+        {
+            ["state"] = State.ToString(),
+            ["pluginId"] = "example.minimal"
+        });
 
         try
         {
@@ -66,6 +74,11 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
                 var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
                 if (!string.IsNullOrWhiteSpace(instanceId))
                 {
+                    await PublishUpdateAsync("已请求新的浏览器实例。", new Dictionary<string, string?>
+                    {
+                        ["instanceId"] = instanceId,
+                        ["displayName"] = "ExamplePluginInstance"
+                    });
                     return Result.Ok(new { instanceId });
                 }
 
@@ -88,6 +101,10 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     public Task<IResult> StopAsync()
     {
         State = PluginState.Stopped;
+        _ = PublishUpdateAsync("插件已停止。", new Dictionary<string, string?>
+        {
+            ["state"] = State.ToString()
+        });
         return Task.FromResult<IResult>(Result.Ok(new { message = "Stopped." }));
     }
 
@@ -123,6 +140,10 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     public async Task<IResult> ReturnObjectAsync()
     {
         await Task.Delay(10);
+        await PublishUpdateAsync("正在返回对象结果。", new Dictionary<string, string?>
+        {
+            ["kind"] = "object"
+        });
         return Result.Ok(new { now = DateTime.UtcNow, message = "returned object" });
     }
 
@@ -176,6 +197,12 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     {
         if (HostContext is null) return Result.Fail("No host context available");
 
+        await PublishUpdateAsync("准备请求新的浏览器实例。", new Dictionary<string, string?>
+        {
+            ["browserType"] = "chromium",
+            ["headless"] = "true"
+        });
+
         var opts = new BrowserCreationOptions(
             OwnerId: HostContext.PluginId,
             UserDataDirectory: null,
@@ -190,6 +217,12 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(instanceId))
             return Result.Fail("Host refused to create a new browser instance.");
 
+        await PublishUpdateAsync("实例创建成功。", new Dictionary<string, string?>
+        {
+            ["instanceId"] = instanceId,
+            ["mode"] = "with-args"
+        });
+
         return Result.Ok(new { instanceId });
     }
 
@@ -203,10 +236,16 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     {
         if (HostContext?.ActivePage is null) return Result.Fail("No active page available");
 
+        await PublishUpdateAsync("开始读取当前页面标题。", null);
+
         try
         {
             // Read document title via Playwright evaluate
             var title = await HostContext.ActivePage.EvaluateAsync<string>("() => document.title");
+            await PublishUpdateAsync("已读取页面标题。", new Dictionary<string, string?>
+            {
+                ["title"] = title
+            });
             return Result.Ok(new { title });
         }
         catch (Exception ex)
@@ -253,6 +292,11 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     {
         if (HostContext is null) return Result.Fail("No host context available");
 
+        await PublishUpdateAsync("准备打开百度首页。", new Dictionary<string, string?>
+        {
+            ["url"] = "https://www.baidu.com"
+        });
+
         var opts = new BrowserCreationOptions(
             OwnerId: HostContext.PluginId,
             UserDataDirectory: null,
@@ -266,6 +310,11 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(instanceId))
             return Result.Fail("Host refused to create a new browser instance.");
 
+        await PublishUpdateAsync("浏览器实例已创建。", new Dictionary<string, string?>
+        {
+            ["instanceId"] = instanceId
+        });
+
         try
         {
             var browserContext = HostContext.BrowserContext;
@@ -274,8 +323,18 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
             var page = await browserContext.NewPageAsync();
             try
             {
+                await PublishUpdateAsync("新页面已打开，开始导航。", new Dictionary<string, string?>
+                {
+                    ["instanceId"] = instanceId,
+                    ["step"] = "navigate"
+                });
                 await page.GotoAsync("https://www.baidu.com");
                 var title = await page.TitleAsync();
+                await PublishUpdateAsync("导航完成并取得标题。", new Dictionary<string, string?>
+                {
+                    ["instanceId"] = instanceId,
+                    ["title"] = title
+                }, true);
                 return Result.Ok(new { instanceId, title });
             }
             finally

@@ -115,7 +115,13 @@ public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string insta
     /// </summary>
     /// <param name="page">要为其创建 CDP 会话的页面 / page to create the CDP session for.</param>
     /// <returns>可能为 null 的异步 CDP 会话。<br/>An asynchronous CDP session or null if context is not available.</returns>
-    public Task<ICDPSession?> CreateCdpSessionAsync(IPage page) => BrowserContext is null ? Task.FromResult<ICDPSession?>(null) : BrowserContext.NewCDPSessionAsync(page);
+    public async Task<ICDPSession?> CreateCdpSessionAsync(IPage page)
+    {
+        if (BrowserContext is null)
+            return null;
+
+        return await BrowserContext.NewCDPSessionAsync(page);
+    }
 
     /// <summary>
     /// 通过给定 CDP 会话分发鼠标事件。<br/>

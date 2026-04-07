@@ -43,6 +43,38 @@
         } catch (e) { console.log(title, message); }
     }
 
+    function normalizeExecutionData(data) {
+        if (data === null || data === undefined)
+            return {};
+
+        if (Array.isArray(data))
+            return { result: JSON.stringify(data) };
+
+        if (typeof data === 'object') {
+            const entries = Object.entries(data);
+            return Object.fromEntries(entries.map(([key, value]) => [key, value === null || value === undefined ? '' : typeof value === 'string' ? value : JSON.stringify(value)]));
+        }
+
+        return { result: String(data) };
+    }
+
+    function pushExecutionResponseToPluginOutput(pluginId, targetId, response) {
+        if (!pluginId || !targetId || !window.BrowserPlugins?.applyPluginOutputUpdate)
+            return;
+
+        const normalizedData = normalizeExecutionData(response?.data);
+        const fallbackMessage = Object.keys(normalizedData).length === 0 && response?.state ? '状态: ' + response.state : null;
+        window.BrowserPlugins.applyPluginOutputUpdate({
+            pluginId,
+            targetId: response?.targetId || targetId,
+            message: response?.message ?? fallbackMessage,
+            data: normalizedData,
+            state: response?.state,
+            openModal: false,
+            timestampUtc: new Date().toISOString()
+        });
+    }
+
     window.renderPlugins = function (plugins) {
         pluginHost.replaceChildren();
         window.BrowserUI = window.BrowserUI || {};
@@ -143,7 +175,14 @@
                     }
 
                     btn.addEventListener('click', async () => {
-                        try { btn.disabled = true; const url = api('pluginsControl', '/api/plugins/control'); const res = await postJsonUrl(url, { pluginId: plugin.id, command: c.command, arguments: {} }); showToast('控制', '已发送: ' + (res?.status ?? 'ok'), false); await (window.BrowserUI.loadPlugins?.() || Promise.resolve()); } catch (e) { showToast('控制失败', e.message || String(e), true); } finally { btn.disabled = false; }
+                        try {
+                            btn.disabled = true;
+                            const url = api('pluginsControl', '/api/plugins/control');
+                            const res = await postJsonUrl(url, { pluginId: plugin.id, command: c.command, arguments: {} });
+                            pushExecutionResponseToPluginOutput(plugin.id, c.command, res);
+                            showToast('控制', (res?.message || ('状态: ' + (res?.state || 'ok'))), false);
+                            await (window.BrowserUI.loadPlugins?.() || Promise.resolve());
+                        } catch (e) { showToast('控制失败', e.message || String(e), true); } finally { btn.disabled = false; }
                     });
                     controlsWrap.appendChild(btn);
                 }
@@ -156,7 +195,13 @@
                 for (const fn of plugin.functions) {
                     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn btn-sm btn-outline-primary'; btn.textContent = fn.name || fn.id;
                     btn.addEventListener('click', async () => {
-                        try { btn.disabled = true; const url = api('pluginsRun', '/api/plugins/run'); const res = await postJsonUrl(url, { pluginId: plugin.id, functionId: fn.id, arguments: {} }); showToast('执行', '返回: ' + (res?.result ?? JSON.stringify(res)), false); } catch (e) { showToast('执行失败', e.message || String(e), true); } finally { btn.disabled = false; }
+                        try {
+                            btn.disabled = true;
+                            const url = api('pluginsRun', '/api/plugins/run');
+                            const res = await postJsonUrl(url, { pluginId: plugin.id, functionId: fn.id, arguments: {} });
+                            pushExecutionResponseToPluginOutput(plugin.id, fn.id, res);
+                            showToast('执行', '返回: ' + ((res?.message && !res?.data) ? res.message : JSON.stringify(res?.data ?? res)), false);
+                        } catch (e) { showToast('执行失败', e.message || String(e), true); } finally { btn.disabled = false; }
                     });
                     functionsWrap.appendChild(btn);
                 }
