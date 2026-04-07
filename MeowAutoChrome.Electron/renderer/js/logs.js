@@ -100,6 +100,18 @@
         const ts = e.timestampText ?? e.TimestampText ?? e.timestamp ?? e.Timestamp ?? '';
         const levelText = e.levelText ?? e.LevelText ?? (e.level != null ? String(e.level) : '') ?? '';
         let filterLevel = e.filterLevel ?? e.FilterLevel ?? '';
+        // normalize any server-provided FilterLevel into canonical short form
+        const _normLevel = (s) => {
+            if (!s && s !== 0) return '';
+            const t = String(s).toLowerCase().trim();
+            if (t === 'warning' || t === 'warn') return 'warn';
+            if (t === 'debug') return 'debug';
+            if (t === 'error' || t === 'critical') return 'error';
+            if (t === 'information' || t === 'info') return 'info';
+            if (t === 'trace') return 'trace';
+            return t;
+        };
+        filterLevel = _normLevel(filterLevel);
         const category = e.category ?? e.Category ?? e.CategoryName ?? '';
         const message = e.message ?? e.Message ?? e.msg ?? e.text ?? '';
 
@@ -160,20 +172,35 @@
         }
 
         function applyFilters(list) {
-            const lv = filterLevel?.value || '';
-            const cat = filterCategory?.value || '';
-            const txt = (filterText?.value || '').toLowerCase();
-            const tsFilter = (filterTimestamp?.value || '').toLowerCase();
-            return list.filter(e => {
-                if (lv && e.FilterLevel !== lv) return false;
-                if (cat && e.Category !== cat) return false;
-                if (tsFilter && !(e.TimestampText || '').toLowerCase().includes(tsFilter)) return false;
+            const lv = (filterLevel?.value || '').toLowerCase().trim();
+            const cat = (filterCategory?.value || '').toString().trim();
+            const txt = (filterText?.value || '').toLowerCase().trim();
+            const tsFilter = (filterTimestamp?.value || '').toLowerCase().trim();
+
+            // perform filtering but also emit a concise debug sample to help diagnose mismatches
+            const filtered = list.filter(e => {
+                if (lv && ((e.FilterLevel || '').toLowerCase().trim() !== lv)) return false;
+                if (cat && ((e.Category || '').toString().trim() !== cat)) return false;
+                if (tsFilter && !((e.TimestampText || '').toLowerCase().includes(tsFilter))) return false;
                 if (txt) {
-                    const hay = (e.Message + ' ' + e.Category + ' ' + e.LevelText + ' ' + e.TimestampText).toLowerCase();
+                    const hay = ((e.Message || '') + ' ' + (e.Category || '') + ' ' + (e.LevelText || '') + ' ' + (e.TimestampText || '')).toLowerCase();
                     if (!hay.includes(txt)) return false;
                 }
                 return true;
             });
+
+            try {
+                // sample up to 6 entries to inspect normalized FilterLevel/Category values
+                const sample = (list || []).slice(0, 6).map(x => ({
+                    FilterLevel: (x.FilterLevel || '').toString(),
+                    LevelText: (x.LevelText || '').toString(),
+                    Category: (x.Category || '').toString(),
+                    Message: (x.Message || '').toString()
+                }));
+                console.debug('applyFilters', { criteria: { lv, cat, txt, tsFilter }, in: (list || []).length, out: filtered.length, sample });
+            } catch (err) { /* ignore debug failures */ }
+
+            return filtered;
         }
 
         function renderAll() {
@@ -191,10 +218,11 @@
             console.debug('addEntry: adding key', k);
             // keep entries array with newest first
             entries.unshift(ne);
-            // update category options
-            const exists = Array.from(filterCategory.options).some(o => o.value === ne.Category);
-            if (!exists && ne.Category) {
-                const opt = document.createElement('option'); opt.value = ne.Category; opt.textContent = ne.Category; filterCategory.appendChild(opt);
+            // update category options (use trimmed value to avoid mismatches)
+            const val = (ne.Category || '').toString().trim();
+            const exists = Array.from(filterCategory.options).some(o => o.value === val);
+            if (!exists && val) {
+                const opt = document.createElement('option'); opt.value = val; opt.textContent = val; filterCategory.appendChild(opt);
             }
             const shouldAppend = applyFilters([ne]).length > 0;
             if (!shouldAppend) return;
@@ -215,8 +243,8 @@
                     try { seenKeys.add(entryKey(e)); } catch { }
                 }
                 console.debug('loadInitial: loaded', entries.length, 'entries');
-                // populate categories
-                const cats = new Set(entries.map(e => e.Category).filter(Boolean));
+                // populate categories (normalized/trimming to avoid mismatches)
+                const cats = new Set(entries.map(e => (e.Category || '').toString().trim()).filter(Boolean));
                 cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; filterCategory.appendChild(o); });
                 renderAll();
             } catch (e) { console.warn('加载日志失败', e); }

@@ -62,7 +62,9 @@ namespace MeowAutoChrome.WebAPI.Services
                             {
                                 LogLevel.Warning => "warn",
                                 LogLevel.Error or LogLevel.Critical => "error",
-                                _ => "info"
+                                LogLevel.Information => "info",
+                                LogLevel.Debug => "debug",
+                                _ => "trace"
                             },
                             entry.Category,
                             entry.Message

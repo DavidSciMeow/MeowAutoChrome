@@ -17,9 +17,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new AppLogLoggerProvider(appLogService));
 
-// builder.Logging.AddFilter("Microsoft.AspNetCore.Routing", LogLevel.None);
-// builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.None);
-// builder.Logging.AddFilter("Microsoft.AspNetCore.Mvc.Infrastructure", LogLevel.None);
+builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.None);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Routing", LogLevel.Trace);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.Trace);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Mvc.Infrastructure.*", LogLevel.Trace);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics.*", LogLevel.Trace);
 
 builder.Services.AddSingleton(appLogService);
 builder.Services.AddMeowAutoChromeServices();
