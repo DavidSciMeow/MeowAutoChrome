@@ -16,7 +16,7 @@ public sealed class LogPageViewModel
     /// 日志条目集合。<br/>
     /// Collection of log entries.
     /// </summary>
-    public IReadOnlyList<LogEntryViewModel> Entries { get; set; } = Array.Empty<LogEntryViewModel>();
+    public IReadOnlyList<LogEntryViewModel> Entries { get; set; } = [];
 
     /// <summary>
     /// 最后更新时间。<br/>

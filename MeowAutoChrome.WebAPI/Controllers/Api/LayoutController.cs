@@ -10,14 +10,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 布局保存 API，负责持久化桌面端界面布局参数。<br/>
 /// Layout persistence API responsible for storing desktop UI layout settings.
 /// </summary>
-public class LayoutController : ControllerBase
+public class LayoutController(IProgramSettingsProvider programSettingsService) : ControllerBase
 {
-    private readonly IProgramSettingsProvider programSettingsService;
-
-    public LayoutController(IProgramSettingsProvider programSettingsService)
-    {
-        this.programSettingsService = programSettingsService;
-    }
 
     /// <summary>
     /// 保存插件区宽度等布局设置。<br/>

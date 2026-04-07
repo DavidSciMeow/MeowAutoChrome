@@ -24,7 +24,7 @@ internal static class PluginMetadataScanner
         using var peReader = new PEReader(stream);
 
         if (!peReader.HasMetadata)
-            return Array.Empty<string>();
+            return [];
 
         var metadataReader = peReader.GetMetadataReader();
         var typeNames = new List<string>();

@@ -3,7 +3,6 @@ using MeowAutoChrome.WebAPI.Models;
 using MeowAutoChrome.WebAPI.Services;
 using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core.Interface;
-using System.IO;
 
 namespace MeowAutoChrome.WebAPI.Controllers.Api;
 
@@ -13,18 +12,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 浏览器实例管理 API，负责实例创建、关闭、设置读取与更新。<br/>
 /// Browser instance management API for creating, closing, reading, and updating instances.
 /// </summary>
-public class InstancesController : ControllerBase
+public class InstancesController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService, IProgramSettingsProvider programSettingsService) : ControllerBase
 {
-    private readonly BrowserInstanceManager browserInstances;
-    private readonly ScreencastServiceCore screencastService;
-    private readonly IProgramSettingsProvider programSettingsService;
-
-    public InstancesController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService, IProgramSettingsProvider programSettingsService)
-    {
-        this.browserInstances = browserInstances;
-        this.screencastService = screencastService;
-        this.programSettingsService = programSettingsService;
-    }
 
     /// <summary>
     /// 读取指定实例的设置快照。<br/>

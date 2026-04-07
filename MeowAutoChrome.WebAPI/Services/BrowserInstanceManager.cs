@@ -2,13 +2,6 @@ using MeowAutoChrome.Core;
 using MeowAutoChrome.Core.Interface;
 using Microsoft.Playwright;
 using MeowAutoChrome.WebAPI.Models;
-using Microsoft.Extensions.Logging;
-using System.Linq;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using System;
-using System.IO;
 
 namespace MeowAutoChrome.WebAPI.Services;
 
@@ -16,85 +9,71 @@ namespace MeowAutoChrome.WebAPI.Services;
 /// WebAPI 层的浏览器实例适配服务，用于把 Core 能力转换为 API 可直接消费的模型。<br/>
 /// WebAPI-level browser instance adapter that converts Core capabilities into models directly consumable by the API layer.
 /// </summary>
-public class BrowserInstanceManager
+public class BrowserInstanceManager(BrowserInstanceManagerCore core, IProgramSettingsProvider settingsProvider, ILogger<BrowserInstanceManager> logger)
 {
-    private readonly BrowserInstanceManagerCore _core;
-    private readonly IProgramSettingsProvider _settingsProvider;
-    private readonly ILogger<BrowserInstanceManager> _logger;
-
-    public BrowserInstanceManager(BrowserInstanceManagerCore core, IProgramSettingsProvider settingsProvider, ILogger<BrowserInstanceManager> logger)
-    {
-        _core = core;
-        _settingsProvider = settingsProvider;
-        _logger = logger;
-    }
 
     /// <summary>
     /// 当前选中的实例 ID。<br/>
     /// Identifier of the currently selected instance.
     /// </summary>
     public string CurrentInstanceId
-        => _core.CurrentInstanceId;
+        => core.CurrentInstanceId;
 
     /// <summary>
     /// 当前选中的实例对象。<br/>
     /// Currently selected instance object.
     /// </summary>
-    public dynamic? CurrentInstance => _core.CurrentInstance;
+    public dynamic? CurrentInstance => core.CurrentInstance;
 
     /// <summary>
     /// 当前实例对应的浏览器上下文。<br/>
     /// Browser context associated with the current instance.
     /// </summary>
-    public IBrowserContext? BrowserContext => _core.BrowserContext;
+    public IBrowserContext? BrowserContext => core.BrowserContext;
 
     /// <summary>
     /// 当前活动页面。<br/>
     /// Current active page.
     /// </summary>
-    public IPage? ActivePage => _core.ActivePage;
+    public IPage? ActivePage => core.ActivePage;
 
     /// <summary>
     /// 当前选中页面 ID。<br/>
     /// Identifier of the selected page.
     /// </summary>
-    public string? SelectedPageId => _core.SelectedPageId;
+    public string? SelectedPageId => core.SelectedPageId;
 
     /// <summary>
     /// 当前运行模式是否为 Headless。<br/>
     /// Whether the current runtime mode is headless.
     /// </summary>
-    public bool IsHeadless => _core.IsHeadless;
+    public bool IsHeadless => core.IsHeadless;
 
     /// <summary>
     /// 当前活动页面 URL。<br/>
     /// URL of the current active page.
     /// </summary>
-    public string? CurrentUrl => _core.CurrentUrl;
+    public string? CurrentUrl => core.CurrentUrl;
 
     /// <summary>
     /// 全部实例中的页面总数。<br/>
     /// Total number of pages across all instances.
     /// </summary>
-    public int TotalPageCount => _core.TotalPageCount;
+    public int TotalPageCount => core.TotalPageCount;
 
     /// <summary>
     /// 获取全部实例的 API 视图。<br/>
     /// Get the API view of all browser instances.
     /// </summary>
     /// <returns>实例信息列表。<br/>List of instance information.</returns>
-    public IReadOnlyList<BrowserInstanceInfoDto> GetInstances()
-    {
-        return _core.GetInstances()
+    public IReadOnlyList<BrowserInstanceInfoDto> GetInstances() => [.. core.GetInstances()
             .Select(i => new BrowserInstanceInfoDto(
                 i.Id,
                 i.Name,
-                _core.GetInstance(i.Id)?.UserDataDirectoryPath,
+                core.GetInstance(i.Id)?.UserDataDirectoryPath,
                 GetInstanceColor(i.Id),
                 i.IsSelected,
-                i.PageCount))
-            .ToArray();
-    }
+                i.PageCount))];
 
     /// <summary>
     /// 获取全部实例的 DTO 列表。<br/>
@@ -111,16 +90,16 @@ public class BrowserInstanceManager
     /// <returns>实例设置响应；若不存在则返回空。<br/>Instance settings response, or null when the instance does not exist.</returns>
     public async Task<BrowserInstanceSettingsResponseDto?> GetInstanceSettingsAsync(string instanceId)
     {
-        var inst = _core.GetInstance(instanceId);
+        var inst = core.GetInstance(instanceId);
         if (inst is null)
             return null;
 
-        var settings = await _settingsProvider.GetAsync();
+        var settings = await settingsProvider.GetAsync();
         return new BrowserInstanceSettingsResponseDto(
             inst.InstanceId,
             inst.DisplayName,
             inst.UserDataDirectoryPath,
-            string.Equals(inst.InstanceId, _core.CurrentInstanceId, StringComparison.OrdinalIgnoreCase),
+            string.Equals(inst.InstanceId, core.CurrentInstanceId, StringComparison.OrdinalIgnoreCase),
             new BrowserInstanceSettingsViewportDto(1280, 800, false, false),
             new BrowserInstanceSettingsUserAgentDto(false, false, null, settings.UserAgent, settings.UserAgent));
     }
@@ -130,10 +109,7 @@ public class BrowserInstanceManager
     /// Get viewport settings for the current instance.
     /// </summary>
     /// <returns>Core 视口设置模型。<br/>Core viewport settings model.</returns>
-    public Core.Models.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
-    {
-        return _core.GetCurrentInstanceViewportSettings();
-    }
+    public Core.Models.BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings() => core.GetCurrentInstanceViewportSettings();
 
     /// <summary>
     /// 获取当前实例的 API 视口设置响应。<br/>
@@ -142,7 +118,7 @@ public class BrowserInstanceManager
     /// <returns>API 视口设置响应。<br/>API viewport settings response.</returns>
     public Task<BrowserInstanceViewportSettingsResponseDto> GetCurrentInstanceViewportSettingsAsync()
     {
-        var viewport = _core.GetCurrentInstanceViewportSettings();
+        var viewport = core.GetCurrentInstanceViewportSettings();
         return Task.FromResult(new BrowserInstanceViewportSettingsResponseDto(viewport.Width, viewport.Height, viewport.ViewportType));
     }
 
@@ -152,8 +128,7 @@ public class BrowserInstanceManager
     /// </summary>
     /// <param name="pluginId">插件 ID。<br/>Plugin id.</param>
     /// <returns>实例 ID 列表。<br/>List of instance identifiers.</returns>
-    public IReadOnlyList<string> GetPluginInstanceIds(string pluginId)
-        => _core.GetPluginInstanceIds(pluginId);
+    public IReadOnlyList<string> GetPluginInstanceIds(string pluginId) => core.GetPluginInstanceIds(pluginId);
 
     /// <summary>
     /// 为实例分配稳定的展示颜色。<br/>
@@ -178,9 +153,7 @@ public class BrowserInstanceManager
         unchecked
         {
             var hash = 17;
-            foreach (var ch in instanceId ?? string.Empty)
-                hash = (hash * 31) + ch;
-
+            foreach (var ch in instanceId ?? string.Empty) hash = (hash * 31) + ch;
             return colors[Math.Abs(hash) % colors.Length];
         }
     }
@@ -189,15 +162,13 @@ public class BrowserInstanceManager
     /// 获取指定实例的浏览器上下文。<br/>
     /// Get the browser context for the specified instance.
     /// </summary>
-    public IBrowserContext? GetBrowserContext(string instanceId)
-        => _core.GetBrowserContext(instanceId);
+    public IBrowserContext? GetBrowserContext(string instanceId) => core.GetBrowserContext(instanceId);
 
     /// <summary>
     /// 获取指定实例的活动页面。<br/>
     /// Get the active page for the specified instance.
     /// </summary>
-    public IPage? GetActivePage(string instanceId)
-        => _core.GetActivePage(instanceId);
+    public IPage? GetActivePage(string instanceId) => core.GetActivePage(instanceId);
 
     /// <summary>
     /// 创建新的浏览器实例。<br/>
@@ -209,31 +180,25 @@ public class BrowserInstanceManager
     /// <param name="previewInstanceId">预览阶段生成的实例 ID。<br/>Preview-generated instance id.</param>
     /// <param name="cancellationToken">请求取消令牌。<br/>Request cancellation token.</param>
     /// <returns>新实例 ID。<br/>New instance identifier.</returns>
-    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default)
-    {
-        return await _core.CreateBrowserInstanceAsync(ownerPluginId, displayName, userDataDirectory, previewInstanceId);
-    }
+    public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default) => await core.CreateBrowserInstanceAsync(ownerPluginId, displayName, userDataDirectory, previewInstanceId);
 
     /// <summary>
     /// 删除指定实例。<br/>
     /// Remove the specified instance.
     /// </summary>
-    public Task<bool> RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
-        => _core.RemoveAsync(instanceId);
+    public Task<bool> RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default) => core.RemoveAsync(instanceId);
 
     /// <summary>
     /// 选择指定实例为当前实例。<br/>
     /// Select the specified instance as the current instance.
     /// </summary>
-    public Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
-        => _core.SelectBrowserInstanceAsync(instanceId, cancellationToken);
+    public Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default) => core.SelectBrowserInstanceAsync(instanceId, cancellationToken);
 
     /// <summary>
     /// 预览新实例的实例 ID 和目录路径。<br/>
     /// Preview the instance id and directory path for a new instance.
     /// </summary>
-    public Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot)
-        => _core.PreviewNewInstanceAsync(ownerPluginId ?? "ui", userDataDirectoryRoot);
+    public Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string? ownerPluginId, string? userDataDirectoryRoot) => core.PreviewNewInstanceAsync(ownerPluginId ?? "ui", userDataDirectoryRoot);
 
     /// <summary>
     /// 获取所有标签页的 API 视图。<br/>
@@ -242,12 +207,12 @@ public class BrowserInstanceManager
     /// <returns>标签页 DTO 列表。<br/>List of tab DTOs.</returns>
     public async Task<IReadOnlyList<Models.BrowserTabInfoDto>> GetTabsAsync()
     {
-        var tabs = await _core.GetTabsAsync();
-        var selectedInstanceId = _core.CurrentInstanceId;
+        var tabs = await core.GetTabsAsync();
+        var selectedInstanceId = core.CurrentInstanceId;
 
-        return tabs.Select(tab =>
+        return [.. tabs.Select(tab =>
         {
-            var instance = _core.Instances.FirstOrDefault(i => i.TabIds.Contains(tab.Id));
+            var instance = core.Instances.FirstOrDefault(i => i.TabIds.Contains(tab.Id));
             return new Models.BrowserTabInfoDto(
                 tab.Id,
                 tab.Title,
@@ -258,20 +223,20 @@ public class BrowserInstanceManager
                 instance?.DisplayName,
                 instance is null ? null : GetInstanceColor(instance.InstanceId),
                 string.Equals(instance?.InstanceId, selectedInstanceId, StringComparison.OrdinalIgnoreCase));
-        }).ToArray();
+        })];
     }
 
     /// <summary>
     /// 选择指定页面。<br/>
     /// Select the specified page.
     /// </summary>
-    public Task<bool> SelectPageAsync(string tabId) => _core.SelectPageAsync(tabId);
+    public Task<bool> SelectPageAsync(string tabId) => core.SelectPageAsync(tabId);
 
     /// <summary>
     /// 关闭指定标签页。<br/>
     /// Close the specified tab.
     /// </summary>
-    public Task<bool> CloseTabAsync(string tabId) => _core.CloseTabAsync(tabId);
+    public Task<bool> CloseTabAsync(string tabId) => core.CloseTabAsync(tabId);
 
     /// <summary>
     /// 关闭指定浏览器实例。<br/>
@@ -279,59 +244,57 @@ public class BrowserInstanceManager
     /// </summary>
     public async Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(instanceId))
-            return false;
-
-        return await _core.CloseBrowserInstanceAsync(instanceId);
+        if (string.IsNullOrWhiteSpace(instanceId)) return false;
+        return await core.CloseBrowserInstanceAsync(instanceId, cancellationToken);
     }
 
     /// <summary>
     /// 在当前实例中创建新标签页。<br/>
     /// Create a new tab in the current instance.
     /// </summary>
-    public Task CreateTabAsync(string? url = null) => _core.CreateTabAsync(url);
+    public Task CreateTabAsync(string? url = null) => core.CreateTabAsync(url);
 
     /// <summary>
     /// 获取当前页面标题。<br/>
     /// Get the title of the current page.
     /// </summary>
-    public Task<string?> GetTitleAsync() => _core.GetTitleAsync();
+    public Task<string?> GetTitleAsync() => core.GetTitleAsync();
 
     /// <summary>
     /// 导航到指定 URL。<br/>
     /// Navigate to the specified URL.
     /// </summary>
-    public Task NavigateAsync(string url) => _core.NavigateAsync(url);
+    public Task NavigateAsync(string url) => core.NavigateAsync(url);
 
     /// <summary>
     /// 在当前历史记录中后退。<br/>
     /// Navigate backward in the current history stack.
     /// </summary>
-    public Task GoBackAsync() => _core.GoBackAsync();
+    public Task GoBackAsync() => core.GoBackAsync();
 
     /// <summary>
     /// 在当前历史记录中前进。<br/>
     /// Navigate forward in the current history stack.
     /// </summary>
-    public Task GoForwardAsync() => _core.GoForwardAsync();
+    public Task GoForwardAsync() => core.GoForwardAsync();
 
     /// <summary>
     /// 刷新当前页面。<br/>
     /// Reload the current page.
     /// </summary>
-    public Task ReloadAsync() => _core.ReloadAsync();
+    public Task ReloadAsync() => core.ReloadAsync();
 
     /// <summary>
     /// 捕获当前页面截图。<br/>
     /// Capture a screenshot of the current page.
     /// </summary>
-    public Task<byte[]?> CaptureScreenshotAsync() => _core.CaptureScreenshotAsync();
+    public Task<byte[]?> CaptureScreenshotAsync() => core.CaptureScreenshotAsync();
 
     /// <summary>
     /// 设置当前实例视口大小。<br/>
     /// Set the viewport size of the current instance.
     /// </summary>
-    public Task SetViewportSizeAsync(int width, int height) => _core.SetViewportSizeAsync(width, height);
+    public Task SetViewportSizeAsync(int width, int height) => core.SetViewportSizeAsync(width, height);
 
     /// <summary>
     /// 更新浏览器启动设置并按需重新加载实例。<br/>
@@ -339,7 +302,7 @@ public class BrowserInstanceManager
     /// </summary>
     public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false)
     {
-        await _core.UpdateLaunchSettingsAsync(primaryUserDataDirectory, isHeadless, forceReload);
+        await core.UpdateLaunchSettingsAsync(primaryUserDataDirectory, isHeadless, forceReload);
         try
         {
             var pluginHost = AppDomain.CurrentDomain.GetAssemblies()
@@ -354,13 +317,11 @@ public class BrowserInstanceManager
     /// 更新实例设置。<br/>
     /// Update instance settings.
     /// </summary>
-    public Task<bool> UpdateInstanceSettingsAsync(Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default)
-        => _core.UpdateInstanceSettingsAsync(request, cancellationToken);
+    public Task<bool> UpdateInstanceSettingsAsync(Core.Models.BrowserInstanceSettingsUpdateRequest request, CancellationToken cancellationToken = default) => core.UpdateInstanceSettingsAsync(request, cancellationToken);
 
     /// <summary>
     /// 同步当前实例视口大小。<br/>
     /// Synchronize the viewport size of the current instance.
     /// </summary>
-    public Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default)
-        => _core.SyncCurrentInstanceViewportAsync(width, height, cancellationToken);
+    public Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default) => core.SyncCurrentInstanceViewportAsync(width, height, cancellationToken);
 }

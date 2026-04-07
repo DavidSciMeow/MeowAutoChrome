@@ -2,10 +2,6 @@
 using Microsoft.Extensions.Logging;
 // using MeowAutoChrome.Core.Services; // not required in this file
 using System.Collections.Concurrent;
-using System.Linq;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using MeowAutoChrome.Core.Interface;
 
 namespace MeowAutoChrome.Core;
@@ -13,10 +9,16 @@ namespace MeowAutoChrome.Core;
 /// Playwright 实例封装，负责管理浏览器上下文、标签页并提供 CDP、事件分发等功能。<br/>
 /// Wrapper for a Playwright instance that manages browser context, pages, and provides CDP and event dispatching.
 /// </summary>
-public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
+/// <remarks>
+/// 创建一个新的 <see cref="PlaywrightInstance"/> 实例。<br/>
+/// Create a new <see cref="PlaywrightInstance"/>.
+/// </remarks>
+/// <param name="logger">日志记录器 / logger.</param>
+/// <param name="instanceId">实例 Id / instance identifier.</param>
+/// <param name="displayName">显示名称 / display name.</param>
+/// <param name="ownerId">宿主/拥有者 Id / owner identifier.</param>
+public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string instanceId, string displayName, string ownerId) : ICoreScreencastable, ICoreBrowserInstance
 {
-    // Minimal wrapper adapted from original PlayWrightWarpper. Full feature parity will be migrated gradually.
-    private readonly ILogger<PlaywrightInstance> _logger;
     private IBrowserContext? _context;
     private readonly ConcurrentDictionary<string, IPage> _pagesById = new();
     private static readonly Lazy<Task<IPlaywright>> _sharedPlaywrightLazy = new(() => Playwright.CreateAsync());
@@ -24,7 +26,7 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
     /// 此实例所属的宿主标识。<br/>
     /// Identifier of the owner that created or manages this instance.
     /// </summary>
-    public string OwnerId { get; }
+    public string OwnerId { get; } = ownerId;
 
     /// <summary>
     /// 最近一次发生的错误消息（如果有）。<br/>
@@ -36,13 +38,13 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
     /// 实例唯一标识符。<br/>
     /// Unique identifier for this Playwright instance.
     /// </summary>
-    public string InstanceId { get; }
+    public string InstanceId { get; } = instanceId;
 
     /// <summary>
     /// 人类可读的实例显示名称。<br/>
     /// Human-readable display name for the instance.
     /// </summary>
-    public string DisplayName { get; }
+    public string DisplayName { get; } = displayName;
 
     /// <summary>
     /// 指示实例是否为无头（Headless）模式。<br/>
@@ -108,22 +110,6 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
     }
 
     /// <summary>
-    /// 创建一个新的 <see cref="PlaywrightInstance"/> 实例。<br/>
-    /// Create a new <see cref="PlaywrightInstance"/>.
-    /// </summary>
-    /// <param name="logger">日志记录器 / logger.</param>
-    /// <param name="instanceId">实例 Id / instance identifier.</param>
-    /// <param name="displayName">显示名称 / display name.</param>
-    /// <param name="ownerId">宿主/拥有者 Id / owner identifier.</param>
-    public PlaywrightInstance(ILogger<PlaywrightInstance> logger, string instanceId, string displayName, string ownerId)
-    {
-        _logger = logger;
-        InstanceId = instanceId;
-        DisplayName = displayName;
-        OwnerId = ownerId;
-    }
-
-    /// <summary>
     /// 为指定页面创建一个 CDP 会话（如果浏览器上下文可用）。<br/>
     /// Create a CDP session for the specified page if the browser context is available.
     /// </summary>
@@ -186,7 +172,7 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
         catch (Exception ex)
         {
             LastErrorMessage = ex.Message;
-            _logger.LogError(ex, "Failed to initialize Playwright instance {InstanceId}", InstanceId);
+            logger.LogError(ex, "Failed to initialize Playwright instance {InstanceId}", InstanceId);
             throw;
         }
 
@@ -215,7 +201,7 @@ public class PlaywrightInstance : ICoreScreencastable, ICoreBrowserInstance
         catch { }
 
         IsHeadless = headless;
-        _logger.LogInformation("Playwright instance initialized {InstanceId} headless={Headless}", InstanceId, IsHeadless);
+        logger.LogInformation("Playwright instance initialized {InstanceId} headless={Headless}", InstanceId, IsHeadless);
 
         // Start background monitor to detect externally closed pages and raise TabClosed
         try

@@ -113,12 +113,10 @@ namespace MeowAutoChrome.Core.Services.PluginHost
         /// </summary>
         /// <param name="type">要扫描的插件实现类型（反射）。<br/>Plugin implementation type to scan (reflection).</param>
         /// <returns>发现的动作描述符列表。<br/>List of discovered action descriptors.</returns>
-        public static List<RuntimeBrowserPluginAction> DiscoverActions(Type type)
-        {
+        public static List<RuntimeBrowserPluginAction> DiscoverActions(Type type) =>
             // Delegate discovery to PluginTypeIntrospector to avoid duplicated implementation
             // and potential dead/unused code paths.
-            return PluginTypeIntrospector.DiscoverActions(type);
-        }
+            PluginTypeIntrospector.DiscoverActions(type);
 
         private static string EnsureUniqueActionId(string baseId, HashSet<string> usedIds)
         {

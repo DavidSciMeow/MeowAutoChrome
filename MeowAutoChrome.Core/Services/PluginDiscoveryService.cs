@@ -8,19 +8,14 @@ namespace MeowAutoChrome.Core.Services.PluginDiscovery;
 /// 插件发现实现：在插件根目录中扫描程序集、加载集合并返回发现的插件及错误信息。<br/>
 /// Implementation of plugin discovery which scans the plugin root directory, loads assemblies and returns discovered plugins and errors.
 /// </summary>
-public sealed class PluginDiscoveryService : IPluginDiscoveryService
+/// <remarks>
+/// 创建一个 PluginDiscoveryService 实例，可通过可选参数覆盖插件根路径。<br/>
+/// Create a PluginDiscoveryService instance; plugin root path can be overridden via the optional constructor parameter.
+/// </remarks>
+/// <param name="pluginRootPath">可选的插件根目录路径 / optional plugin root path.</param>
+public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPluginDiscoveryService
 {
-    private string _pluginRootPath;
-
-    /// <summary>
-    /// 创建一个 PluginDiscoveryService 实例，可通过可选参数覆盖插件根路径。<br/>
-    /// Create a PluginDiscoveryService instance; plugin root path can be overridden via the optional constructor parameter.
-    /// </summary>
-    /// <param name="pluginRootPath">可选的插件根目录路径 / optional plugin root path.</param>
-    public PluginDiscoveryService(string? pluginRootPath = null)
-    {
-        _pluginRootPath = pluginRootPath ?? ProgramSettings.GetDefaultPluginDirectoryPath();
-    }
+    private string _pluginRootPath = pluginRootPath ?? ProgramSettings.GetDefaultPluginDirectoryPath();
 
     /// <summary>
     /// 插件根目录路径。<br/>

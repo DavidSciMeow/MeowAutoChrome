@@ -1,5 +1,4 @@
 using MeowAutoChrome.Core.Models;
-using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.WebAPI.Services;
 
@@ -31,8 +30,7 @@ public sealed class AppLogLoggerProvider(Core.Services.AppLogService appLogServi
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            if (!IsEnabled(logLevel))
-                return;
+            if (!IsEnabled(logLevel)) return;
 
             var message = formatter(state, exception);
             if (exception is not null)

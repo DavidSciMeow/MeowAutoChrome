@@ -12,20 +12,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 浏览器状态查询 API，返回当前页面、实例、资源占用和推流状态。<br/>
 /// Browser status API returning current page, instance, resource usage, and screencast state.
 /// </summary>
-public class StatusController : ControllerBase
+public class StatusController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService, ResourceMetricsService resourceMetricsService, IProgramSettingsProvider programSettingsService) : ControllerBase
 {
-    private readonly BrowserInstanceManager browserInstances;
-    private readonly ScreencastServiceCore screencastService;
-    private readonly ResourceMetricsService resourceMetricsService;
-    private readonly IProgramSettingsProvider programSettingsService;
-
-    public StatusController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService, ResourceMetricsService resourceMetricsService, IProgramSettingsProvider programSettingsService)
-    {
-        this.browserInstances = browserInstances;
-        this.screencastService = screencastService;
-        this.resourceMetricsService = resourceMetricsService;
-        this.programSettingsService = programSettingsService;
-    }
 
     /// <summary>
     /// 读取当前浏览器运行状态快照。<br/>

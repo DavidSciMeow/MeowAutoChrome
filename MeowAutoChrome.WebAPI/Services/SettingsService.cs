@@ -1,10 +1,6 @@
 using MeowAutoChrome.WebAPI.Models;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Struct;
-using System;
-using System.IO;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace MeowAutoChrome.WebAPI.Services;
 
@@ -12,18 +8,8 @@ namespace MeowAutoChrome.WebAPI.Services;
 /// 程序设置领域服务，负责校验、保存和同步设置变更。<br/>
 /// Domain service for validating, saving, and synchronizing program settings changes.
 /// </summary>
-public class SettingsService
+public class SettingsService(IProgramSettingsProvider programSettingsService, Core.Services.ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances)
 {
-    private readonly IProgramSettingsProvider programSettingsService;
-    private readonly Core.Services.ScreencastServiceCore screencastService;
-    private readonly BrowserInstanceManager browserInstances;
-
-    public SettingsService(IProgramSettingsProvider programSettingsService, Core.Services.ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances)
-    {
-        this.programSettingsService = programSettingsService;
-        this.screencastService = screencastService;
-        this.browserInstances = browserInstances;
-    }
 
     /// <summary>
     /// 将 FPS 转换为帧间隔毫秒数。<br/>

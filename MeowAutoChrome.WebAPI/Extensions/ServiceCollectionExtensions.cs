@@ -1,11 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
 using MeowAutoChrome.Core.Services;
-using System.Linq;
 using MeowAutoChrome.Contracts.SignalR;
 using MeowAutoChrome.Core;
-using System.Threading.Tasks;
 using MeowAutoChrome.WebAPI.Models;
-using MeowAutoChrome.Core.Services;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Services.PluginDiscovery;
 using MeowAutoChrome.WebAPI.Services;
@@ -174,7 +171,8 @@ public static class ServiceCollectionExtensions
                 Executor = sp.GetRequiredService<Core.Services.PluginHost.IPluginExecutor>(),
                 ExecutionService = sp.GetRequiredService<Core.Services.PluginHost.PluginExecutionService>(),
                 PublishingService = sp.GetRequiredService<Core.Services.PluginHost.PluginPublishingService>(),
-                SettingsProvider = sp.GetRequiredService<IProgramSettingsProvider>()
+                SettingsProvider = sp.GetRequiredService<IProgramSettingsProvider>(),
+                AppLogService = sp.GetRequiredService<AppLogService>()
             }, sp.GetRequiredService<ILogger<Core.Services.PluginHost.BrowserPluginHostCore>>()));
         services.AddSingleton<IPluginHostCore>(sp => sp.GetRequiredService<Core.Services.PluginHost.BrowserPluginHostCore>());
 

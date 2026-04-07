@@ -9,19 +9,14 @@ namespace MeowAutoChrome.Core.Adapters;
 /// 用于将核心实现暴露给依赖于更高层 API 的组件（不支持所有写操作）。<br/>
 /// Adapter that exposes the core `ICoreBrowserInstanceManager` as a narrower/compatible wrapper for higher-level components. Not all write operations are supported.
 /// </summary>
-public sealed class BrowserInstanceManagerAdapter
+/// <remarks>
+/// 创建适配器并注入核心管理器实现。<br/>
+/// Create the adapter and inject the core manager implementation.
+/// </remarks>
+/// <param name="core">核心浏览器实例管理器 / core browser instance manager.</param>
+public sealed class BrowserInstanceManagerAdapter(ICoreBrowserInstanceManager core)
 {
-    private readonly ICoreBrowserInstanceManager _core;
-
-    /// <summary>
-    /// 创建适配器并注入核心管理器实现。<br/>
-    /// Create the adapter and inject the core manager implementation.
-    /// </summary>
-    /// <param name="core">核心浏览器实例管理器 / core browser instance manager.</param>
-    public BrowserInstanceManagerAdapter(ICoreBrowserInstanceManager core)
-    {
-        _core = core ?? throw new ArgumentNullException(nameof(core));
-    }
+    private readonly ICoreBrowserInstanceManager _core = core ?? throw new ArgumentNullException(nameof(core));
 
     // Read-only query functions can be mapped
     /// <summary>

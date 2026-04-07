@@ -8,16 +8,13 @@ namespace MeowAutoChrome.WebAPI.Services;
 /// 基于 SignalR 的插件输出发布器。<br/>
 /// SignalR-based publisher for plugin output messages.
 /// </summary>
-public sealed class SignalRPluginOutputPublisher : IPluginOutputPublisher
+/// <remarks>
+/// 初始化插件输出发布器。<br/>
+/// Initialize the plugin output publisher.
+/// </remarks>
+/// <param name="hub">BrowserHub 上下文。<br/>BrowserHub context.</param>
+public sealed class SignalRPluginOutputPublisher(IHubContext<BrowserHub> hub) : IPluginOutputPublisher
 {
-    private readonly IHubContext<BrowserHub> _hub;
-
-    /// <summary>
-    /// 初始化插件输出发布器。<br/>
-    /// Initialize the plugin output publisher.
-    /// </summary>
-    /// <param name="hub">BrowserHub 上下文。<br/>BrowserHub context.</param>
-    public SignalRPluginOutputPublisher(IHubContext<BrowserHub> hub) => _hub = hub;
 
     /// <summary>
     /// 发布插件输出到所有客户端或指定客户端。<br/>
@@ -35,7 +32,7 @@ public sealed class SignalRPluginOutputPublisher : IPluginOutputPublisher
             TimestampUtc = DateTimeOffset.UtcNow
         };
 
-        var clients = string.IsNullOrWhiteSpace(connectionId) ? _hub.Clients.All : _hub.Clients.Client(connectionId);
+        var clients = string.IsNullOrWhiteSpace(connectionId) ? hub.Clients.All : hub.Clients.Client(connectionId);
         return clients.SendAsync("ReceivePluginOutput", payload, cancellationToken);
     }
 }

@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MeowAutoChrome.WebAPI.Models;
 using MeowAutoChrome.Core.Services;
-using Microsoft.Extensions.Logging;
-using System.Linq;
 
 namespace MeowAutoChrome.WebAPI.Controllers.Api;
 
@@ -12,14 +10,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 程序日志 API，负责读取最近日志与清空日志文件。<br/>
 /// Application log API for reading recent logs and clearing the log file.
 /// </summary>
-public class LogsController : ControllerBase
+public class LogsController(AppLogService appLogService) : ControllerBase
 {
-    private readonly AppLogService appLogService;
-
-    public LogsController(AppLogService appLogService)
-    {
-        this.appLogService = appLogService;
-    }
 
     /// <summary>
     /// 读取最近日志内容。<br/>
@@ -37,7 +29,9 @@ public class LogsController : ControllerBase
             {
                 LogLevel.Warning => "warn",
                 LogLevel.Error or LogLevel.Critical => "error",
-                _ => "info"
+                LogLevel.Information => "info",
+                LogLevel.Debug => "debug",
+                _ => "trace"
             },
             Category = e.Category,
             Message = e.Message

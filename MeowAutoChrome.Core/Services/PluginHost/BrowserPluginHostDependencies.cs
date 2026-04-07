@@ -52,4 +52,9 @@ public sealed class BrowserPluginHostDependencies
     /// 可选的程序设置提供者 / optional program settings provider.
     /// </summary>
     public Interface.IProgramSettingsProvider SettingsProvider { get; init; } = null!;
+
+    /// <summary>
+    /// 应用日志服务，供插件宿主将插件日志写入应用级日志。/ App log service used by plugin host to write plugin logs.
+    /// </summary>
+    public AppLogService AppLogService { get; init; } = null!;
 }

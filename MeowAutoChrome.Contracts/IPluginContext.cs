@@ -53,4 +53,13 @@ public interface IPluginContext
     /// <param name="cancellationToken">可选的取消令牌。<br/>Optional cancellation token.</param>
     /// <returns>若找不到或宿主不公开元数据则返回 null。<br/>Returns null if the instance is not found or host does not expose metadata.</returns>
     Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 允许插件将日志写入宿主应用的集中日志系统。插件可以调用此方法来记录自己的运行时信息或错误。
+    /// </summary>
+    /// <param name="level">日志级别字符串（例如 Debug/Information/Warning/Error）。</param>
+    /// <param name="message">日志消息文本。</param>
+    /// <param name="category">可选日志类别；若为空，宿主将使用插件 ID 作为类别。</param>
+    /// <returns>异步完成任务。</returns>
+    Task WriteLogAsync(string level, string message, string? category = null);
 }

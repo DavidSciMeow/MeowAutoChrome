@@ -10,14 +10,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 推流配置 API，用于更新实时画面的传输参数。<br/>
 /// Screencast configuration API used to update realtime frame delivery settings.
 /// </summary>
-public class ScreencastController : ControllerBase
+public class ScreencastController(ScreencastServiceCore screencastService) : ControllerBase
 {
-    private readonly ScreencastServiceCore screencastService;
-
-    public ScreencastController(ScreencastServiceCore screencastService)
-    {
-        this.screencastService = screencastService;
-    }
 
     /// <summary>
     /// 更新实时画面推流设置。<br/>

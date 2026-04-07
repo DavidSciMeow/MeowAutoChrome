@@ -319,8 +319,6 @@
                             <h2 class="h4 mb-0">程序日志</h2>
                             <div class="btn-group">
                                 <button id="exportLogsBtn" class="btn btn-outline-secondary btn-sm">导出 CSV</button>
-                                <button id="autoScrollBtn" class="btn btn-outline-secondary btn-sm"
-                                    title="切换自动滚动">自动滚动</button>
                                 <button id="clearLogsBtn" class="btn btn-outline-danger btn-sm">清空日志</button>
                                 <button id="refreshLogsBtn" class="btn btn-outline-secondary btn-sm">刷新</button>
                             </div>
@@ -332,6 +330,8 @@
                                 <option value="error">错误</option>
                                 <option value="warn">警告</option>
                                 <option value="info">信息</option>
+                                <option value="debug">调试</option>
+                                <option value="trace">追踪</option>
                             </select>
                             <select id="filterCategory" class="form-select form-select-sm" style="width:200px;">
                                 <option value="">所有插件/类别</option>

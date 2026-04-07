@@ -92,7 +92,7 @@ internal static class PluginParameterBinder
             DefaultValue = attribute?.DefaultValue ?? legacy?.DefaultValue,
             Required = attribute?.Required ?? legacy?.Required ?? false,
             InputType = attribute?.InputType ?? legacy?.InputType ?? "text",
-            Options = Array.Empty<(string, string)>()
+            Options = []
         };
 
         return param;

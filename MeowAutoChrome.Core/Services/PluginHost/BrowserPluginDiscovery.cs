@@ -17,7 +17,7 @@ internal sealed class BrowserPluginDiscovery
     private readonly ILogger _logger;
     private readonly IPluginInstanceManager _instanceManager;
 
-    private CoreModels.PluginDiscoverySnapshot _latestSnapshot = new CoreModels.PluginDiscoverySnapshot(Array.Empty<CoreModels.RuntimeBrowserPlugin>(), Array.Empty<string>(), Array.Empty<CoreModels.BrowserPluginErrorDescriptor>());
+    private CoreModels.PluginDiscoverySnapshot _latestSnapshot = new([], [], []);
     private readonly object _snapshotLock = new();
     private readonly TimeSpan _scanInterval = TimeSpan.FromSeconds(30);
 
@@ -43,7 +43,7 @@ internal sealed class BrowserPluginDiscovery
         catch (Exception ex)
         {
             _logger.LogError(ex, "Initial plugin discovery failed.");
-            _latestSnapshot = new CoreModels.PluginDiscoverySnapshot(Array.Empty<CoreModels.RuntimeBrowserPlugin>(), Array.Empty<string>(), Array.Empty<CoreModels.BrowserPluginErrorDescriptor>());
+            _latestSnapshot = new CoreModels.PluginDiscoverySnapshot([], [], []);
         }
     }
 

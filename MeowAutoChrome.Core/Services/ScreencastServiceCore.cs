@@ -8,11 +8,15 @@ namespace MeowAutoChrome.Core.Services;
 /// 核心屏幕投射服务：管理 CDP 会话、接收帧并将其转发到注册的帧接收端，同时处理客户端连接计数与设置变更。<br/>
 /// Core screencast service that manages CDP sessions, receives frames and forwards them to a registered frame sink, while handling client connections and setting changes.
 /// </summary>
-public sealed class ScreencastServiceCore
+/// <remarks>
+/// 构造函数：创建 ScreencastServiceCore 并注入所需的依赖项（浏览器实例管理器、帧接收端与日志）。<br/>
+/// Constructor: creates ScreencastServiceCore and injects required dependencies (browser instance manager, frame sink, and logger).
+/// </remarks>
+/// <param name="browserInstances">浏览器实例管理器 / browser instance manager.</param>
+/// <param name="sink">用于发送帧的接收端 / frame sink used to send frames.</param>
+/// <param name="logger">日志记录器 / logger.</param>
+public sealed class ScreencastServiceCore(BrowserInstanceManagerCore browserInstances, IScreencastFrameSink sink, ILogger<ScreencastServiceCore> logger)
 {
-    private readonly BrowserInstanceManagerCore _browserInstances;
-    private readonly IScreencastFrameSink _sink;
-    private readonly ILogger<ScreencastServiceCore> _logger;
 
     // CDP session for the current target page
     private ICDPSession? _session;
@@ -28,20 +32,6 @@ public sealed class ScreencastServiceCore
     private int _maxHeight = 800;
     private int _frameIntervalMs = 100;
     private long _lastFrameSentAtMs;
-
-    /// <summary>
-    /// 构造函数：创建 ScreencastServiceCore 并注入所需的依赖项（浏览器实例管理器、帧接收端与日志）。<br/>
-    /// Constructor: creates ScreencastServiceCore and injects required dependencies (browser instance manager, frame sink, and logger).
-    /// </summary>
-    /// <param name="browserInstances">浏览器实例管理器 / browser instance manager.</param>
-    /// <param name="sink">用于发送帧的接收端 / frame sink used to send frames.</param>
-    /// <param name="logger">日志记录器 / logger.</param>
-    public ScreencastServiceCore(BrowserInstanceManagerCore browserInstances, IScreencastFrameSink sink, ILogger<ScreencastServiceCore> logger)
-    {
-        _browserInstances = browserInstances;
-        _sink = sink;
-        _logger = logger;
-    }
 
     /// <summary>
     /// 指示屏幕投射当前是否启用。<br/>
@@ -107,21 +97,21 @@ public sealed class ScreencastServiceCore
     /// </summary>
     public async Task EnsureTargetAsync()
     {
-        var page = _browserInstances.ActivePage;
+        var page = browserInstances.ActivePage;
         if (page is null) return;
 
-        if (_session is null || _targetPageId != _browserInstances.SelectedPageId)
+        if (_session is null || _targetPageId != browserInstances.SelectedPageId)
         {
             // recreate session for new target
             try
             {
-                _session = await _browserInstances.BrowserContext.NewCDPSessionAsync(page);
-                _targetPageId = _browserInstances.SelectedPageId;
+                _session = await browserInstances.BrowserContext.NewCDPSessionAsync(page);
+                _targetPageId = browserInstances.SelectedPageId;
                 _session.Event("Page.screencastFrame").OnEvent += OnFrame;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create CDP session");
+                logger.LogError(ex, "Failed to create CDP session");
                 _session = null;
             }
         }
@@ -130,7 +120,7 @@ public sealed class ScreencastServiceCore
     private async Task StartAsync()
     {
         if (!_enabled) return;
-        if (_browserInstances.ActivePage is null) return;
+        if (browserInstances.ActivePage is null) return;
 
         await EnsureTargetAsync();
         if (_session is null) return;
@@ -146,11 +136,11 @@ public sealed class ScreencastServiceCore
                 ["maxWidth"] = _maxWidth,
                 ["maxHeight"] = _maxHeight,
             });
-            _logger.LogDebug("Started screencast");
+            logger.LogDebug("Started screencast");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to start screencast");
+            logger.LogWarning(ex, "Failed to start screencast");
         }
     }
 
@@ -162,7 +152,7 @@ public sealed class ScreencastServiceCore
         _session = null;
         _targetPageId = null;
         Interlocked.Exchange(ref _lastFrameSentAtMs, 0);
-        _logger.LogDebug("Stopped screencast");
+        logger.LogDebug("Stopped screencast");
     }
 
     private void OnFrame(object? sender, JsonElement? e)
@@ -196,7 +186,7 @@ public sealed class ScreencastServiceCore
         catch { }
 
         if (data != null && CanSendFrameNow())
-            await _sink.SendFrameAsync(data, width, height);
+            await sink.SendFrameAsync(data, width, height);
     }
 
     /// <summary>
@@ -281,7 +271,7 @@ public sealed class ScreencastServiceCore
             if (_enabled)
                 await StartAsync();
             else
-                await _sink.NotifyScreencastDisabledAsync();
+                await sink.NotifyScreencastDisabledAsync();
         }
         finally { _semaphore.Release(); }
     }
@@ -315,7 +305,7 @@ public sealed class ScreencastServiceCore
             if (_clientCount <= 0 || !_enabled) return;
 
             await StopAsync();
-            if (_enabled) await StartAsync(); else await _sink.NotifyScreencastDisabledAsync();
+            if (_enabled) await StartAsync(); else await sink.NotifyScreencastDisabledAsync();
         }
         finally { _semaphore.Release(); }
     }
@@ -324,9 +314,7 @@ public sealed class ScreencastServiceCore
     /// 当浏览器模式发生变化时调用以重新评估目标与会话。<br/>
     /// Called when the browser mode changes to re-evaluate the target/session.
     /// </summary>
-    public Task OnBrowserModeChangedAsync()
-    {
+    public Task OnBrowserModeChangedAsync() =>
         // Re-evaluate target/session when browser mode changes
-        return RefreshTargetAsync();
-    }
+        RefreshTargetAsync();
 }

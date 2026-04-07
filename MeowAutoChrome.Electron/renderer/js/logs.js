@@ -42,12 +42,7 @@
         return `background: ${bg}; border: ${border}; color: ${color};`;
     }
 
-    // Auto-scroll setting (persisted to localStorage)
-    let autoScroll = true;
-    try {
-        const stored = localStorage.getItem('logsAutoScroll');
-        if (stored !== null) autoScroll = stored === 'true';
-    } catch (e) { /* ignore storage errors */ }
+    // NOTE: auto-scroll removed — new entries will be prepended (newest at top)
 
     function toRowHtml(e) {
         const escaped = (s) => (s || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -81,13 +76,41 @@
         const e = src;
         const ts = e.timestampText ?? e.TimestampText ?? e.timestamp ?? e.Timestamp ?? '';
         const levelText = e.levelText ?? e.LevelText ?? (e.level != null ? String(e.level) : '') ?? '';
-        const filterLevel = e.filterLevel ?? e.FilterLevel ?? '';
+        let filterLevel = e.filterLevel ?? e.FilterLevel ?? '';
         const category = e.category ?? e.Category ?? e.CategoryName ?? '';
         const message = e.message ?? e.Message ?? e.msg ?? e.text ?? '';
+
+        // If server didn't provide FilterLevel, derive it from numeric e.level or textual levelText
+        if (!filterLevel) {
+            const rawLevel = (e.level !== undefined && e.level !== null) ? e.level : levelText;
+            if (rawLevel !== undefined && rawLevel !== null && rawLevel !== '') {
+                // numeric LogLevel mapping: Trace=0, Debug=1, Information=2, Warning=3, Error=4, Critical=5
+                if (typeof rawLevel === 'number' || /^\d+$/.test(String(rawLevel))) {
+                    const lv = parseInt(rawLevel, 10);
+                    if (lv === 3) filterLevel = 'warn';
+                    else if (lv === 1) filterLevel = 'debug';
+                    else if (lv === 4 || lv === 5) filterLevel = 'error';
+                    else if (lv === 2) filterLevel = 'info';
+                    else filterLevel = 'trace';
+                } else {
+                    const s = String(rawLevel).toLowerCase();
+                    if (s === 'warning') filterLevel = 'warn';
+                    else if (s === 'debug') filterLevel = 'debug';
+                    else if (s === 'error' || s === 'critical') filterLevel = 'error';
+                    else if (s === 'information' || s === 'info') filterLevel = 'info';
+                    else if (s === 'trace') filterLevel = 'trace';
+                    else filterLevel = 'trace';
+                }
+            } else {
+                filterLevel = 'trace';
+            }
+        }
+
         return { TimestampText: ts, LevelText: levelText, FilterLevel: filterLevel, Category: category, Message: message, _raw: src };
     }
 
     async function init() {
+        console.debug('logs.init starting');
         const container = document.getElementById('logsContainer');
         if (!container) return;
 
@@ -98,28 +121,19 @@
         const filterCategory = document.getElementById('filterCategory');
         const filterText = document.getElementById('filterText');
 
-        const autoBtn = document.getElementById('autoScrollBtn');
-        function updateAutoBtn() {
-            if (!autoBtn) return;
-            if (autoScroll) {
-                autoBtn.classList.remove('btn-outline-secondary');
-                autoBtn.classList.add('btn-primary');
-                autoBtn.textContent = '自动滚动: 开';
-                autoBtn.title = '自动滚动已启用';
-            } else {
-                autoBtn.classList.remove('btn-primary');
-                autoBtn.classList.add('btn-outline-secondary');
-                autoBtn.textContent = '自动滚动: 关';
-                autoBtn.title = '自动滚动已禁用';
-            }
-        }
-        autoBtn?.addEventListener('click', () => {
-            autoScroll = !autoScroll;
-            try { localStorage.setItem('logsAutoScroll', autoScroll ? 'true' : 'false'); } catch (e) { }
-            updateAutoBtn();
-        });
+        // auto-scroll UI/logic removed per user request
 
         let entries = [];
+        // Keys for entries we've already rendered to avoid duplicates (JSON of raw or composite key)
+        const seenKeys = new Set();
+        let pollIntervalId = null;
+
+        function entryKey(ne) {
+            try {
+                if (ne && ne._raw) return JSON.stringify(ne._raw);
+            } catch { }
+            return `${ne?.TimestampText}|${ne?.LevelText}|${ne?.Category}|${ne?.Message}`;
+        }
 
         function applyFilters(list) {
             const lv = filterLevel?.value || '';
@@ -137,15 +151,20 @@
         }
 
         function renderAll() {
-            const atBottom = Math.abs(container.scrollHeight - (container.scrollTop + container.clientHeight)) < 20;
+            // Render entries with newest first (entries array keeps newest at index 0)
             const filtered = applyFilters(entries);
             container.innerHTML = filtered.map(toRowHtml).join('');
-            if (autoScroll || atBottom) container.scrollTop = container.scrollHeight;
+            console.debug('renderAll: rendered', filtered.length, 'entries');
         }
 
         function addEntry(e) {
             const ne = normalizeEntry(e);
-            entries.push(ne);
+            const k = entryKey(ne);
+            if (seenKeys.has(k)) { console.debug('addEntry: duplicate key', k); return; } // already rendered
+            seenKeys.add(k);
+            console.debug('addEntry: adding key', k);
+            // keep entries array with newest first
+            entries.unshift(ne);
             // update category options
             const exists = Array.from(filterCategory.options).some(o => o.value === ne.Category);
             if (!exists && ne.Category) {
@@ -153,11 +172,9 @@
             }
             const shouldAppend = applyFilters([ne]).length > 0;
             if (!shouldAppend) return;
-            const wasAtBottom = Math.abs(container.scrollHeight - (container.scrollTop + container.clientHeight)) < 20;
             const div = document.createElement('div'); div.innerHTML = toRowHtml(ne);
-            // append child nodes
-            while (div.firstChild) container.appendChild(div.firstChild);
-            if (autoScroll || wasAtBottom) container.scrollTop = container.scrollHeight;
+            // insert the new nodes at the top while preserving their internal order
+            while (div.lastChild) container.insertBefore(div.lastChild, container.firstChild);
         }
 
         async function loadInitial() {
@@ -165,7 +182,14 @@
                 const res = await fetch(getApiEndpoint('logsContent'), { cache: 'no-store' });
                 if (!res.ok) return;
                 const data = await res.json();
-                entries = (data.entries || []).map(normalizeEntry);
+                // ensure newest entries appear first
+                entries = (data.entries || []).map(normalizeEntry).reverse();
+                // populate seen keys so polling/SignalR don't duplicate
+                seenKeys.clear();
+                for (const e of entries) {
+                    try { seenKeys.add(entryKey(e)); } catch { }
+                }
+                console.debug('loadInitial: loaded', entries.length, 'entries');
                 // populate categories
                 const cats = new Set(entries.map(e => e.Category).filter(Boolean));
                 cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; filterCategory.appendChild(o); });
@@ -204,8 +228,7 @@
         filterCategory?.addEventListener('change', renderAll);
         filterText?.addEventListener('input', () => { setTimeout(renderAll, 100); });
 
-        // reflect auto-scroll button state in UI
-        updateAutoBtn();
+        // auto-scroll UI removed; nothing to reflect
 
         await loadInitial();
 
@@ -305,6 +328,35 @@
         } catch (e) {
             console.warn('LogHub 连接失败', e);
         }
+
+        // Start polling fallback to keep UI refreshed even if SignalR not available
+        function startPolling() {
+            if (pollIntervalId) return;
+            console.debug('startPolling: starting poll interval');
+            pollIntervalId = setInterval(async () => {
+                try {
+                    console.debug('poll: fetching logs');
+                    const res = await fetch(getApiEndpoint('logsContent'), { cache: 'no-store' });
+                    if (!res.ok) { console.debug('poll: logsContent returned', res.status); return; }
+                    const data = await res.json();
+                    // data.entries is oldest->newest
+                    const apiEntries = (data.entries || []).map(normalizeEntry);
+                    let added = 0;
+                    for (const ne of apiEntries) {
+                        const k = entryKey(ne);
+                        if (!seenKeys.has(k)) {
+                            try { addEntry(ne); added++; } catch (e) { console.warn('poll addEntry failed', e); }
+                        }
+                    }
+                    if (added > 0) console.debug('poll: added', added, 'new entries');
+                } catch (err) {
+                    console.warn('poll error', err);
+                }
+            }, 1500);
+        }
+
+        // always keep polling active so view updates even without SignalR
+        startPolling();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

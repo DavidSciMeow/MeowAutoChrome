@@ -9,23 +9,17 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// 从 BrowserPluginHostCore 中提取以降低该类型复杂度。<br/>
 /// Extracted from BrowserPluginHostCore to reduce complexity.
 /// </summary>
-public sealed class PluginAssemblyLoader : Interface.ICorePluginAssemblyLoader, IPluginAssemblyLoader
+/// <remarks>
+/// 构造函数：创建插件程序集加载器并注入日志记录器。<br/>
+/// Constructor: creates the plugin assembly loader and injects a logger.
+/// </remarks>
+/// <param name="logger">日志记录器 / logger.</param>
+public sealed class PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger) : Interface.ICorePluginAssemblyLoader, IPluginAssemblyLoader
 {
     private readonly Dictionary<string, Assembly> _assemblies = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PluginLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);
     // map plugin id -> assembly path for quick lookup when unloading
     private readonly Dictionary<string, string> _pluginToPath = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ILogger<PluginAssemblyLoader> _logger;
-
-    /// <summary>
-    /// 构造函数：创建插件程序集加载器并注入日志记录器。<br/>
-    /// Constructor: creates the plugin assembly loader and injects a logger.
-    /// </summary>
-    /// <param name="logger">日志记录器 / logger.</param>
-    public PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger)
-    {
-        _logger = logger;
-    }
 
     /// <summary>
     /// 从给定路径加载程序集并缓存其装载上下文；发生错误时将错误信息追加到 <paramref name="errors"/> 并返回 null。<br/>
@@ -61,7 +55,7 @@ public sealed class PluginAssemblyLoader : Interface.ICorePluginAssemblyLoader, 
         {
             var detail = ex.ToString();
             var message = $"插件程序集加载失败：{Path.GetFileName(pluginPath)} -> {detail}";
-            _logger.LogError(ex, "加载插件程序集失败：{PluginAssembly}", pluginPath);
+            logger.LogError(ex, "加载插件程序集失败：{PluginAssembly}", pluginPath);
             errors.Add(message);
             return null;
         }
@@ -83,7 +77,7 @@ public sealed class PluginAssemblyLoader : Interface.ICorePluginAssemblyLoader, 
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "卸载插件上下文失败：{Plugin}", pluginPath);
+                logger.LogWarning(ex, "卸载插件上下文失败：{Plugin}", pluginPath);
             }
         }
         _loadContexts.Remove(fullPath);

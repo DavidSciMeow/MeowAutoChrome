@@ -11,16 +11,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 页面导航 API，负责导航、前进、后退和刷新。<br/>
 /// Page navigation API handling navigate, forward, back, and reload actions.
 /// </summary>
-public class NavigationController : ControllerBase
+public class NavigationController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService) : ControllerBase
 {
-    private readonly BrowserInstanceManager browserInstances;
-    private readonly ScreencastServiceCore screencastService;
-
-    public NavigationController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService)
-    {
-        this.browserInstances = browserInstances;
-        this.screencastService = screencastService;
-    }
 
     /// <summary>
     /// 导航到指定 URL。<br/>

@@ -48,9 +48,7 @@ public sealed class AppLogService
         entry.Timestamp = entry.Timestamp == default ? DateTimeOffset.Now : entry.Timestamp;
         entry.Category = string.IsNullOrWhiteSpace(entry.Category) ? "Application" : entry.Category.Trim();
         entry.Message = entry.Message ?? string.Empty;
-
         var serializedEntry = JsonSerializer.Serialize(entry, JsonSerializerOptions);
-
         lock (_syncRoot)
         {
             Directory.CreateDirectory(_logDirectoryPath);
@@ -65,8 +63,7 @@ public sealed class AppLogService
     /// <param name="level">日志级别 / log level.</param>
     /// <param name="message">日志消息 / message.</param>
     /// <param name="category">日志类别 / category.</param>
-    public void WriteEntry(LogLevel level, string message, string category)
-        => WriteEntry(new Models.AppLogEntry(DateTimeOffset.Now, level, category, message));
+    public void WriteEntry(LogLevel level, string message, string category) => WriteEntry(new Models.AppLogEntry(DateTimeOffset.Now, level, category, message));
 
     /// <summary>
     /// 读取最近的日志条目。若日志文件不存在则返回空集合。<br/>
@@ -76,8 +73,7 @@ public sealed class AppLogService
     /// <returns>最近日志项的只读列表 / read-only list of recent log entries.</returns>
     public async Task<IReadOnlyList<Models.AppLogEntry>> ReadRecentEntriesAsync(int maxEntries = DefaultMaxEntries)
     {
-        if (!File.Exists(_logFilePath))
-            return Array.Empty<Models.AppLogEntry>();
+        if (!File.Exists(_logFilePath)) return [];
 
         await using var stream = new FileStream(_logFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
@@ -88,13 +84,14 @@ public sealed class AppLogService
         {
             if (string.IsNullOrWhiteSpace(line))
                 continue;
-
-            entries.Enqueue(ParseEntry(line));
+            var entry = ParseEntry(line);
+            if (entry is not null)
+                entries.Enqueue(entry);
             while (entries.Count > maxEntries)
                 entries.Dequeue();
         }
 
-        return entries.ToArray();
+        return [.. entries];
     }
 
     /// <summary>
@@ -126,18 +123,5 @@ public sealed class AppLogService
         return File.GetLastWriteTimeUtc(_logFilePath);
     }
 
-    private static Models.AppLogEntry ParseEntry(string line)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<Models.AppLogEntry>(line, JsonSerializerOptions) ?? CreateLegacyEntry(line);
-        }
-        catch
-        {
-            return CreateLegacyEntry(line);
-        }
-    }
-
-    private static Models.AppLogEntry CreateLegacyEntry(string line)
-        => new(DateTimeOffset.Now, LogLevel.Information, "Legacy", line);
+    private static Models.AppLogEntry? ParseEntry(string line) => JsonSerializer.Deserialize<Models.AppLogEntry>(line, JsonSerializerOptions);
 }

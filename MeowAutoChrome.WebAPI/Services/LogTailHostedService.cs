@@ -2,10 +2,8 @@ using System.Text;
 using System.Text.Json;
 using MeowAutoChrome.Core.Services;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Hosting;
 using MeowAutoChrome.WebAPI.Hubs;
 using MeowAutoChrome.Core.Models;
-using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.WebAPI.Services
 {
@@ -13,18 +11,9 @@ namespace MeowAutoChrome.WebAPI.Services
     /// 后台服务：tail 日志文件并通过 SignalR 推送新增行。
     /// Background service that tails the app log file and broadcasts new lines via SignalR.
     /// </summary>
-    public sealed class LogTailHostedService : BackgroundService
+    public sealed class LogTailHostedService(AppLogService appLogService, IHubContext<LogHub> hub, ILogger<LogTailHostedService> logger) : BackgroundService
     {
-        private readonly AppLogService _appLogService;
-        private readonly IHubContext<LogHub> _hub;
-        private readonly ILogger<LogTailHostedService> _logger;
-
-        public LogTailHostedService(AppLogService appLogService, IHubContext<LogHub> hub, ILogger<LogTailHostedService> logger)
-        {
-            _appLogService = appLogService;
-            _hub = hub;
-            _logger = logger;
-        }
+        private readonly AppLogService _appLogService = appLogService;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -37,7 +26,7 @@ namespace MeowAutoChrome.WebAPI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "无法读取日志文件初始位置");
+                logger.LogWarning(ex, "无法读取日志文件初始位置");
             }
 
             while (!stoppingToken.IsCancellationRequested)
@@ -82,18 +71,18 @@ namespace MeowAutoChrome.WebAPI.Services
                         // broadcast to all connected clients
                         try
                         {
-                            await _hub.Clients.All.SendAsync("ReceiveLog", payload, stoppingToken);
+                            await hub.Clients.All.SendAsync("ReceiveLog", payload, stoppingToken);
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogDebug(ex, "广播日志条目时出错");
+                            logger.LogDebug(ex, "广播日志条目时出错");
                         }
                     }
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "读取日志时发生错误，稍后重试");
+                    logger.LogDebug(ex, "读取日志时发生错误，稍后重试");
                     try { await Task.Delay(1000, stoppingToken); } catch { }
                 }
 

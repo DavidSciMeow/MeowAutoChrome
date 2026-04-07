@@ -110,10 +110,8 @@ internal static class PluginTypeIntrospector
         /// </summary>
         /// <param name="method">要检查的 MethodInfo / MethodInfo to check.</param>
         /// <returns>当签名被接受时返回 true / true when signature is accepted.</returns>
-        public static bool HasSupportedSignature(MethodInfo method)
-        {
+        public static bool HasSupportedSignature(MethodInfo method) =>
             // Accept any return shape for plugin actions. Execution layer will normalize results.
-            return true;
-        }
+            true;
     }
 }

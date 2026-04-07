@@ -1,8 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using MeowAutoChrome.WebAPI.Models;
-using System.IO;
-using System.Linq;
-using System.Collections.Generic;
 using MeowAutoChrome.Core.Interface;
 
 namespace MeowAutoChrome.WebAPI.Controllers.Api;
@@ -13,16 +10,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 插件管理 API，负责上传、扫描、加载、卸载与执行插件。<br/>
 /// Plugin management API for uploading, scanning, loading, unloading, and executing plugins.
 /// </summary>
-public class PluginsController : ControllerBase
+public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvider settingsProvider) : ControllerBase
 {
-    private readonly IPluginHostCore pluginHost;
-    private readonly IProgramSettingsProvider _settingsProvider;
-
-    public PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvider settingsProvider)
-    {
-        this.pluginHost = pluginHost;
-        _settingsProvider = settingsProvider;
-    }
 
     /// <summary>
     /// 上传插件文件或目录压缩包并尝试扫描加载其中的程序集。<br/>
@@ -105,7 +94,7 @@ public class PluginsController : ControllerBase
             var roots = raw.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray();
             // Also include current persisted pluginDirectory and the default path from Core so clients can synchronize UI
             string persisted = string.Empty;
-            try { persisted = _settingsProvider.GetAsync().GetAwaiter().GetResult().PluginDirectory ?? string.Empty; } catch { }
+            try { persisted = settingsProvider.GetAsync().GetAwaiter().GetResult().PluginDirectory ?? string.Empty; } catch { }
             var defaultPluginDir = MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultPluginDirectoryPath();
             if (string.IsNullOrWhiteSpace(persisted)) persisted = defaultPluginDir;
             return Ok(new { roots, pluginDirectory = persisted, defaultPluginDirectory = defaultPluginDir });

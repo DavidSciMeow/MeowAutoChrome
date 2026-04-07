@@ -13,20 +13,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 程序设置 API，负责读取与自动保存全局运行配置。<br/>
 /// Program settings API for reading and autosaving global runtime configuration.
 /// </summary>
-public class SettingsController : ControllerBase
+public class SettingsController(IProgramSettingsProvider programSettingsService, ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances, IPluginHostCore pluginHost) : ControllerBase
 {
-    private readonly IProgramSettingsProvider programSettingsService;
-    private readonly ScreencastServiceCore screencastService;
-    private readonly BrowserInstanceManager browserInstances;
-    private readonly IPluginHostCore pluginHost;
-
-    public SettingsController(IProgramSettingsProvider programSettingsService, ScreencastServiceCore screencastService, BrowserInstanceManager browserInstances, IPluginHostCore pluginHost)
-    {
-        this.programSettingsService = programSettingsService;
-        this.screencastService = screencastService;
-        this.browserInstances = browserInstances;
-        this.pluginHost = pluginHost;
-    }
 
     /// <summary>
     /// 读取当前程序设置。<br/>

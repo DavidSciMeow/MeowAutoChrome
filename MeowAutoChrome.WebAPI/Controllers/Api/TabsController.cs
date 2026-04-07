@@ -11,16 +11,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 标签页管理 API，负责创建、关闭和切换当前标签页。<br/>
 /// Tab management API for creating, closing, and switching the current tab.
 /// </summary>
-public class TabsController : ControllerBase
+public class TabsController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService) : ControllerBase
 {
-    private readonly BrowserInstanceManager browserInstances;
-    private readonly ScreencastServiceCore screencastService;
-
-    public TabsController(BrowserInstanceManager browserInstances, ScreencastServiceCore screencastService)
-    {
-        this.browserInstances = browserInstances;
-        this.screencastService = screencastService;
-    }
 
     /// <summary>
     /// 创建新的标签页；必要时可先切换到指定实例。<br/>

@@ -109,11 +109,9 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// 异步释放插件所持有的非托管资源（若有）。<br/>
     /// Asynchronously dispose unmanaged resources held by the plugin (if any).
     /// </summary>
-    public ValueTask DisposeAsync()
-    {
+    public ValueTask DisposeAsync() =>
         // No unmanaged resources in this minimal example.
-        return ValueTask.CompletedTask;
-    }
+        ValueTask.CompletedTask;
 
     // Extra demo actions to illustrate different return shapes for plugins
     [PAction(Name = "ReturnObject")]
@@ -134,21 +132,14 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// Demo action returning a generic `Result<int>`.
     /// </summary>
     /// <returns>封装的整型结果。<br/>Wrapped integer result.</returns>
-    public Task<Result<int>> ReturnGenericAsync()
-    {
-        return Task.FromResult(Result<int>.Ok(42));
-    }
+    public Task<Result<int>> ReturnGenericAsync() => Task.FromResult(Result<int>.Ok(42));
 
     [PAction(Name = "VoidTask")]
     /// <summary>
     /// 示例动作：返回无结果的异步任务。<br/>
     /// Demo action returning a void Task.
     /// </summary>
-    public async Task VoidTaskAsync()
-    {
-        await Task.Delay(10);
-        // no return
-    }
+    public async Task VoidTaskAsync() => await Task.Delay(10);// no return
 
     [PAction(Name = "Throw")]
     /// <summary>
@@ -156,10 +147,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// Demo action that throws an exception to illustrate host error handling.
     /// </summary>
     /// <returns>此方法将抛出异常而不会返回值。<br/>This method throws and does not return a value.</returns>
-    public Task<IResult> ThrowAsync()
-    {
-        throw new InvalidOperationException("示例异常");
-    }
+    public Task<IResult> ThrowAsync() => throw new InvalidOperationException("示例异常");
 
     // Additional demo actions to illustrate more return shapes and HostContext usage
     [PAction(Name = "ReturnPrimitive")]
@@ -168,10 +156,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// Demo action returning a primitive value.
     /// </summary>
     /// <returns>返回一个整数。<br/>Returns an integer.</returns>
-    public Task<int> ReturnPrimitiveAsync()
-    {
-        return Task.FromResult(7);
-    }
+    public Task<int> ReturnPrimitiveAsync() => Task.FromResult(7);
 
     [PAction(Name = "ValueTaskResult")]
     /// <summary>
@@ -179,10 +164,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// Demo action returning a generic result wrapped in `ValueTask`.
     /// </summary>
     /// <returns>封装的字符串结果。<br/>Wrapped string result.</returns>
-    public ValueTask<Result<string>> ValueTaskResultAsync()
-    {
-        return new ValueTask<Result<string>>(Result<string>.Ok("value-task-result"));
-    }
+    public ValueTask<Result<string>> ValueTaskResultAsync() => new(Result<string>.Ok("value-task-result"));
 
     [PAction(Name = "RequestInstanceWithArgs")]
     /// <summary>

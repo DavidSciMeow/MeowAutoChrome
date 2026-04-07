@@ -1,5 +1,4 @@
 ﻿using Microsoft.Playwright;
-using System;
 using MeowAutoChrome.Core.Struct;
 using MeowAutoChrome.Core.Interface;
 using MeowAutoChrome.Core.Models;
@@ -13,29 +12,19 @@ namespace MeowAutoChrome.Core;
 /// 浏览器实例管理核心，负责创建和管理 Playwright 实例、标签页以及对外的查询/控制 API。<br/>
 /// Core manager for browser instances responsible for creating and managing Playwright instances, tabs, and providing query/control APIs.
 /// </summary>
-public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
+/// <remarks>
+/// 构造函数，注入日志、日志工厂与可选的设置提供者。<br/>
+/// Constructor that injects logger, optional logger factory and an optional settings provider.
+/// </remarks>
+/// <param name="logger">记录器实例 / logger.</param>
+/// <param name="loggerFactory">可选的日志工厂 / optional logger factory.</param>
+/// <param name="settingsProvider">可选的程序设置提供者 / optional program settings provider.</param>
+public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logger, ILoggerFactory? loggerFactory = null, IProgramSettingsProvider? settingsProvider = null) : ICoreBrowserInstanceManager
 {
-    private readonly ILogger<BrowserInstanceManagerCore> _logger;
-    private readonly ILoggerFactory? _loggerFactory;
-    private readonly IProgramSettingsProvider? _settingsProvider;
-    private readonly ConcurrentDictionary<string, ICoreBrowserInstance> _instances = new ConcurrentDictionary<string, ICoreBrowserInstance>();
+    private readonly ConcurrentDictionary<string, ICoreBrowserInstance> _instances = new();
     private string? _currentInstanceId;
     public event Action<string>? TabClosed;
     public event Action<string>? TabOpened;
-
-    /// <summary>
-    /// 构造函数，注入日志、日志工厂与可选的设置提供者。<br/>
-    /// Constructor that injects logger, optional logger factory and an optional settings provider.
-    /// </summary>
-    /// <param name="logger">记录器实例 / logger.</param>
-    /// <param name="loggerFactory">可选的日志工厂 / optional logger factory.</param>
-    /// <param name="settingsProvider">可选的程序设置提供者 / optional program settings provider.</param>
-    public BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logger, ILoggerFactory? loggerFactory = null, IProgramSettingsProvider? settingsProvider = null)
-    {
-        _logger = logger;
-        _loggerFactory = loggerFactory;
-        _settingsProvider = settingsProvider;
-    }
 
     // Note: this core class does not implement IBrowserInstanceManager directly.
     // A host-level adapter implements IBrowserInstanceManager and delegates
@@ -49,7 +38,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// </summary>
     public async Task<(string InstanceId, string UserDataDirectory)> PreviewNewInstanceAsync(string ownerId, string? userDataDirRoot = null)
     {
-        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = settingsProvider is null ? new ProgramSettings() : await settingsProvider.GetAsync();
         var root = string.IsNullOrWhiteSpace(userDataDirRoot) ? settings.UserDataDirectory : userDataDirRoot!;
         var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
         var id = $"{ownerId}-{shortId}";
@@ -201,7 +190,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
             var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
             id = $"{ownerId}-{shortId}";
         }
-        var inst = new PlaywrightInstance(_loggerFactory?.CreateLogger<PlaywrightInstance>() ?? NullLogger<PlaywrightInstance>.Instance, id, displayName, ownerId);
+        var inst = new PlaywrightInstance(loggerFactory?.CreateLogger<PlaywrightInstance>() ?? NullLogger<PlaywrightInstance>.Instance, id, displayName, ownerId);
         if (!_instances.TryAdd(id, inst))
             throw new InvalidOperationException("Failed to add instance");
 
@@ -222,7 +211,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
         Directory.CreateDirectory(instanceUserDataDir);
         await inst.InitializeAsync(instanceUserDataDir, headless);
         _currentInstanceId = id;
-        _logger.LogInformation("Created instance {Id}", id);
+        logger.LogInformation("Created instance {Id}", id);
         return id;
     }
 
@@ -238,7 +227,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// <returns>已创建的实例 Id / the created instance id.</returns>
     public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null)
     {
-        var settings = _settingsProvider is null ? new ProgramSettings() : await _settingsProvider.GetAsync();
+        var settings = settingsProvider is null ? new ProgramSettings() : await settingsProvider.GetAsync();
         var userData = string.IsNullOrWhiteSpace(userDataDirectory) ? settings.UserDataDirectory : userDataDirectory!;
         var name = string.IsNullOrWhiteSpace(displayName) ? "Browser" : displayName!;
         return await CreateAsync(ownerPluginId, name, userData, settings.Headless, previewInstanceId);
@@ -300,10 +289,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// <param name="instanceId">要关闭的实例 Id / instance id to close.</param>
     /// <param name="cancellationToken">可选取消令牌 / optional cancellation token.</param>
     /// <returns>返回是否成功关闭。<br/>Returns whether the close succeeded.</returns>
-    public async Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
-    {
-        return await RemoveAsync(instanceId);
-    }
+    public async Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default) => await RemoveAsync(instanceId);
 
     /// <summary>
     /// 捕获当前活动页面的截图（占位实现，当前返回 null）。<br/>
@@ -331,7 +317,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     public async Task UpdateLaunchSettingsAsync(string primaryUserDataDirectory, bool isHeadless, bool forceReload = false)
     {
         // If no instances, nothing to do.
-        if (!_instances.Any())
+        if (_instances.IsEmpty)
             return;
 
         // Normalize root
@@ -361,7 +347,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to recreate instance {Id} during launch settings update", item.InstanceId);
+                logger.LogWarning(ex, "Failed to recreate instance {Id} during launch settings update", item.InstanceId);
             }
         }
 
@@ -410,11 +396,9 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// <param name="width">宽度 / width.</param>
     /// <param name="height">高度 / height.</param>
     /// <returns>表示操作完成的异步任务 / A Task representing completion of the operation.</returns>
-    public async Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default)
-    {
+    public async Task SyncCurrentInstanceViewportAsync(int width, int height, CancellationToken cancellationToken = default) =>
         // noop for now
         await Task.CompletedTask;
-    }
 
     /// <summary>
     /// 导航当前活动页面到指定 URL（若 URL 不是绝对链接将使用默认搜索模板处理）。<br/>
@@ -490,10 +474,10 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
                 var page = inst.GetPageById(id);
                 if (page is null) continue; // page was removed/closed
 
-                string? title = null;
+                string title = "null";
                 try { title = await page.TitleAsync(); } catch { }
 
-                string? url = null;
+                string url = "null";
                 try { url = page.Url; } catch { }
 
                 tabs.Add(new BrowserTabInfo(id, title, url, inst.SelectedPageId == id, inst.OwnerId));
@@ -508,10 +492,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// Get the viewport settings response object for the current instance (for UI).
     /// </summary>
     /// <returns>视口设置响应对象 / Viewport settings response object.</returns>
-    public BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings()
-    {
-        return new BrowserInstanceViewportSettingsResponse(1280, 800, "Auto");
-    }
+    public BrowserInstanceViewportSettingsResponse GetCurrentInstanceViewportSettings() => new(1280, 800, "Auto");
 
     /// <summary>
     /// 获取指定实例的设置响应对象（如果存在）。<br/>
@@ -545,10 +526,7 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// Close and remove the specified instance.
     /// </summary>
     /// <param name="instanceId">实例 id / instance id to close.</param>
-    public async Task<bool> CloseInstanceAsync(string instanceId)
-    {
-        return await RemoveAsync(instanceId);
-    }
+    public async Task<bool> CloseInstanceAsync(string instanceId) => await RemoveAsync(instanceId);
 
     /// <summary>
     /// 从管理集合中移除实例并关闭其资源。<br/>
@@ -557,11 +535,9 @@ public class BrowserInstanceManagerCore : ICoreBrowserInstanceManager
     /// <param name="id">实例 id / instance id to remove.</param>
     public async Task<bool> RemoveAsync(string id)
     {
-        if (!_instances.TryRemove(id, out var inst))
-            return false;
-
+        if (!_instances.TryRemove(id, out var inst)) return false;
         await inst.CloseAsync();
-        _logger.LogInformation("Removed instance {Id}", id);
+        if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Removed instance {Id}", id);
         return true;
     }
 }

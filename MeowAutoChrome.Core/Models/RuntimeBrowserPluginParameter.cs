@@ -40,5 +40,5 @@ public sealed class RuntimeBrowserPluginParameter
     /// 可选值列表（Value, Label）。<br/>
     /// Option list of (Value, Label) pairs.
     /// </summary>
-    public IReadOnlyList<(string Value, string Label)> Options { get; init; } = Array.Empty<(string, string)>();
+    public IReadOnlyList<(string Value, string Label)> Options { get; init; } = [];
 }

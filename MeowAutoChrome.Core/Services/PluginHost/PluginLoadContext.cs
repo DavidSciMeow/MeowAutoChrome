@@ -8,19 +8,14 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// 可回收（collectible），以便在不再引用时卸载插件程序集。<br/>
 /// AssemblyLoadContext for plugin isolation that resolves dependencies using <see cref="AssemblyDependencyResolver"/>. It is collectible so plugin assemblies can be unloaded when no longer referenced.
 /// </summary>
-public sealed class PluginLoadContext : AssemblyLoadContext
+/// <remarks>
+/// 创建一个基于插件路径的可回收加载上下文。<br/>
+/// Create a collectible load context based on the plugin path.
+/// </remarks>
+/// <param name="pluginPath">插件程序集文件路径 / plugin assembly file path.</param>
+public sealed class PluginLoadContext(string pluginPath) : AssemblyLoadContext(Path.GetFileNameWithoutExtension(pluginPath), isCollectible: true)
 {
-    private readonly AssemblyDependencyResolver _resolver;
-
-    /// <summary>
-    /// 创建一个基于插件路径的可回收加载上下文。<br/>
-    /// Create a collectible load context based on the plugin path.
-    /// </summary>
-    /// <param name="pluginPath">插件程序集文件路径 / plugin assembly file path.</param>
-    public PluginLoadContext(string pluginPath) : base(Path.GetFileNameWithoutExtension(pluginPath), isCollectible: true)
-    {
-        _resolver = new AssemblyDependencyResolver(pluginPath);
-    }
+    private readonly AssemblyDependencyResolver _resolver = new(pluginPath);
 
     /// <summary>
     /// 解析并加载托管程序集（由依赖解析器尝试定位路径）。<br/>

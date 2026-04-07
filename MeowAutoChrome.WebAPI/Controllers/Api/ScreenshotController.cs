@@ -10,14 +10,8 @@ namespace MeowAutoChrome.WebAPI.Controllers.Api;
 /// 截图 API，返回当前活动页面的 PNG 截图。<br/>
 /// Screenshot API returning a PNG capture of the current active page.
 /// </summary>
-public class ScreenshotController : ControllerBase
+public class ScreenshotController(BrowserInstanceManager browserInstances) : ControllerBase
 {
-    private readonly BrowserInstanceManager browserInstances;
-
-    public ScreenshotController(BrowserInstanceManager browserInstances)
-    {
-        this.browserInstances = browserInstances;
-    }
 
     /// <summary>
     /// 获取当前页面截图。<br/>
