@@ -8,6 +8,7 @@
     const spinner = document.getElementById('uploadSpinner');
     const installedList = document.getElementById('installedList');
     const installedPlaceholder = document.getElementById('installedPlaceholder');
+    const refreshBtn = document.getElementById('refreshPluginsBtn');
 
     if (!input || !btn || !clearBtn || !selectedInfo || !resultList || !placeholder || !spinner) {
         return;
@@ -182,6 +183,29 @@
         } catch (error) {
             installedPlaceholder.textContent = error.message || '加载已安装插件失败。';
         }
+    }
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            try {
+                refreshBtn.disabled = true;
+                if (spinner) spinner.style.display = '';
+                const response = await fetch(resolveApi('pluginsRefresh', '/api/plugins/refresh'), { method: 'POST' });
+                const json = await response.json().catch(() => null);
+                if (!response.ok) {
+                    window.showNotification?.(json?.error || '刷新失败', 'danger');
+                    return;
+                }
+                await loadInstalledPlugins();
+                await window.BrowserUI.loadPlugins?.();
+                window.showNotification?.('刷新完成', 'success');
+            } catch (error) {
+                window.showNotification?.(error.message || '刷新失败', 'danger');
+            } finally {
+                if (spinner) spinner.style.display = 'none';
+                refreshBtn.disabled = false;
+            }
+        });
     }
 
     loadInstalledPlugins().catch(() => { });

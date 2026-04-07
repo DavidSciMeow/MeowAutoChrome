@@ -516,7 +516,8 @@
                             </div>
                         </div>
 
-                        <h2 class="h5 mt-4 mb-3">已安装插件</h2>
+                        <h2 class="h5 mt-4 mb-3">已安装插件 <button id="refreshPluginsBtn"
+                                class="btn btn-sm btn-outline-secondary ms-2">刷新插件</button></h2>
                         <div id="installedPlugins" class="card">
                             <div class="card-body">
                                 <div id="installedPlaceholder" class="text-muted">正在加载已安装插件列表…</div>
@@ -652,6 +653,7 @@
                         pluginsRun: mk('/api/plugins/run'),
                         pluginsUpload: mk('/api/plugins/upload'),
                         pluginsLoad: mk('/api/plugins/load'),
+                        pluginsRefresh: mk('/api/plugins/refresh'),
                         pluginsUnload: mk('/api/plugins/unload'),
                         pluginsDelete: mk('/api/plugins/delete'),
                         tabsClose: mk('/api/tabs/close'),

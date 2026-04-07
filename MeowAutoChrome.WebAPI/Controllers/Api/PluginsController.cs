@@ -82,6 +82,24 @@ public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvi
     }
 
     /// <summary>
+    /// 触发一次立即扫描并加载尚未加载的插件程序集。<br/>
+    /// Trigger an immediate scan and load any assemblies that are not yet loaded.
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh()
+    {
+        try
+        {
+            var catalog = await pluginHost.ScanPluginsAsync();
+            return Ok(catalog);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "刷新插件失败", detail = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// 返回配置的插件根目录（支持多个根路径分隔）。
     /// Return configured plugin root path(s).
     /// </summary>

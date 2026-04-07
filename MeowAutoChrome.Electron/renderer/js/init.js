@@ -39,6 +39,7 @@
         pluginsUpload: mk('/api/plugins/upload'),
         pluginsRoot: mk('/api/plugins/root'),
         pluginsLoad: mk('/api/plugins/load'),
+        pluginsRefresh: mk('/api/plugins/refresh'),
         pluginsUnload: mk('/api/plugins/unload'),
         pluginsDelete: mk('/api/plugins/delete'),
         tabsClose: mk('/api/tabs/close'),

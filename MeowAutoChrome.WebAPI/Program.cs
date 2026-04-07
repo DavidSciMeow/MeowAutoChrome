@@ -16,7 +16,10 @@ TaskScheduler.UnobservedTaskException += (_, args) => appLogService.WriteEntry(L
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new AppLogLoggerProvider(appLogService));
-builder.Logging.AddFilter("Microsoft.AspNetCore.Routing", LogLevel.None);
+
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Routing", LogLevel.None);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.None);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Mvc.Infrastructure", LogLevel.None);
 
 builder.Services.AddSingleton(appLogService);
 builder.Services.AddMeowAutoChromeServices();
