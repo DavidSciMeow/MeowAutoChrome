@@ -1,7 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
-using MeowAutoChrome.WebAPI.Models;
-using MeowAutoChrome.Core.Services;
-
 namespace MeowAutoChrome.WebAPI.Controllers.Api;
 
 [ApiController]

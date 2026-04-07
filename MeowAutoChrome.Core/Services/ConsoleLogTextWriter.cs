@@ -1,7 +1,4 @@
-﻿using System.Text;
-using Microsoft.Extensions.Logging;
-
-namespace MeowAutoChrome.Core.Services;
+﻿namespace MeowAutoChrome.Core.Services;
 
 /// <summary>
 /// 将控制台输出捕获并写入 AppLogService 的 TextWriter 实现。<br/>

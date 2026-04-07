@@ -53,10 +53,12 @@
         const tsRaw = (e?.TimestampText || '').toString();
 
         const catStyle = categoryColorStyle(e?.Category);
-        const main = `<div class="log-row d-flex align-items-center border-bottom">
+        const main = `<div class="log-row d-flex align-items-start border-bottom">
             <div class="log-ts" style="width:180px;flex:0 0 180px;padding-right:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escaped(tsRaw)}</div>
                 <div style="width:100px;flex:0 0 100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span class="badge bg-secondary" style="white-space:nowrap;display:inline-block;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escaped(e?.LevelText)}</span></div>
-                <div style="width:260px;flex:0 0 260px;display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span class="log-category" style="white-space:nowrap;display:inline-block;overflow:hidden;text-overflow:ellipsis;max-width:100%;${catStyle}">${escaped(e?.Category)}</span></div>
+                <div style="flex:0 0 auto;display:block;align-items:center;overflow:visible;white-space:nowrap;">
+                    <span class="log-category" style="display:inline-block;max-width:none;word-break:normal;white-space:nowrap;${catStyle}">${escaped(e?.Category)}</span>
+                </div>
                 <div class="log-message" style="flex:1 1 auto;min-width:0;">${escaped(e?.Message)}</div>
             </div>`;
 
@@ -67,6 +69,27 @@
 
         // Always include a collapsible raw JSON block (hidden by default via CSS) for diagnostics
         return `${main}<div class="log-row-raw text-muted small" style="display:none; padding:.25rem .5rem 1rem 10px; white-space:pre-wrap;">${raw}</div>`;
+    }
+
+    // Table-row HTML renderer (tr + optional raw tr)
+    function toRowTrHtml(e) {
+        const escaped = (s) => (s || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const raw = escaped(JSON.stringify(e?._raw ? e._raw : e || {}, null, 0));
+        const allEmpty = !(e?.TimestampText || e?.LevelText || e?.Category || e?.Message);
+        const tsRaw = (e?.TimestampText || '').toString();
+        const catStyle = categoryColorStyle(e?.Category);
+
+        const main = `<tr class="log-row">
+            <td class="log-ts" style="padding:.375rem .75rem; width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:top;">${escaped(tsRaw)}</td>
+            <td style="padding:.375rem .75rem; width:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:top;"><span class="badge bg-secondary" style="white-space:nowrap;display:inline-block;overflow:hidden;text-overflow:ellipsis;max-width:100%">${escaped(e?.LevelText)}</span></td>
+            <td style="padding:.375rem .75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:top;"><span class="log-category" style="display:inline-block;max-width:100%;word-break:normal;white-space:nowrap;${catStyle}">${escaped(e?.Category)}</span></td>
+            <td class="log-message" style="padding:.375rem .75rem; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; vertical-align:top;">${escaped(e?.Message)}</td>
+        </tr>`;
+
+        if (allEmpty) {
+            return `<tr class="log-row text-muted"><td colspan="4" style="white-space:pre-wrap">${raw}</td></tr>`;
+        }
+        return `${main}<tr class="log-row-raw text-muted small" style="display:none;"><td colspan="4" style="padding:.25rem .5rem 1rem 10px; white-space:pre-wrap;">${raw}</td></tr>`;
     }
 
     // Normalize an incoming entry to a consistent shape so rendering code
@@ -111,12 +134,13 @@
 
     async function init() {
         console.debug('logs.init starting');
-        const container = document.getElementById('logsContainer');
+        const container = document.getElementById('logsTableBody');
         if (!container) return;
 
         const exportBtn = document.getElementById('exportLogsBtn');
         const clearBtn = document.getElementById('clearLogsBtn');
         const refreshBtn = document.getElementById('refreshLogsBtn');
+        const filterTimestamp = document.getElementById('filterTimestamp');
         const filterLevel = document.getElementById('filterLevel');
         const filterCategory = document.getElementById('filterCategory');
         const filterText = document.getElementById('filterText');
@@ -139,9 +163,11 @@
             const lv = filterLevel?.value || '';
             const cat = filterCategory?.value || '';
             const txt = (filterText?.value || '').toLowerCase();
+            const tsFilter = (filterTimestamp?.value || '').toLowerCase();
             return list.filter(e => {
                 if (lv && e.FilterLevel !== lv) return false;
                 if (cat && e.Category !== cat) return false;
+                if (tsFilter && !(e.TimestampText || '').toLowerCase().includes(tsFilter)) return false;
                 if (txt) {
                     const hay = (e.Message + ' ' + e.Category + ' ' + e.LevelText + ' ' + e.TimestampText).toLowerCase();
                     if (!hay.includes(txt)) return false;
@@ -153,7 +179,7 @@
         function renderAll() {
             // Render entries with newest first (entries array keeps newest at index 0)
             const filtered = applyFilters(entries);
-            container.innerHTML = filtered.map(toRowHtml).join('');
+            container.innerHTML = filtered.map(toRowTrHtml).join('');
             console.debug('renderAll: rendered', filtered.length, 'entries');
         }
 
@@ -172,9 +198,8 @@
             }
             const shouldAppend = applyFilters([ne]).length > 0;
             if (!shouldAppend) return;
-            const div = document.createElement('div'); div.innerHTML = toRowHtml(ne);
-            // insert the new nodes at the top while preserving their internal order
-            while (div.lastChild) container.insertBefore(div.lastChild, container.firstChild);
+            // prepend table rows (main row + optional raw row)
+            try { container.insertAdjacentHTML('afterbegin', toRowTrHtml(ne)); } catch (err) { console.warn('insert row failed', err); }
         }
 
         async function loadInitial() {
@@ -227,6 +252,8 @@
         filterLevel?.addEventListener('change', renderAll);
         filterCategory?.addEventListener('change', renderAll);
         filterText?.addEventListener('input', () => { setTimeout(renderAll, 100); });
+        // header column filters (table header inputs)
+        filterTimestamp?.addEventListener('input', () => { setTimeout(renderAll, 100); });
 
         // auto-scroll UI removed; nothing to reflect
 

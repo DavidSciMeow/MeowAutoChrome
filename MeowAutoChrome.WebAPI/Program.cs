@@ -1,10 +1,3 @@
-using MeowAutoChrome.Core.Services;
-using MeowAutoChrome.Core;
-using MeowAutoChrome.Core.Interface;
-using MeowAutoChrome.WebAPI.Hubs;
-using MeowAutoChrome.WebAPI.Extensions;
-using MeowAutoChrome.WebAPI.Services;
-
 var appLogService = new AppLogService();
 
 Console.SetOut(new ConsoleLogTextWriter(Console.Out, appLogService, LogLevel.Debug, "Console.Out"));
@@ -16,6 +9,8 @@ TaskScheduler.UnobservedTaskException += (_, args) => appLogService.WriteEntry(L
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new AppLogLoggerProvider(appLogService));
+builder.Logging.AddFilter("Microsoft.AspNetCore.Routing", LogLevel.None);
+
 builder.Services.AddSingleton(appLogService);
 builder.Services.AddMeowAutoChromeServices();
 builder.Services.AddControllers();

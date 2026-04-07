@@ -324,24 +324,42 @@
                             </div>
                         </div>
 
-                        <div class="mb-2 d-flex gap-2 align-items-center">
-                            <select id="filterLevel" class="form-select form-select-sm" style="width:140px;">
-                                <option value="">所有级别</option>
-                                <option value="error">错误</option>
-                                <option value="warn">警告</option>
-                                <option value="info">信息</option>
-                                <option value="debug">调试</option>
-                                <option value="trace">追踪</option>
-                            </select>
-                            <select id="filterCategory" class="form-select form-select-sm" style="width:200px;">
-                                <option value="">所有插件/类别</option>
-                            </select>
-                            <input id="filterText" class="form-control form-control-sm" placeholder="关键字"
-                                style="max-width:320px;" />
-                        </div>
-
-                        <div id="logsContainer" class="border rounded p-2 bg-white">
-                            <!-- 日志条目会追加到这里 -->
+                        <!-- 使用单个表格（thead 为筛选输入，tbody 用于追加 tr/td 日志行），保证列宽对齐 -->
+                        <div id="logsContainerWrapper" class="border rounded p-2 bg-white"
+                            style="overflow-y:auto; overflow-x:hidden;">
+                            <table id="logsTable" class="table table-sm mb-0"
+                                style="table-layout: fixed; width: 100%; margin-bottom:0;">
+                                <colgroup>
+                                    <col style="width:180px" />
+                                    <col style="width:100px" />
+                                    <col />
+                                    <col />
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th class="p-1"><input id="filterTimestamp" class="form-control form-control-sm"
+                                                placeholder="时间筛选" /></th>
+                                        <th class="p-1">
+                                            <select id="filterLevel" class="form-select form-select-sm">
+                                                <option value="">所有级别</option>
+                                                <option value="error">错误</option>
+                                                <option value="warn">警告</option>
+                                                <option value="info">信息</option>
+                                                <option value="debug">调试</option>
+                                                <option value="trace">追踪</option>
+                                            </select>
+                                        </th>
+                                        <th class="p-1">
+                                            <select id="filterCategory" class="form-select form-select-sm">
+                                                <option value="">所有插件/类别</option>
+                                            </select>
+                                        </th>
+                                        <th class="p-1"><input id="filterText" class="form-control form-control-sm"
+                                                placeholder="关键字" /></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logsTableBody"></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
