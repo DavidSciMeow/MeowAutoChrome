@@ -16,6 +16,12 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 public sealed class PluginLoadContext(string pluginPath) : AssemblyLoadContext(Path.GetFileNameWithoutExtension(pluginPath), isCollectible: true)
 {
     private readonly AssemblyDependencyResolver _resolver = new(pluginPath);
+    private static readonly HashSet<string> SharedAssemblyNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        typeof(MeowAutoChrome.Contracts.IPlugin).Assembly.GetName().Name ?? "MeowAutoChrome.Contracts",
+        "Microsoft.Playwright",
+        "Microsoft.Bcl.AsyncInterfaces"
+    };
 
     /// <summary>
     /// 解析并加载托管程序集（由依赖解析器尝试定位路径）。<br/>
@@ -25,6 +31,10 @@ public sealed class PluginLoadContext(string pluginPath) : AssemblyLoadContext(P
     /// <returns>已加载的 Assembly 或 null（无法解析时）。</returns>
     protected override Assembly? Load(AssemblyName assemblyName)
     {
+        var sharedAssembly = ResolveSharedAssembly(assemblyName);
+        if (sharedAssembly is not null)
+            return sharedAssembly;
+
         // Try to resolve assembly using dependency resolver (searches plugin folder and runtime deps)
         var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
         if (!string.IsNullOrEmpty(assemblyPath) && File.Exists(assemblyPath))
@@ -41,6 +51,27 @@ public sealed class PluginLoadContext(string pluginPath) : AssemblyLoadContext(P
 
         // Fallback to default context
         return null;
+    }
+
+    private static Assembly? ResolveSharedAssembly(AssemblyName assemblyName)
+    {
+        var simpleName = assemblyName.Name;
+        if (string.IsNullOrWhiteSpace(simpleName) || !SharedAssemblyNames.Contains(simpleName))
+            return null;
+
+        var loaded = AssemblyLoadContext.Default.Assemblies
+            .FirstOrDefault(item => string.Equals(item.GetName().Name, simpleName, StringComparison.OrdinalIgnoreCase));
+        if (loaded is not null)
+            return loaded;
+
+        try
+        {
+            return AssemblyLoadContext.Default.LoadFromAssemblyName(assemblyName);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

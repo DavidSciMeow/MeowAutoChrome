@@ -96,10 +96,20 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
             try
             {
                 var candidateTypeNames = PluginMetadataScanner.DiscoverPluginTypeNames(pluginPath);
+                Assembly? assembly = null;
+                if (candidateTypeNames.Length == 0 && PluginMetadataScanner.ReferencesAssembly(pluginPath, typeof(Contracts.IPlugin).Assembly.GetName().Name ?? "MeowAutoChrome.Contracts"))
+                {
+                    assembly = assemblyLoader.Load(pluginPath, errors);
+                    if (assembly is null)
+                        continue;
+
+                    candidateTypeNames = DiscoverPluginTypeNamesByReflection(assembly, pluginPath, errors);
+                }
+
                 if (candidateTypeNames.Length == 0)
                     continue;
 
-                var assembly = assemblyLoader.Load(pluginPath, errors);
+                assembly ??= assemblyLoader.Load(pluginPath, errors);
                 if (assembly is null)
                     continue;
 
@@ -141,10 +151,20 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
         try
         {
             var candidateTypeNames = PluginMetadataScanner.DiscoverPluginTypeNames(pluginPath);
+            Assembly? assembly = null;
+            if (candidateTypeNames.Length == 0 && PluginMetadataScanner.ReferencesAssembly(pluginPath, typeof(Contracts.IPlugin).Assembly.GetName().Name ?? "MeowAutoChrome.Contracts"))
+            {
+                assembly = assemblyLoader.Load(pluginPath, errors);
+                if (assembly is null)
+                    return (plugins, errors, errorsDetailed);
+
+                candidateTypeNames = DiscoverPluginTypeNamesByReflection(assembly, pluginPath, errors);
+            }
+
             if (candidateTypeNames.Length == 0)
                 return (plugins, errors, errorsDetailed);
 
-            var assembly = assemblyLoader.Load(pluginPath, errors);
+            assembly ??= assemblyLoader.Load(pluginPath, errors);
             if (assembly is null)
                 return (plugins, errors, errorsDetailed);
 
@@ -197,5 +217,46 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
         }
 
         return plugins;
+    }
+
+    private static string[] DiscoverPluginTypeNamesByReflection(Assembly assembly, string pluginPath, List<string> errors)
+    {
+        try
+        {
+            return GetLoadableTypes(assembly, pluginPath, errors)
+                .Where(type => type is { IsAbstract: false, IsInterface: false })
+                .Where(type => typeof(Contracts.IPlugin).IsAssignableFrom(type))
+                .Where(type => type.GetCustomAttribute<Contracts.Attributes.PluginAttribute>() is not null)
+                .Select(type => type.FullName)
+                .Where(typeName => !string.IsNullOrWhiteSpace(typeName))
+                .Distinct(StringComparer.Ordinal)
+                .Cast<string>()
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"插件程序集 {Path.GetFileName(pluginPath)} 回退扫描失败：{ex.Message}");
+            return [];
+        }
+    }
+
+    private static IEnumerable<Type> GetLoadableTypes(Assembly assembly, string pluginPath, List<string> errors)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            var loaderMessages = ex.LoaderExceptions
+                .Where(item => item is not null)
+                .Select(item => item!.Message)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (loaderMessages.Length > 0)
+                errors.Add($"插件程序集 {Path.GetFileName(pluginPath)} 部分类型加载失败：{string.Join(" | ", loaderMessages)}");
+
+            return ex.Types.Where(type => type is not null).Cast<Type>();
+        }
     }
 }

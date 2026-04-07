@@ -229,12 +229,12 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
         if (HostContext is null) return Result.Fail("No host context available");
 
         // Expect instanceId to be provided via HostContext.Arguments["instanceId"]
-        if (!HostContext.Arguments.TryGetValue(instanceId, out var iid) || string.IsNullOrWhiteSpace(iid))
+        if (string.IsNullOrWhiteSpace(instanceId))
             return Result.Fail("Missing required argument 'instanceId' in HostContext.Arguments");
 
         try
         {
-            var info = await HostContext.GetBrowserInstanceInfoAsync(iid!, HostContext.CancellationToken);
+            var info = await HostContext.GetBrowserInstanceInfoAsync(instanceId, HostContext.CancellationToken);
             if (info is null) return Result.Fail("Instance not found");
             return Result.Ok(info);
         }

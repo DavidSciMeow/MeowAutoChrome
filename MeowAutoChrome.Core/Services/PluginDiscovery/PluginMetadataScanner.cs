@@ -45,6 +45,26 @@ internal static class PluginMetadataScanner
         return typeNames.Distinct(StringComparer.Ordinal).ToArray();
     }
 
+    internal static bool ReferencesAssembly(string pluginPath, string assemblySimpleName)
+    {
+        using var stream = new FileStream(pluginPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var peReader = new PEReader(stream);
+
+        if (!peReader.HasMetadata)
+            return false;
+
+        var metadataReader = peReader.GetMetadataReader();
+        foreach (var assemblyReferenceHandle in metadataReader.AssemblyReferences)
+        {
+            var assemblyReference = metadataReader.GetAssemblyReference(assemblyReferenceHandle);
+            var referenceName = metadataReader.GetString(assemblyReference.Name);
+            if (string.Equals(referenceName, assemblySimpleName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool HasCustomAttribute(MetadataReader metadataReader, CustomAttributeHandleCollection attributes, string attributeFullName)
         => attributes.Any(attributeHandle => string.Equals(GetAttributeTypeFullName(metadataReader, attributeHandle), attributeFullName, StringComparison.Ordinal));
 
