@@ -16,8 +16,7 @@ public class BrowserInstanceManager(BrowserInstanceManagerCore core, IProgramSet
     /// 当前选中的实例 ID。<br/>
     /// Identifier of the currently selected instance.
     /// </summary>
-    public string CurrentInstanceId
-        => core.CurrentInstanceId;
+    public string CurrentInstanceId => core.CurrentInstanceId;
 
     /// <summary>
     /// 当前选中的实例对象。<br/>
@@ -162,12 +161,16 @@ public class BrowserInstanceManager(BrowserInstanceManagerCore core, IProgramSet
     /// 获取指定实例的浏览器上下文。<br/>
     /// Get the browser context for the specified instance.
     /// </summary>
+    /// <param name="instanceId">实例 ID。<br/>Instance id.</param>
+    /// <returns>浏览器上下文。<br/>Browser context.</returns>
     public IBrowserContext? GetBrowserContext(string instanceId) => core.GetBrowserContext(instanceId);
 
     /// <summary>
     /// 获取指定实例的活动页面。<br/>
     /// Get the active page for the specified instance.
     /// </summary>
+    /// <param name="instanceId">实例 ID。<br/>Instance id.</param>
+    /// <returns>活动页面。<br/>Active page.</returns>
     public IPage? GetActivePage(string instanceId) => core.GetActivePage(instanceId);
 
     /// <summary>
@@ -183,9 +186,12 @@ public class BrowserInstanceManager(BrowserInstanceManagerCore core, IProgramSet
     public async Task<string> CreateBrowserInstanceAsync(string ownerPluginId, string? displayName = null, string? userDataDirectory = null, string? previewInstanceId = null, CancellationToken cancellationToken = default) => await core.CreateBrowserInstanceAsync(ownerPluginId, displayName, userDataDirectory, previewInstanceId);
 
     /// <summary>
-    /// 删除指定实例。<br/>
+    /// 移除指定实例。<br/>
     /// Remove the specified instance.
     /// </summary>
+    /// <param name="instanceId">实例 ID。<br/>Instance id.</param>
+    /// <param name="cancellationToken">请求取消令牌。<br/>Request cancellation token.</param>
+    /// <returns>操作结果。<br/>Operation result.</returns>
     public Task<bool> RemoveBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default) => core.RemoveAsync(instanceId);
 
     /// <summary>

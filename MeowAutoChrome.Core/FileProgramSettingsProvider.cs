@@ -9,8 +9,8 @@ namespace MeowAutoChrome.Core.Interface;
 public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-    private readonly string _settingsFilePath = MeowAutoChrome.Core.Struct.ProgramSettings.GetSettingsFilePath();
-    private readonly string _legacySettingsFilePath = MeowAutoChrome.Core.Struct.ProgramSettings.GetLegacySettingsFilePath();
+    private readonly string _settingsFilePath = Struct.ProgramSettings.GetSettingsFilePath();
+    private readonly string _legacySettingsFilePath = Struct.ProgramSettings.GetLegacySettingsFilePath();
     private Struct.ProgramSettings? _cachedSettings;
 
     /// <summary>
@@ -86,18 +86,18 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
 
     private static void Normalize(Struct.ProgramSettings settings)
     {
-        settings.SearchUrlTemplate = string.IsNullOrWhiteSpace(settings.SearchUrlTemplate) ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultSearchUrlTemplate : settings.SearchUrlTemplate.Trim();
+        settings.SearchUrlTemplate = string.IsNullOrWhiteSpace(settings.SearchUrlTemplate) ? Struct.ProgramSettings.DefaultSearchUrlTemplate : settings.SearchUrlTemplate.Trim();
 
         // Normalize UserDataDirectory: prefer default if empty, otherwise make absolute.
         settings.UserDataDirectory = string.IsNullOrWhiteSpace(settings.UserDataDirectory)
-            ? MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultUserDataDirectoryPath()
+            ? Struct.ProgramSettings.GetDefaultUserDataDirectoryPath()
             : Path.GetFullPath(settings.UserDataDirectory);
 
         // Normalize PluginDirectory: if empty use default under AppData; if it's not rooted,
         // interpret it as relative to AppData directory (avoid resolving relative to current working dir).
         if (string.IsNullOrWhiteSpace(settings.PluginDirectory))
         {
-            settings.PluginDirectory = MeowAutoChrome.Core.Struct.ProgramSettings.GetDefaultPluginDirectoryPath();
+            settings.PluginDirectory = Struct.ProgramSettings.GetDefaultPluginDirectoryPath();
         }
         else
         {
@@ -108,14 +108,14 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
             }
             else
             {
-                var appDataBase = MeowAutoChrome.Core.Struct.ProgramSettings.GetAppDataDirectoryPath();
+                var appDataBase = Struct.ProgramSettings.GetAppDataDirectoryPath();
                 settings.PluginDirectory = Path.GetFullPath(Path.Combine(appDataBase, pluginDirRaw));
             }
         }
 
         settings.UserAgent = string.IsNullOrWhiteSpace(settings.UserAgent) ? null : settings.UserAgent.Trim();
-        settings.ScreencastFps = Math.Clamp(settings.ScreencastFps <= 0 ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultScreencastFps : settings.ScreencastFps, 1, 60);
-        settings.PluginPanelWidth = Math.Clamp(settings.PluginPanelWidth <= 0 ? MeowAutoChrome.Core.Struct.ProgramSettings.DefaultPluginPanelWidth : settings.PluginPanelWidth, MeowAutoChrome.Core.Struct.ProgramSettings.MinPluginPanelWidth, MeowAutoChrome.Core.Struct.ProgramSettings.MaxPluginPanelWidth);
+        settings.ScreencastFps = Math.Clamp(settings.ScreencastFps <= 0 ? Struct.ProgramSettings.DefaultScreencastFps : settings.ScreencastFps, 1, 60);
+        settings.PluginPanelWidth = Math.Clamp(settings.PluginPanelWidth <= 0 ? Struct.ProgramSettings.DefaultPluginPanelWidth : settings.PluginPanelWidth, Struct.ProgramSettings.MinPluginPanelWidth, Struct.ProgramSettings.MaxPluginPanelWidth);
     }
 
     private void EnsureSettingsFileMigrated()

@@ -1,1 +1,2 @@
-dotnet publish .\MeowAutoChrome.WebAPI\MeowAutoChrome.WebAPI.csproj -c Release -r win-x64 --self-contained false -o .\Artifact\Standalone\win-x64\resources\app\webapi
+# dotnet publish .\MeowAutoChrome.WebAPI\MeowAutoChrome.WebAPI.csproj -c Release -r win-x64 --self-contained false -o .\Artifact\Standalone\win-x64\resources\app\webapi;
+dotnet publish .\MeowAutoChrome.WebAPI\MeowAutoChrome.WebAPI.csproj -c Release -r win-x64 --self-contained false -o .\MeowAutoChrome.Electron\webapi;

@@ -26,8 +26,7 @@ public class SettingsService(IProgramSettingsProvider programSettingsService, Co
     /// <param name="addModelError">添加错误信息的回调。<br/>Callback used to add validation errors.</param>
     public void ValidateProgramSettings(ProgramSettingsViewModel model, Action<string> addModelError)
     {
-        if (!model.SearchUrlTemplate.Contains("{query}", StringComparison.OrdinalIgnoreCase))
-            addModelError("搜索地址模板必须包含 {query} 占位符。");
+        if (!model.SearchUrlTemplate.Contains("{query}", StringComparison.OrdinalIgnoreCase)) addModelError("搜索地址模板必须包含 {query} 占位符。");
 
         try
         {

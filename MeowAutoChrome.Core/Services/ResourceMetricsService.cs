@@ -28,7 +28,7 @@ public sealed class ResourceMetricsService
     {
         using var process = Process.GetCurrentProcess();
         _lastTotalProcessorTime = process.TotalProcessorTime;
-        _lastTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        _lastTimestamp = Stopwatch.GetTimestamp();
     }
 
     /// <summary>
@@ -45,9 +45,9 @@ public sealed class ResourceMetricsService
 
         lock (_syncRoot)
         {
-            var nowTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            var nowTimestamp = Stopwatch.GetTimestamp();
             var nowCpuTime = process.TotalProcessorTime;
-            var elapsedSeconds = (nowTimestamp - _lastTimestamp) / (double)System.Diagnostics.Stopwatch.Frequency;
+            var elapsedSeconds = (nowTimestamp - _lastTimestamp) / (double)Stopwatch.Frequency;
             var cpuDeltaMs = (nowCpuTime - _lastTotalProcessorTime).TotalMilliseconds;
 
             var cpuUsagePercent = elapsedSeconds <= 0 ? 0 : cpuDeltaMs / (elapsedSeconds * 1000d * Environment.ProcessorCount) * 100d;

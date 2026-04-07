@@ -1,4 +1,7 @@
-﻿namespace MeowAutoChrome.Core.Services;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Playwright;
+
+namespace MeowAutoChrome.Core.Services;
 
 /// <summary>
 /// 屏幕截图服务：从第一个可用页面捕获 PNG 格式的截图。<br/>

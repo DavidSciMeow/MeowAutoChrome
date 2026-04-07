@@ -1,3 +1,10 @@
+using System.Text;
+using System.Text.Json;
+using MeowAutoChrome.Core.Models;
+using MeowAutoChrome.Core.Services;
+using MeowAutoChrome.WebAPI.Hubs;
+using Microsoft.AspNetCore.SignalR;
+
 namespace MeowAutoChrome.WebAPI.Services
 {
     /// <summary>
@@ -53,12 +60,12 @@ namespace MeowAutoChrome.WebAPI.Services
                             LevelText = entry.Level.ToString(),
                             FilterLevel = entry.Level switch
                             {
-                                Microsoft.Extensions.Logging.LogLevel.Warning => "warn",
-                                Microsoft.Extensions.Logging.LogLevel.Error or Microsoft.Extensions.Logging.LogLevel.Critical => "error",
+                                LogLevel.Warning => "warn",
+                                LogLevel.Error or LogLevel.Critical => "error",
                                 _ => "info"
                             },
-                            Category = entry.Category,
-                            Message = entry.Message
+                            entry.Category,
+                            entry.Message
                         };
 
                         // broadcast to all connected clients

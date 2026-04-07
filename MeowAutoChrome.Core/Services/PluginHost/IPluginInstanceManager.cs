@@ -19,8 +19,8 @@ public interface IPluginInstanceManager
     /// 根据插件 ID 移除对应实例。<br/>
     /// Remove the instance associated with the given plugin id.
     /// </summary>
-    /// <param name="pluginId">要移除实例的插件 ID。<br/>Plugin id of the instance to remove.</param>
-    void RemoveInstanceByPluginId(string pluginId);
+    /// <param name="plugin">要移除实例的插件 ID。<br/>Plugin id of the instance to remove.</param>
+    void RemoveInstanceByPluginId(string plugin);
     /// <summary>
     /// 为插件确保新的生命周期取消令牌（丢弃旧的）。<br/>
     /// Ensure a fresh lifecycle cancellation token for the plugin.

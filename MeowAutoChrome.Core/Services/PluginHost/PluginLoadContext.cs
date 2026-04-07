@@ -52,9 +52,7 @@ public sealed class PluginLoadContext(string pluginPath) : AssemblyLoadContext(P
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {
         var libraryPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
-        if (!string.IsNullOrEmpty(libraryPath) && File.Exists(libraryPath))
-            return LoadUnmanagedDllFromPath(libraryPath);
-
+        if (!string.IsNullOrEmpty(libraryPath) && File.Exists(libraryPath)) return LoadUnmanagedDllFromPath(libraryPath);
         return IntPtr.Zero;
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using MeowAutoChrome.Core.Interface;
 using Microsoft.Extensions.Logging;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
@@ -14,7 +15,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// Constructor: creates the plugin assembly loader and injects a logger.
 /// </remarks>
 /// <param name="logger">日志记录器 / logger.</param>
-public sealed class PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger) : Interface.ICorePluginAssemblyLoader, IPluginAssemblyLoader
+public sealed class PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger) : IPluginAssemblyLoader
 {
     private readonly Dictionary<string, Assembly> _assemblies = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PluginLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);
@@ -98,10 +99,7 @@ public sealed class PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger) :
     public void RegisterPlugins(string pluginPath, IEnumerable<string> pluginIds)
     {
         var fullPath = Path.GetFullPath(pluginPath);
-        foreach (var id in pluginIds)
-        {
-            _pluginToPath[id] = fullPath;
-        }
+        foreach (var id in pluginIds) _pluginToPath[id] = fullPath;
     }
 
     /// <summary>
@@ -113,8 +111,7 @@ public sealed class PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger) :
     {
         var fullPath = Path.GetFullPath(pluginPath);
         var keys = _pluginToPath.Where(kv => string.Equals(kv.Value, fullPath, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Key).ToArray();
-        foreach (var k in keys)
-            _pluginToPath.Remove(k);
+        foreach (var k in keys) _pluginToPath.Remove(k);
     }
 
     /// <summary>
@@ -123,6 +120,5 @@ public sealed class PluginAssemblyLoader(ILogger<PluginAssemblyLoader> logger) :
     /// </summary>
     /// <param name="pluginId">插件 ID / plugin id.</param>
     /// <returns>程序集路径或 null / assembly path or null.</returns>
-    public string? GetAssemblyPathForPluginId(string pluginId)
-        => _pluginToPath.TryGetValue(pluginId, out var path) ? path : null;
+    public string? GetAssemblyPathForPluginId(string pluginId) => _pluginToPath.TryGetValue(pluginId, out var path) ? path : null;
 }

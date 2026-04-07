@@ -25,8 +25,7 @@ public sealed class PluginExecutionService(IPluginExecutor executor)
     /// <param name="execute">在插件实例上执行动作的委托。<br/>Delegate that executes an action on the plugin instance.</param>
     /// <param name="cancellationToken">取消令牌，用于中止执行。<br/>Cancellation token to abort execution.</param>
     /// <returns>异步操作，返回规范化的执行结果。<br/>Asynchronous operation returning the normalized execution result.</returns>
-    public Task<IResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<IResult>> execute, CancellationToken cancellationToken)
-        => executor.ExecuteAsync(instance, hostContext, execute, cancellationToken);
+    public Task<IResult> ExecuteAsync(RuntimeBrowserPluginInstance instance, IPluginContext hostContext, Func<IPlugin, Task<IResult>> execute, CancellationToken cancellationToken) => executor.ExecuteAsync(instance, hostContext, execute, cancellationToken);
 
     /// <summary>
     /// 执行指定动作并标准化返回为 `IResult`。<br/>
@@ -37,34 +36,37 @@ public sealed class PluginExecutionService(IPluginExecutor executor)
     /// <param name="hostContext">宿主提供的插件上下文。<br/>Host-provided plugin context.</param>
     /// <param name="cancellationToken">取消令牌，用于在外部取消执行。<br/>Cancellation token for external cancellation.</param>
     /// <returns>异步操作，返回规范化的执行结果。<br/>Asynchronous operation returning the normalized execution result.</returns>
-    public Task<IResult> ExecuteActionAsync(RuntimeBrowserPluginInstance instance, RuntimeBrowserPluginAction action, IPluginContext hostContext, CancellationToken cancellationToken) => executor.ExecuteAsync(instance, hostContext, async pluginInstance =>
-                                                                                                                                                                                               {
-                                                                                                                                                                                                   var invocation = action.Method.Invoke(pluginInstance, PluginParameterBinder.BuildInvocationArguments(action.Method, (IPluginContext)hostContext));
-                                                                                                                                                                                                   // Normalize various return shapes into IResult
-                                                                                                                                                                                                   if (invocation is Task<IResult> taskResult)
-                                                                                                                                                                                                       return await taskResult.ConfigureAwait(false);
-                                                                                                                                                                                                   if (invocation is IResult directResult)
-                                                                                                                                                                                                       return directResult;
-                                                                                                                                                                                                   if (invocation is Task task)
-                                                                                                                                                                                                   {
-                                                                                                                                                                                                       await task.ConfigureAwait(false);
-                                                                                                                                                                                                       var resultProp = task.GetType().GetProperty("Result");
-                                                                                                                                                                                                       if (resultProp is not null)
-                                                                                                                                                                                                       {
-                                                                                                                                                                                                           var res = resultProp.GetValue(task);
-                                                                                                                                                                                                           if (res is IResult ir) return ir;
-                                                                                                                                                                                                           return new Result(res);
-                                                                                                                                                                                                       }
+    public Task<IResult> ExecuteActionAsync(RuntimeBrowserPluginInstance instance, RuntimeBrowserPluginAction action, IPluginContext hostContext, CancellationToken cancellationToken)
+    {
+        return executor.ExecuteAsync(instance, hostContext, async pluginInstance =>
+        {
+            var invocation = action.Method.Invoke(pluginInstance, PluginParameterBinder.BuildInvocationArguments(action.Method, (IPluginContext)hostContext));
+            // Normalize various return shapes into IResult
+            if (invocation is Task<IResult> taskResult)
+                return await taskResult.ConfigureAwait(false);
+            if (invocation is IResult directResult)
+                return directResult;
+            if (invocation is Task task)
+            {
+                await task.ConfigureAwait(false);
+                var resultProp = task.GetType().GetProperty("Result");
+                if (resultProp is not null)
+                {
+                    var res = resultProp.GetValue(task);
+                    if (res is IResult ir) return ir;
+                    return new Result(res);
+                }
 
-                                                                                                                                                                                                       // void-returning Task -> success without data
-                                                                                                                                                                                                       return Result.Ok();
-                                                                                                                                                                                                   }
+                // void-returning Task -> success without data
+                return Result.Ok();
+            }
 
-                                                                                                                                                                                                   // synchronous returns
-                                                                                                                                                                                                   if (invocation is IResult ir2) return ir2;
-                                                                                                                                                                                                   if (invocation is null) return Result.Ok();
-                                                                                                                                                                                                   return new Result(invocation);
-                                                                                                                                                                                               }, cancellationToken);
+            // synchronous returns
+            if (invocation is IResult ir2) return ir2;
+            if (invocation is null) return Result.Ok();
+            return new Result(invocation);
+        }, cancellationToken);
+    }
 
     /// <summary>
     /// 执行插件的控制命令（start/stop/pause/resume）。<br/>
@@ -75,12 +77,15 @@ public sealed class PluginExecutionService(IPluginExecutor executor)
     /// <param name="hostContext">宿主提供的插件上下文。<br/>Host-provided plugin context.</param>
     /// <param name="cancellationToken">取消令牌，用于中止执行。<br/>Cancellation token to abort execution.</param>
     /// <returns>异步操作，返回规范化的执行结果。<br/>Asynchronous operation returning the normalized execution result.</returns>
-    public Task<IResult> ExecuteControlAsync(RuntimeBrowserPluginInstance instance, string command, IPluginContext hostContext, CancellationToken cancellationToken) => executor.ExecuteAsync(instance, hostContext, pluginInstance => command.ToLowerInvariant() switch
-                                                                                                                                                                             {
-                                                                                                                                                                                 "start" => pluginInstance.StartAsync(),
-                                                                                                                                                                                 "stop" => pluginInstance.StopAsync(),
-                                                                                                                                                                                 "pause" => pluginInstance.PauseAsync(),
-                                                                                                                                                                                 "resume" => pluginInstance.ResumeAsync(),
-                                                                                                                                                                                 _ => Task.FromResult<IResult>(Result.Fail($"不支持的插件控制命令：{command}"))
-                                                                                                                                                                             }, cancellationToken);
+    public Task<IResult> ExecuteControlAsync(RuntimeBrowserPluginInstance instance, string command, IPluginContext hostContext, CancellationToken cancellationToken)
+    {
+        return executor.ExecuteAsync(instance, hostContext, pluginInstance => command.ToLowerInvariant() switch
+        {
+            "start" => pluginInstance.StartAsync(),
+            "stop" => pluginInstance.StopAsync(),
+            "pause" => pluginInstance.PauseAsync(),
+            "resume" => pluginInstance.ResumeAsync(),
+            _ => Task.FromResult<IResult>(Result.Fail($"不支持的插件控制命令：{command}"))
+        }, cancellationToken);
+    }
 }

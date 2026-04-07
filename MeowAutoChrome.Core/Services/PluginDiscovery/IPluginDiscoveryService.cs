@@ -31,7 +31,7 @@ public interface IPluginDiscoveryService
     /// Discover and load plugins from the plugin directory and return an aggregated snapshot.
     /// </summary>
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader used to load plugin assemblies.</param>
-    PluginDiscoverySnapshot DiscoverAll(Interface.ICorePluginAssemblyLoader assemblyLoader);
+    PluginDiscoverySnapshot DiscoverAll(Interface.IPluginAssemblyLoader assemblyLoader);
 
     /// <summary>
     /// 从单个程序集路径中发现插件，返回插件列表与错误信息。<br/>
@@ -40,7 +40,7 @@ public interface IPluginDiscoveryService
     /// <param name="pluginPath">插件程序集的文件路径 / plugin assembly file path.</param>
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader used to load the assembly.</param>
     /// <returns>包含插件、错误摘要与详细错误信息的三元组 / tuple containing plugins, error messages and detailed descriptors.</returns>
-    (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.ICorePluginAssemblyLoader assemblyLoader);
+    (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.IPluginAssemblyLoader assemblyLoader);
 
     /// <summary>
     /// 在运行时更新插件根目录路径并确保存储的目录存在。<br/>

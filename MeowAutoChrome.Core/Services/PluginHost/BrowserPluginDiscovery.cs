@@ -13,7 +13,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 internal sealed class BrowserPluginDiscovery
 {
     private readonly IPluginDiscoveryService _discovery;
-    private readonly ICorePluginAssemblyLoader _assemblyLoader;
+    private readonly IPluginAssemblyLoader _assemblyLoader;
     private readonly ILogger _logger;
     private readonly IPluginInstanceManager _instanceManager;
 
@@ -29,7 +29,7 @@ internal sealed class BrowserPluginDiscovery
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader used to load plugin assemblies.</param>
     /// <param name="logger">日志记录器 / logger instance.</param>
     /// <param name="instanceManager">插件实例管理器 / plugin instance manager.</param>
-    public BrowserPluginDiscovery(IPluginDiscoveryService discovery, ICorePluginAssemblyLoader assemblyLoader, ILogger logger, IPluginInstanceManager instanceManager)
+    public BrowserPluginDiscovery(IPluginDiscoveryService discovery, IPluginAssemblyLoader assemblyLoader, ILogger logger, IPluginInstanceManager instanceManager)
     {
         _discovery = discovery;
         _assemblyLoader = assemblyLoader;

@@ -83,7 +83,7 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
     /// </summary>
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader.</param>
     /// <returns>表示发现结果的快照 / snapshot representing discovery results.</returns>
-    public PluginDiscoverySnapshot DiscoverAll(Interface.ICorePluginAssemblyLoader assemblyLoader)
+    public PluginDiscoverySnapshot DiscoverAll(Interface.IPluginAssemblyLoader assemblyLoader)
     {
         EnsurePluginDirectoryExists();
 
@@ -132,7 +132,7 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
     /// <param name="pluginPath">程序集文件路径 / assembly file path.</param>
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader.</param>
     /// <returns>包含插件、错误摘要与详细错误信息的三元组 / tuple containing plugins, error messages and detailed descriptors.</returns>
-    public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.ICorePluginAssemblyLoader assemblyLoader)
+    public (List<RuntimeBrowserPlugin> Plugins, List<string> Errors, List<BrowserPluginErrorDescriptor> ErrorsDetailed) DiscoverFromAssembly(string pluginPath, Interface.IPluginAssemblyLoader assemblyLoader)
     {
         var plugins = new List<RuntimeBrowserPlugin>();
         var errors = new List<string>();
@@ -163,7 +163,7 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
         return (plugins, errors, errorsDetailed);
     }
 
-    private List<RuntimeBrowserPlugin> DiscoverPluginsInAssembly(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, List<string> errors)
+    private static List<RuntimeBrowserPlugin> DiscoverPluginsInAssembly(Assembly assembly, string pluginPath, IReadOnlyList<string> candidateTypeNames, List<string> errors)
     {
         var plugins = new List<RuntimeBrowserPlugin>();
 

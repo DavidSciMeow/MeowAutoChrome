@@ -24,7 +24,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// <param name="publishUpdate">用于发布插件更新的回调 / callback to publish plugin updates.</param>
 /// <param name="requestNewInstance">用于请求新浏览器实例的回调（可空）/ optional callback to request a new browser instance.</param>
 /// <param name="getInstanceInfo">用于查询实例信息的回调（可空）/ optional callback to get instance info.</param>
-public sealed class PluginHostContextCore(IBrowserContext browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, CancellationToken cancellationToken, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<LogLevel, string, string?, Task>? logCallback = null) : IPluginContext
+public sealed class PluginHostContextCore(IBrowserContext browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<LogLevel, string, string?, Task>? logCallback = null, CancellationToken cancellationToken = default) : IPluginContext
 {
 
     /// <summary>

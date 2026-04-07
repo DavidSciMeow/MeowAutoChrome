@@ -1,4 +1,9 @@
-﻿using CoreModels = MeowAutoChrome.Core.Models;
+﻿using System.Diagnostics.CodeAnalysis;
+using MeowAutoChrome.Contracts;
+using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Struct;
+using Microsoft.Extensions.Logging;
+using CoreModels = MeowAutoChrome.Core.Models;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
@@ -6,7 +11,6 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// 插件宿主核心实现：包含插件发现、执行与发布逻辑，已从 Web 层迁移以支持在 CLI 环境中运行。<br/>
 /// Core implementation of plugin host logic moved from Web. This class does not depend on ASP.NET and can run in CLI environments. It exposes discovery, execution and publishing via IPluginOutputPublisher.
 /// </summary>
-[SuppressMessage("Maintainability", "Avoid types too big", Justification = "Planned refactor; suppressed temporarily to complete migration.")]
 public sealed class BrowserPluginHostCore : IPluginHostCore
 {
     private readonly ICoreBrowserInstanceManager _browserInstances;
@@ -20,7 +24,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
     private readonly PluginExecutionService _executionService;
     private readonly PluginPublishingService _publishingService;
     // assembly loader/executor injected via DI to allow testing and replacement
-    private readonly ICorePluginAssemblyLoader _assemblyLoader;
+    private readonly IPluginAssemblyLoader _assemblyLoader;
     private readonly IPluginExecutor _executor;
     private readonly BrowserPluginDiscovery _pluginDiscovery;
     private readonly IProgramSettingsProvider? _settingsProvider;
@@ -307,11 +311,11 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             normalizedArguments,
             plugin.Id,
             command,
-            combinedCts.Token,
             (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token),
             RequestNewBrowserInstanceAsync,
             GetBrowserInstanceInfoAsync,
-            (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; }
+            (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
+            combinedCts.Token
         );
         if (string.Equals(command, "stop", StringComparison.OrdinalIgnoreCase))
         {
@@ -346,11 +350,11 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             normalizedArguments,
             plugin.Id,
             action.Id,
-            combinedCts.Token,
             (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token),
             RequestNewBrowserInstanceAsync,
             GetBrowserInstanceInfoAsync,
-            (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; }
+            (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
+            combinedCts.Token
         );
 
 

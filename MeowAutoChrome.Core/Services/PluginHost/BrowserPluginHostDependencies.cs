@@ -1,4 +1,5 @@
-﻿using MeowAutoChrome.Core.Services.PluginDiscovery;
+﻿using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Services.PluginDiscovery;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
@@ -31,7 +32,7 @@ public sealed class BrowserPluginHostDependencies
     /// <summary>
     /// 核心层的程序集装载器接口 / core layer assembly loader interface.
     /// </summary>
-    public Interface.ICorePluginAssemblyLoader AssemblyLoader { get; init; } = null!;
+    public IPluginAssemblyLoader AssemblyLoader { get; init; } = null!;
 
     /// <summary>
     /// 插件执行器 / plugin executor.
@@ -51,7 +52,7 @@ public sealed class BrowserPluginHostDependencies
     /// <summary>
     /// 可选的程序设置提供者 / optional program settings provider.
     /// </summary>
-    public Interface.IProgramSettingsProvider SettingsProvider { get; init; } = null!;
+    public IProgramSettingsProvider SettingsProvider { get; init; } = null!;
 
     /// <summary>
     /// 应用日志服务，供插件宿主将插件日志写入应用级日志。/ App log service used by plugin host to write plugin logs.

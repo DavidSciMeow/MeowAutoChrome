@@ -1,4 +1,12 @@
-﻿namespace MeowAutoChrome.Core;
+﻿using System.Collections.Concurrent;
+using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Models;
+using MeowAutoChrome.Core.Struct;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Playwright;
+
+namespace MeowAutoChrome.Core;
 
 /// <summary>
 /// 浏览器实例管理核心，负责创建和管理 Playwright 实例、标签页以及对外的查询/控制 API。<br/>

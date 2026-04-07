@@ -18,16 +18,21 @@ public sealed class SignalRScreencastFrameSink(IHubContext<BrowserHub, IBrowserC
 {
 
     /// <summary>
-    /// 向所有连接客户端发送一帧推流数据。<br/>
-    /// Send one screencast frame to all connected clients.
+    /// 将推流帧发送给所有连接的客户端。<br/>
+    /// Send screencast frames to all connected clients.
     /// </summary>
-    public Task SendFrameAsync(string data, int? width, int? height, CancellationToken cancellationToken = default)
-        => hub.Clients.All.ReceiveFrame(data, width, height);
+    /// <param name="data">帧数据。<br/>Frame data.</param>
+    /// <param name="width">帧宽度。<br/>Frame width.</param>
+    /// <param name="height">帧高度。<br/>Frame height.</param>
+    /// <param name="cancellationToken">取消操作的令牌。<br/>Cancellation token to cancel the operation.</param>
+    /// <returns>表示异步操作的任务。<br/>A task representing the asynchronous operation.</returns>
+    public Task SendFrameAsync(string data, int? width, int? height, CancellationToken cancellationToken = default) => hub.Clients.All.ReceiveFrame(data, width, height);
 
     /// <summary>
-    /// 通知所有客户端当前未启用实时画面。<br/>
-    /// Notify all clients that screencast is currently disabled.
+    /// 通知所有连接客户端推流已停止。<br/>
+    /// Notify all connected clients that screencast has been disabled.
     /// </summary>
-    public Task NotifyScreencastDisabledAsync(CancellationToken cancellationToken = default)
-        => hub.Clients.All.ScreencastDisabled();
+    /// <param name="cancellationToken">取消操作的令牌。<br/>Cancellation token to cancel the operation.</param>
+    /// <returns>表示异步操作的任务。<br/>A task representing the asynchronous operation.</returns>
+    public Task NotifyScreencastDisabledAsync(CancellationToken cancellationToken = default) => hub.Clients.All.ScreencastDisabled();
 }

@@ -1,3 +1,10 @@
+using MeowAutoChrome.Core;
+using MeowAutoChrome.Core.Interface;
+using MeowAutoChrome.Core.Services;
+using MeowAutoChrome.WebAPI.Extensions;
+using MeowAutoChrome.WebAPI.Hubs;
+using MeowAutoChrome.WebAPI.Services;
+
 var appLogService = new AppLogService();
 
 Console.SetOut(new ConsoleLogTextWriter(Console.Out, appLogService, LogLevel.Debug, "Console.Out"));

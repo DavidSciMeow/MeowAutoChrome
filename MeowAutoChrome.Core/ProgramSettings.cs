@@ -41,51 +41,44 @@ public sealed class ProgramSettings
     /// 获取应用数据目录路径（基于本地应用数据）。<br/>
     /// Get the application data directory path (based on LocalApplicationData).
     /// </summary>
-    public static string GetAppDataDirectoryPath()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome");
+    public static string GetAppDataDirectoryPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome");
 
     /// <summary>
     /// 获取配置文件目录路径。<br/>
     /// Get the settings directory path.
     /// </summary>
-    public static string GetSettingsDirectoryPath()
-        => Path.Combine(GetAppDataDirectoryPath(), "setting");
+    public static string GetSettingsDirectoryPath() => Path.Combine(GetAppDataDirectoryPath(), "setting");
 
     /// <summary>
     /// 获取程序设置文件的完整路径。<br/>
     /// Get the full path to the program settings file.
     /// </summary>
-    public static string GetSettingsFilePath()
-        => Path.Combine(GetSettingsDirectoryPath(), "program-settings.json");
+    public static string GetSettingsFilePath() => Path.Combine(GetSettingsDirectoryPath(), "program-settings.json");
 
     /// <summary>
     /// 获取旧版（可移植）设置文件路径。<br/>
     /// Get the legacy settings file path.
     /// </summary>
-    public static string GetLegacySettingsFilePath()
-        => Path.Combine(AppContext.BaseDirectory, "program-settings.json");
+    public static string GetLegacySettingsFilePath() => Path.Combine(AppContext.BaseDirectory, "program-settings.json");
 
     /// <summary>
     /// 获取默认的用户数据目录路径（实例目录）。<br/>
     /// Get the default user data directory path for instances.
     /// </summary>
-    public static string GetDefaultUserDataDirectoryPath()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "instances");
+    public static string GetDefaultUserDataDirectoryPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "instances");
 
     /// <summary>
     /// <summary>
     /// 获取默认插件目录路径（基于本地应用数据的 AppData\Local\MeowAutoChrome\Plugins）。<br/>
     /// Get the default plugin directory path (under LocalApplicationData\MeowAutoChrome\Plugins).
     /// </summary>
-    public static string GetDefaultPluginDirectoryPath()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "Plugins");
+    public static string GetDefaultPluginDirectoryPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "Plugins");
 
     /// <summary>
     /// 获取旧版用户数据目录路径（兼容旧布局）。<br/>
     /// Get the legacy user data directory path (for backward compatibility).
     /// </summary>
-    public static string GetLegacyUserDataDirectoryPath()
-        => Path.Combine(AppContext.BaseDirectory, "user_data");
+    public static string GetLegacyUserDataDirectoryPath() => Path.Combine(AppContext.BaseDirectory, "user_data");
 
     /// <summary>
     /// 搜索 URL 模板（可自定义）。<br/>
@@ -149,7 +142,7 @@ public sealed class ProgramSettings
     /// 插件在请求实例时不允许传递的浏览器命令行参数列表。<br/>
     /// Disallowed browser arguments that plugins should not pass through when requesting instances.
     /// </summary>
-    public string[] DisallowedBrowserArgs { get; set; } = new[] { "--user-data-dir", "--remote-debugging-port" };
+    public string[] DisallowedBrowserArgs { get; set; } = ["--user-data-dir", "--remote-debugging-port"];
 
     /// <summary>
     /// 上传文件的保留天数，超过该天数将自动清理。零或负数表示永久保留。<br/>

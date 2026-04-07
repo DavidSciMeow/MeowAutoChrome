@@ -36,7 +36,7 @@ public sealed class AppLogService
     /// 日志文件在 Web 展示时使用的相对显示路径（forward-slash）。<br/>
     /// Relative display path for the log file (forward-slash) used by the web UI.
     /// </summary>
-    public string LogDisplayPath => Path.Combine("logs", "app.log").Replace('\\', '/');
+    public static string LogDisplayPath => Path.Combine("logs", "app.log").Replace('\\', '/');
 
     /// <summary>
     /// 将给定的日志项写入日志文件。<br/>
@@ -47,7 +47,7 @@ public sealed class AppLogService
     {
         entry.Timestamp = entry.Timestamp == default ? DateTimeOffset.Now : entry.Timestamp;
         entry.Category = string.IsNullOrWhiteSpace(entry.Category) ? "Application" : entry.Category.Trim();
-        entry.Message = entry.Message ?? string.Empty;
+        entry.Message ??= string.Empty;
         var serializedEntry = JsonSerializer.Serialize(entry, JsonSerializerOptions);
         lock (_syncRoot)
         {
@@ -73,7 +73,7 @@ public sealed class AppLogService
     /// <returns>最近日志项的只读列表 / read-only list of recent log entries.</returns>
     public async Task<IReadOnlyList<Models.AppLogEntry>> ReadRecentEntriesAsync(int maxEntries = DefaultMaxEntries)
     {
-        if (!File.Exists(_logFilePath)) return [];
+        if (!File.Exists(_logFilePath)) return Array.Empty<Models.AppLogEntry>();
 
         await using var stream = new FileStream(_logFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
@@ -117,9 +117,7 @@ public sealed class AppLogService
     /// <returns>日志文件的最近写入时间或 null / last write time of the log file or null.</returns>
     public DateTimeOffset? GetLastWriteTime()
     {
-        if (!File.Exists(_logFilePath))
-            return null;
-
+        if (!File.Exists(_logFilePath)) return null;
         return File.GetLastWriteTimeUtc(_logFilePath);
     }
 

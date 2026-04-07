@@ -115,8 +115,7 @@ public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string insta
     /// </summary>
     /// <param name="page">要为其创建 CDP 会话的页面 / page to create the CDP session for.</param>
     /// <returns>可能为 null 的异步 CDP 会话。<br/>An asynchronous CDP session or null if context is not available.</returns>
-    public Task<ICDPSession?> CreateCdpSessionAsync(IPage page)
-        => BrowserContext is null ? Task.FromResult<ICDPSession?>(null) : BrowserContext.NewCDPSessionAsync(page);
+    public Task<ICDPSession?> CreateCdpSessionAsync(IPage page) => BrowserContext is null ? Task.FromResult<ICDPSession?>(null) : BrowserContext.NewCDPSessionAsync(page);
 
     /// <summary>
     /// 通过给定 CDP 会话分发鼠标事件。<br/>
@@ -125,8 +124,7 @@ public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string insta
     /// <param name="session">CDP 会话 / CDP session.</param>
     /// <param name="args">事件参数，通常为字典表示 / event arguments, typically a dictionary object.</param>
     /// <returns>表示异步发送操作的任务 / A Task representing the send operation.</returns>
-    public Task DispatchMouseEventAsync(ICDPSession session, object args)
-        => session.SendAsync("Input.dispatchMouseEvent", (Dictionary<string, object>?)args);
+    public Task DispatchMouseEventAsync(ICDPSession session, object args) => session.SendAsync("Input.dispatchMouseEvent", (Dictionary<string, object>?)args);
 
     /// <summary>
     /// 通过给定 CDP 会话分发按键事件。<br/>
@@ -135,8 +133,7 @@ public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string insta
     /// <param name="session">CDP 会话 / CDP session.</param>
     /// <param name="args">事件参数，通常为字典表示 / event arguments, typically a dictionary object.</param>
     /// <returns>表示异步发送操作的任务 / A Task representing the send operation.</returns>
-    public Task DispatchKeyEventAsync(ICDPSession session, object args)
-        => session.SendAsync("Input.dispatchKeyEvent", (Dictionary<string, object>?)args);
+    public Task DispatchKeyEventAsync(ICDPSession session, object args) => session.SendAsync("Input.dispatchKeyEvent", (Dictionary<string, object>?)args);
 
     /// <summary>
     /// 底层的 Playwright 浏览器上下文（可能为 null）。<br/>

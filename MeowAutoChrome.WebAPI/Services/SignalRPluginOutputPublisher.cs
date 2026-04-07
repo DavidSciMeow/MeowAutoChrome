@@ -31,7 +31,6 @@ public sealed class SignalRPluginOutputPublisher(IHubContext<BrowserHub> hub) : 
             OpenModal = openModal,
             TimestampUtc = DateTimeOffset.UtcNow
         };
-
         var clients = string.IsNullOrWhiteSpace(connectionId) ? hub.Clients.All : hub.Clients.Client(connectionId);
         return clients.SendAsync("ReceivePluginOutput", payload, cancellationToken);
     }
