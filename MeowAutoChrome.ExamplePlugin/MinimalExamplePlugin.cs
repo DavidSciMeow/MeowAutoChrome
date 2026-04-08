@@ -14,8 +14,7 @@ namespace MeowAutoChrome.ExamplePlugin;
 /// </remarks>
 public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
 {
-    private Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = false)
-        => HostContext?.PublishUpdateAsync(message, data, openModal) ?? Task.CompletedTask;
+    private Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = false) => HostContext?.PublishUpdateAsync(message, data, openModal) ?? Task.CompletedTask;
 
     /// <summary>
     /// 插件状态。<br/>

@@ -14,7 +14,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// 构造一个新的宿主上下文实例。<br/>
 /// Construct a new host context instance.
 /// </remarks>
-/// <param name="browserContext">Playwright 浏览器上下文 / Playwright browser context.</param>
+/// <param name="browserContext">Playwright 浏览器上下文（可空）/ Playwright browser context (optional).</param>
 /// <param name="activePage">当前激活页面（可空）/ currently active page (optional).</param>
 /// <param name="browserInstanceId">浏览器实例 Id / browser instance identifier.</param>
 /// <param name="arguments">传递给插件的参数字典 / arguments dictionary provided to the plugin.</param>
@@ -24,14 +24,14 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// <param name="publishUpdate">用于发布插件更新的回调 / callback to publish plugin updates.</param>
 /// <param name="requestNewInstance">用于请求新浏览器实例的回调（可空）/ optional callback to request a new browser instance.</param>
 /// <param name="getInstanceInfo">用于查询实例信息的回调（可空）/ optional callback to get instance info.</param>
-public sealed class PluginHostContextCore(IBrowserContext browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<LogLevel, string, string?, Task>? logCallback = null, CancellationToken cancellationToken = default) : IPluginContext
+public sealed class PluginHostContextCore(IBrowserContext? browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<LogLevel, string, string?, Task>? logCallback = null, CancellationToken cancellationToken = default) : IPluginContext
 {
 
     /// <summary>
-    /// 当前的 Playwright 浏览器上下文。<br/>
-    /// The active Playwright browser context.
+    /// 当前的 Playwright 浏览器上下文；当宿主当前没有实例时可能为 null。<br/>
+    /// The active Playwright browser context; may be null when the host has no current instance.
     /// </summary>
-    public IBrowserContext BrowserContext { get; } = browserContext;
+    public IBrowserContext? BrowserContext { get; } = browserContext;
 
     /// <summary>
     /// 当前激活的页面（如果有）。<br/>

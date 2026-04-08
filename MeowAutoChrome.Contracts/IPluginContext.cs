@@ -12,10 +12,10 @@ namespace MeowAutoChrome.Contracts;
 public interface IPluginContext
 {
     /// <summary>
-    /// 宿主提供的浏览器上下文句柄。<br/>
-    /// Browser context handle provided by the host.
+    /// 宿主提供的浏览器上下文句柄；当生命周期控制在没有当前实例的情况下执行时可能为 null。<br/>
+    /// Browser context handle provided by the host; may be null when lifecycle controls run without a current instance.
     /// </summary>
-    IBrowserContext BrowserContext { get; }
+    IBrowserContext? BrowserContext { get; }
     /// <summary>
     /// 当前活动页面（可能为 null）。<br/>
     /// The currently active page, or null if none.

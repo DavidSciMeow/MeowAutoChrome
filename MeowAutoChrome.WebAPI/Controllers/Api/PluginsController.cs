@@ -196,8 +196,22 @@ public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvi
     [HttpPost("control")]
     public async Task<IActionResult> Control([FromBody] PluginControlRequest request)
     {
-        var res = await pluginHost.ControlAsync(request.PluginId, request.Command, request.Arguments ?? new Dictionary<string, string?>());
-        return Ok(res);
+        try
+        {
+            var res = await pluginHost.ControlAsync(request.PluginId, request.Command, request.Arguments ?? new Dictionary<string, string?>());
+            return Ok(res);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                error = "插件控制执行失败",
+                detail = ex.Message,
+                pluginId = request.PluginId,
+                targetId = request.Command,
+                logCategory = $"Plugin.{request.PluginId}"
+            });
+        }
     }
 
     /// <summary>
@@ -209,7 +223,21 @@ public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvi
     [HttpPost("run")]
     public async Task<IActionResult> Run([FromBody] PluginRunRequest request)
     {
-        var res = await pluginHost.ExecuteAsync(request.PluginId, request.FunctionId, request.Arguments ?? new Dictionary<string, string?>());
-        return Ok(res);
+        try
+        {
+            var res = await pluginHost.ExecuteAsync(request.PluginId, request.FunctionId, request.Arguments ?? new Dictionary<string, string?>());
+            return Ok(res);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                error = "插件函数执行失败",
+                detail = ex.Message,
+                pluginId = request.PluginId,
+                targetId = request.FunctionId,
+                logCategory = $"Plugin.{request.PluginId}"
+            });
+        }
     }
 }

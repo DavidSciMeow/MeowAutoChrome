@@ -23,31 +23,8 @@
     let pendingPluginInvocation = null;
     let activePluginOutputPluginId = null;
 
-    function getPluginOutputMode(pluginId) {
-        try {
-            const mode = window.localStorage.getItem('meow.pluginOutputMode.' + pluginId);
-            return mode === 'toast' ? 'toast' : 'inline';
-        } catch {
-            return 'inline';
-        }
-    }
-
-    function setPluginOutputMode(pluginId, mode) {
-        try {
-            window.localStorage.setItem('meow.pluginOutputMode.' + pluginId, mode === 'toast' ? 'toast' : 'inline');
-        } catch { }
-    }
-
     function getPluginName(pluginId) {
         return pluginCatalog.get(pluginId)?.name || pluginId || '插件';
-    }
-
-    function showPluginToast(pluginId, summary) {
-        if (typeof window.showNotification === 'function') {
-            window.showNotification('[' + getPluginName(pluginId) + '] ' + summary, 'success');
-            return;
-        }
-        console.log('[' + getPluginName(pluginId) + ']', summary);
     }
 
     function showError(msg) {
@@ -103,15 +80,13 @@
             return;
 
         const output = pluginOutputStore.get(pluginId);
-        const mode = getPluginOutputMode(pluginId);
         const unread = Math.min(Number(output?.unreadCount ?? (output?.entries || []).length) || 0, 99);
-        ui.badge.textContent = unread > 0 ? String(unread) : '';
-        ui.badge.classList.toggle('d-none', unread === 0);
-        ui.previewMode.textContent = mode === 'toast' ? 'Toast 展示' : '面板展示';
+        ui.previewBadge.textContent = unread > 0 ? String(unread) : '';
+        ui.previewBadge.classList.toggle('d-none', unread === 0);
 
         if (!output) {
             ui.previewSummary.textContent = '暂无消息。点击查看完整消息记录。';
-            ui.previewMeta.textContent = mode === 'toast' ? '收到新消息时会以 Toast 提示。' : '新消息会优先显示在这里。';
+            ui.previewMeta.textContent = '新消息会显示在这里。';
             return;
         }
 
@@ -175,7 +150,24 @@
         }
     }
 
-    function openPluginOutputModal(pluginId) { const output = pluginOutputStore.get(pluginId); if (!output || !pluginOutputModal) return; activePluginOutputPluginId = pluginId; try { const updated = { ...(output || {}) }; updated.unreadCount = 0; pluginOutputStore.set(pluginId, updated); } catch { } renderPluginOutputModal(pluginId); syncPluginOutputUi(pluginId); pluginOutputModal.show(); }
+    function openPluginOutputModal(pluginId) {
+        if (!pluginOutputModal)
+            return;
+
+        const output = pluginOutputStore.get(pluginId);
+        activePluginOutputPluginId = pluginId;
+        if (output) {
+            try {
+                const updated = { ...(output || {}) };
+                updated.unreadCount = 0;
+                pluginOutputStore.set(pluginId, updated);
+            } catch { }
+        }
+
+        renderPluginOutputModal(pluginId);
+        syncPluginOutputUi(pluginId);
+        pluginOutputModal.show();
+    }
 
     function applyPluginOutputUpdate(update) {
         if (!update?.pluginId)
@@ -208,15 +200,8 @@
         pluginOutputStore.set(update.pluginId, next);
         syncPluginOutputUi(update.pluginId);
 
-        const summary = summarizePluginOutput(update.message, update.data || {});
-        const outputMode = getPluginOutputMode(update.pluginId);
-        if ((update.message || Object.keys(update.data || {}).length) && outputMode === 'toast')
-            showPluginToast(update.pluginId, summary);
-
         if (isCurrentModal)
             renderPluginOutputModal(update.pluginId);
-        else if (update.openModal && outputMode !== 'toast')
-            openPluginOutputModal(update.pluginId);
     }
 
     function createPluginParameterField(parameter, parameterInputs) { const field = document.createElement('div'); const label = document.createElement('label'); label.className = 'form-label mb-1'; label.textContent = parameter.label + (parameter.required ? ' *' : ''); field.appendChild(label); let input; if (parameter.inputType === 'checkbox') { input = document.createElement('input'); input.type = 'checkbox'; input.className = 'form-check-input'; input.checked = String(parameter.defaultValue || 'false').toLowerCase() === 'true'; const wrapper = document.createElement('div'); wrapper.className = 'form-check'; wrapper.appendChild(input); field.appendChild(wrapper); } else if (parameter.inputType === 'select') { input = document.createElement('select'); input.className = 'form-select form-select-sm'; if (!parameter.required) { const emptyOption = document.createElement('option'); emptyOption.value = ''; emptyOption.textContent = '请选择'; input.appendChild(emptyOption); } for (const option of parameter.options || []) { const element = document.createElement('option'); element.value = option.value; element.textContent = option.label; if ((parameter.defaultValue ?? '') === option.value) element.selected = true; input.appendChild(element); } field.appendChild(input); } else { input = document.createElement('input'); input.type = parameter.inputType === 'number' ? 'number' : parameter.inputType === 'datetime-local' ? 'datetime-local' : 'text'; input.className = 'form-control form-control-sm'; input.value = parameter.defaultValue ?? ''; input.placeholder = parameter.description || parameter.label; if (parameter.inputType === 'number') input.step = 'any'; if (parameter.inputType === 'datetime-local') input.step = '1'; if (parameter.inputType === 'guid') { input.placeholder = parameter.description || '00000000-0000-0000-0000-000000000000'; input.pattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; input.spellcheck = false; input.autocomplete = 'off'; } field.appendChild(input); } if (parameter.description) { const help = document.createElement('div'); help.className = 'form-text mt-1'; help.textContent = parameter.description; field.appendChild(help); } parameterInputs[parameter.name] = { input, parameter }; return field; }
@@ -258,7 +243,7 @@
     });
 
     // expose plugin API
-    window.BrowserPlugins = { renderPluginOutputModal, openPluginOutputModal, openPluginArgumentModal, applyPluginOutputUpdate, syncPluginOutputUi, getPluginOutputMode, setPluginOutputMode, pluginCatalog, pluginOutputStore, pluginOutputUi };
+    window.BrowserPlugins = { renderPluginOutputModal, openPluginOutputModal, openPluginArgumentModal, applyPluginOutputUpdate, syncPluginOutputUi, pluginCatalog, pluginOutputStore, pluginOutputUi };
 
     // listen for plugin output from hub
     if (window.signalR && window.signalR.HubConnectionBuilder) {

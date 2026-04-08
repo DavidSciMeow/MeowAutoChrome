@@ -305,7 +305,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         var instanceCtn = _instanceManager.GetOrCreateInstance(plugin);
         var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
         var hostContext = new PluginHostContextCore(
-            _browserInstances.BrowserContext ?? throw new InvalidOperationException("Browser context is not available"),
+            _browserInstances.BrowserContext,
             _browserInstances.ActivePage,
             _browserInstances.CurrentInstanceId,
             normalizedArguments,
@@ -321,9 +321,21 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         {
             try { _instanceManager.CancelLifecycle(plugin); } catch { }
         }
-        var result = await _executionService.ExecuteControlAsync(instance, command, hostContext, combinedCts.Token);
-        combinedCts.Dispose();
-        return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data);
+        try
+        {
+            var result = await _executionService.ExecuteControlAsync(instance, command, hostContext, combinedCts.Token);
+            return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data);
+        }
+        catch (Exception ex)
+        {
+            try { _appLogService.WriteEntry(LogLevel.Error, ex.ToString(), $"Plugin.{plugin.Id}"); } catch { }
+            _logger.LogError(ex, "Plugin control failed for {PluginId}/{Command}", plugin.Id, command);
+            throw;
+        }
+        finally
+        {
+            combinedCts.Dispose();
+        }
     }
 
     /// <summary>
@@ -357,10 +369,17 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
             combinedCts.Token
         );
-
-
-        var result = await _executionService.ExecuteActionAsync(instance, action, hostContext, combinedCts.Token);
-        return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data);
+        try
+        {
+            var result = await _executionService.ExecuteActionAsync(instance, action, hostContext, combinedCts.Token);
+            return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data);
+        }
+        catch (Exception ex)
+        {
+            try { _appLogService.WriteEntry(LogLevel.Error, ex.ToString(), $"Plugin.{plugin.Id}"); } catch { }
+            _logger.LogError(ex, "Plugin action failed for {PluginId}/{ActionId}", plugin.Id, action.Id);
+            throw;
+        }
     }
 
     // 其余 DiscoverPluginsCore、GetOrCreatePluginInstance、ExecuteWithHostContextAsync 等方法请从 Web 迁移并整理到此处

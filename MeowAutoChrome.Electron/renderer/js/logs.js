@@ -2,6 +2,8 @@
 (function () {
     'use strict';
 
+    let logsApi = null;
+
     function getApiEndpoint(name) {
         try {
             if (window.__apiEndpoints && window.__apiEndpoints[name]) return window.__apiEndpoints[name];
@@ -210,6 +212,23 @@
             console.debug('renderAll: rendered', filtered.length, 'entries');
         }
 
+        function openLogsWithFilters(options) {
+            const settings = options || {};
+            try {
+                if (window.MeowSite && typeof window.MeowSite.activatePage === 'function') {
+                    window.MeowSite.activatePage('logs');
+                } else {
+                    window.location.hash = 'logs';
+                }
+            } catch { }
+
+            if (filterLevel && settings.level) filterLevel.value = settings.level;
+            if (filterCategory && settings.category) filterCategory.value = settings.category;
+            if (filterText) filterText.value = settings.text || '';
+            if (filterTimestamp && settings.timestamp) filterTimestamp.value = settings.timestamp;
+            renderAll();
+        }
+
         function addEntry(e) {
             const ne = normalizeEntry(e);
             const k = entryKey(ne);
@@ -259,6 +278,12 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = 'meowautochrome-logs.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
         });
+
+        logsApi = {
+            openLogsWithFilters,
+            refresh: loadInitial
+        };
+        window.MeowLogs = logsApi;
 
         clearBtn?.addEventListener('click', async () => {
             if (!confirm('确定要清空日志文件吗？此操作不可恢复。')) return;
