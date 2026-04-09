@@ -5,3 +5,4 @@ if (Test-Path $outputDir) {
 }
 
 dotnet publish .\MeowAutoChrome.ExamplePlugin\MeowAutoChrome.ExamplePlugin.csproj -c Release -o $outputDir
+
