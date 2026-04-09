@@ -19,7 +19,6 @@
     const liveToggleBtn = document.getElementById('liveToggleBtn');
     const headlessBadge = document.getElementById('headlessBadge');
     const headlessToggleIcon = document.getElementById('headlessToggleIcon');
-    const headlessToggleBtn = document.getElementById('headlessToggleBtn');
     const backBtn = document.getElementById('backBtn');
     const forwardBtn = document.getElementById('forwardBtn');
     const reloadBtn = document.getElementById('reloadBtn');
