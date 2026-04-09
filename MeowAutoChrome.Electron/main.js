@@ -50,13 +50,18 @@ const CONFIG = {
 
 // Attempt to find a packaged/published WebAPI executable in likely locations
 function findPackagedWebApiExec() {
-    const candidateDirs = [
-        path.join(__dirname, 'webapi'),
-        path.join(process.resourcesPath || '', 'webapi'),
-        path.join(process.resourcesPath || '', 'app', 'webapi'),
-        path.join(process.resourcesPath || '', 'app.asar.unpacked', 'webapi'),
-        path.join(__dirname, '..', 'webapi')
-    ];
+    const candidateDirs = app.isPackaged
+        ? [
+            path.join(process.resourcesPath || '', 'webapi'),
+            path.join(process.resourcesPath || '', 'app.asar.unpacked', 'webapi')
+        ]
+        : [
+            path.join(__dirname, 'webapi'),
+            path.join(process.resourcesPath || '', 'webapi'),
+            path.join(process.resourcesPath || '', 'app', 'webapi'),
+            path.join(process.resourcesPath || '', 'app.asar.unpacked', 'webapi'),
+            path.join(__dirname, '..', 'webapi')
+        ];
 
     const candidateNames = process.platform === 'win32'
         ? ['MeowAutoChrome.WebAPI.exe', 'MeowAutoChrome.WebAPI']
@@ -70,6 +75,7 @@ function findPackagedWebApiExec() {
         for (const name of candidateNames) {
             const candidate = path.join(dir, name);
             try {
+                if (candidate.includes('.asar')) continue;
                 if (!fs.existsSync(candidate)) continue;
                 if (process.platform !== 'win32') {
                     try { fs.chmodSync(candidate, 0o755); } catch (chmodErr) { console.warn('[main] chmod failed', chmodErr); }
