@@ -106,6 +106,10 @@
     // 默认展开插件区
     let pluginDrawerOpen = true;
     let selectedInstanceId = null;
+    const resourceMetricHistory = [];
+    const maxResourceMetricHistory = 30;
+    let systemInfoWindow = null;
+    let resourceMetricsBusy = false;
     let currentViewport = null;
     // `instanceHeadless` tracks the current instance's headless state (from /api/status).
     let instanceHeadless = false;
@@ -146,6 +150,19 @@
 
     function resolveApi(key, fallback) {
         return (window.__apiEndpoints && window.__apiEndpoints[key]) || fallback || key;
+    }
+
+    async function refreshResourceMetrics() {
+        if (resourceMetricsBusy) return;
+        resourceMetricsBusy = true;
+        try {
+            const response = await fetch(resolveApi('statusMetrics', '/api/status/metrics'), { cache: 'no-store' });
+            if (!response.ok) throw new Error('资源指标获取失败: ' + response.status);
+            renderResourceMetrics(await response.json());
+        } catch {
+        } finally {
+            resourceMetricsBusy = false;
+        }
     }
 
     function getValue(obj, camel, pascal, fallback) {
@@ -212,9 +229,287 @@
     function renderResourceMetrics(data) {
         const cpu = Number(getValue(data, 'cpuUsagePercent', 'CpuUsagePercent', 0));
         const memory = Number(getValue(data, 'memoryUsageMb', 'MemoryUsageMb', 0));
+        const sampledAt = new Date();
+        resourceMetricHistory.push({
+            timestamp: sampledAt.toISOString(),
+            timeLabel: sampledAt.toLocaleTimeString('zh-CN', { hour12: false }),
+            cpu,
+            memory
+        });
+        if (resourceMetricHistory.length > maxResourceMetricHistory) {
+            resourceMetricHistory.splice(0, resourceMetricHistory.length - maxResourceMetricHistory);
+        }
+
         if (systemInfoBtn) {
             systemInfoBtn.textContent = 'CPU ' + cpu.toFixed(1) + '% · RAM ' + memory.toFixed(1) + ' MB';
+            systemInfoBtn.title = '查看最近 CPU / RAM 记录';
+            systemInfoBtn.setAttribute('aria-label', '查看最近 CPU 和内存记录');
         }
+
+        refreshSystemInfoWindow();
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function buildMetricPolyline(values, maxValue, width, height, padding) {
+        if (!values.length) return '';
+        if (values.length === 1) {
+            const x = width / 2;
+            const y = height - padding - ((values[0] / maxValue) * (height - padding * 2));
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }
+
+        const plotWidth = width - padding * 2;
+        const plotHeight = height - padding * 2;
+        return values.map((value, index) => {
+            const ratioX = index / (values.length - 1);
+            const ratioY = maxValue <= 0 ? 0 : value / maxValue;
+            const x = padding + plotWidth * ratioX;
+            const y = height - padding - plotHeight * ratioY;
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+    }
+
+    function buildMetricArea(values, maxValue, width, height, padding) {
+        const polyline = buildMetricPolyline(values, maxValue, width, height, padding);
+        if (!polyline) return '';
+
+        const baselineY = height - padding;
+        const startX = values.length === 1 ? width / 2 : padding;
+        const endX = values.length === 1 ? width / 2 : width - padding;
+        return `${startX.toFixed(1)},${baselineY.toFixed(1)} ${polyline} ${endX.toFixed(1)},${baselineY.toFixed(1)}`;
+    }
+
+    function buildSystemInfoWindowMarkup() {
+        const latest = resourceMetricHistory[resourceMetricHistory.length - 1] || null;
+        const latestSummary = latest
+            ? `最近一次采样：${escapeHtml(latest.timeLabel)}，CPU ${escapeHtml(latest.cpu.toFixed(1))}% ，RAM ${escapeHtml(latest.memory.toFixed(1))} MB`
+            : '还没有采样记录。';
+
+        const chartWidth = 680;
+        const chartHeight = 320;
+        const padding = 28;
+        const cpuValues = resourceMetricHistory.map(entry => entry.cpu);
+        const memoryValues = resourceMetricHistory.map(entry => entry.memory);
+        const memoryPeak = Math.max(1, ...memoryValues, 100);
+        const cpuPolyline = buildMetricPolyline(cpuValues, 100, chartWidth, chartHeight, padding);
+        const cpuArea = buildMetricArea(cpuValues, 100, chartWidth, chartHeight, padding);
+        const memoryPolyline = buildMetricPolyline(memoryValues, memoryPeak, chartWidth, chartHeight, padding);
+        const memoryArea = buildMetricArea(memoryValues, memoryPeak, chartWidth, chartHeight, padding);
+        const xLabels = resourceMetricHistory.length > 0
+            ? [resourceMetricHistory[0], resourceMetricHistory[Math.floor((resourceMetricHistory.length - 1) / 2)], resourceMetricHistory[resourceMetricHistory.length - 1]]
+            : [];
+
+        return `<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>资源监控记录</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f7f4ec;
+            --panel: #fffdfa;
+            --border: #d7a441;
+            --border-soft: #e9d6ab;
+            --text: #2e2617;
+            --muted: #7b6b4f;
+            --accent: #a86d00;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+            background: linear-gradient(180deg, #fbf7ef 0%, var(--bg) 100%);
+            color: var(--text);
+        }
+        .shell {
+            padding: 18px;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .summary {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--accent);
+            padding: 8px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            font: inherit;
+        }
+        .btn:hover {
+            background: #fff3d9;
+        }
+        .panel {
+            background: rgba(255, 253, 250, 0.95);
+            border: 1px solid var(--border-soft);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 12px 32px rgba(97, 70, 20, 0.08);
+            padding: 14px;
+        }
+        .legend {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .legend-item {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+        }
+        .chart-wrap {
+            width: 100%;
+            overflow: hidden;
+            border-radius: 12px;
+            border: 1px solid #efe4c9;
+            background: linear-gradient(180deg, #fffdf7 0%, #fff7e6 100%);
+        }
+        svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+        .axis-label {
+            font-size: 13px;
+            fill: var(--muted);
+        }
+        .chart-note {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+        .empty {
+            padding: 24px 16px;
+            color: var(--muted);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="topbar">
+            <div>
+                <h1>资源监控记录</h1>
+                <div class="summary">${latestSummary}</div>
+            </div>
+            <div class="actions">
+                <button class="btn" type="button" onclick="window.close()">关闭窗口</button>
+            </div>
+        </div>
+        <div class="panel">
+            ${resourceMetricHistory.length ? `
+                <div class="legend">
+                    <span class="legend-item"><span class="legend-swatch" style="background:#d97706"></span>CPU 使用率</span>
+                    <span class="legend-item"><span class="legend-swatch" style="background:#2563eb"></span>RAM 占用</span>
+                </div>
+                <div class="chart-wrap">
+                    <svg viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="最近 CPU 与内存变化趋势图">
+                        <defs>
+                            <linearGradient id="cpuFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.40"></stop>
+                                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.04"></stop>
+                            </linearGradient>
+                            <linearGradient id="memoryFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"></stop>
+                                <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"></stop>
+                            </linearGradient>
+                        </defs>
+                        <rect x="0" y="0" width="${chartWidth}" height="${chartHeight}" fill="#fffdf7"></rect>
+                        <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${chartHeight - padding}" stroke="#d8c59c" stroke-width="1"></line>
+                        <line x1="${padding}" y1="${chartHeight - padding}" x2="${chartWidth - padding}" y2="${chartHeight - padding}" stroke="#d8c59c" stroke-width="1"></line>
+                        <line x1="${padding}" y1="${chartHeight / 2}" x2="${chartWidth - padding}" y2="${chartHeight / 2}" stroke="#eadbb6" stroke-width="1" stroke-dasharray="4 5"></line>
+                        <line x1="${padding}" y1="${padding}" x2="${chartWidth - padding}" y2="${padding}" stroke="#f2e7cc" stroke-width="1" stroke-dasharray="4 5"></line>
+                        ${cpuArea ? `<polygon points="${cpuArea}" fill="url(#cpuFill)"></polygon>` : ''}
+                        ${memoryArea ? `<polygon points="${memoryArea}" fill="url(#memoryFill)"></polygon>` : ''}
+                        ${memoryPolyline ? `<polyline points="${memoryPolyline}" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>` : ''}
+                        ${cpuPolyline ? `<polyline points="${cpuPolyline}" fill="none" stroke="#d97706" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>` : ''}
+                        <text x="${padding}" y="18" class="axis-label">CPU 100%</text>
+                        <text x="${chartWidth - padding}" y="18" text-anchor="end" class="axis-label">RAM 峰值 ${escapeHtml(memoryPeak.toFixed(1))} MB</text>
+                        <text x="${padding}" y="${chartHeight - 8}" class="axis-label">${escapeHtml(xLabels[0]?.timeLabel || '')}</text>
+                        <text x="${chartWidth / 2}" y="${chartHeight - 8}" text-anchor="middle" class="axis-label">${escapeHtml(xLabels[1]?.timeLabel || '')}</text>
+                        <text x="${chartWidth - padding}" y="${chartHeight - 8}" text-anchor="end" class="axis-label">${escapeHtml(xLabels[2]?.timeLabel || '')}</text>
+                    </svg>
+                </div>
+                <div class="chart-note">
+                    <span>最近 ${resourceMetricHistory.length} 次采样</span>
+                    <span>仅显示趋势，不展示明细表</span>
+                </div>` : '<div class="empty">还没有可显示的资源记录。</div>'}
+        </div>
+    </div>
+</body>
+</html>`;
+    }
+
+    function refreshSystemInfoWindow() {
+        if (!systemInfoWindow || systemInfoWindow.closed) {
+            systemInfoWindow = null;
+            return;
+        }
+
+        const doc = systemInfoWindow.document;
+        if (!doc) {
+            return;
+        }
+
+        doc.open();
+        doc.write(buildSystemInfoWindowMarkup());
+        doc.close();
+    }
+
+    function openSystemInfoWindow() {
+        const features = 'popup=yes,width=720,height=560,resizable=yes,scrollbars=yes';
+        if (!systemInfoWindow || systemInfoWindow.closed) {
+            systemInfoWindow = window.open('', 'meow-system-info-history', features);
+        } else {
+            try { systemInfoWindow.focus(); } catch { }
+        }
+
+        if (!systemInfoWindow) {
+            showError('无法打开资源记录窗口。', 'warning');
+            return;
+        }
+
+        refreshSystemInfoWindow();
+        try { systemInfoWindow.focus(); } catch { }
     }
 
     function updateStatusBadge(hasInstance) {
@@ -935,6 +1230,8 @@
         }
     });
 
+    systemInfoBtn?.addEventListener('click', () => openSystemInfoWindow());
+
     fpsDisplay?.addEventListener('click', () => openScreencastFpsModal());
     fpsDisplay?.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -994,10 +1291,17 @@
 
     setTimeout(() => {
         refreshStatus().catch(() => { });
+        refreshResourceMetrics().catch(() => { });
         loadPlugins().catch(() => { });
         // Ensure toolbar reflects persisted global Headless setting on startup
         loadGlobalSettings().catch(() => { });
     }, 0);
+
+    setInterval(() => {
+        if (document.hidden) return;
+        if (document.querySelector('[data-page="browser"]')?.classList.contains('d-none')) return;
+        refreshResourceMetrics().catch(() => { });
+    }, 500);
 
     setInterval(() => {
         if (document.hidden) return;

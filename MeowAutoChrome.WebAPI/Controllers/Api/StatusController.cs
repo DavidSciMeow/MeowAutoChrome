@@ -28,6 +28,20 @@ public class StatusController(BrowserInstanceManager browserInstances, Screencas
     }
 
     /// <summary>
+    /// 读取轻量资源指标快照，仅包含 CPU 和内存占用。<br/>
+    /// Read a lightweight resource metrics snapshot containing only CPU and memory usage.
+    /// </summary>
+    [HttpGet("metrics")]
+    public IActionResult GetMetrics()
+    {
+        var metrics = resourceMetricsService.GetSnapshot();
+        return Ok(new BrowserResourceMetricsResponse(
+            metrics.CpuUsagePercent,
+            metrics.MemoryUsageMb,
+            DateTimeOffset.UtcNow));
+    }
+
+    /// <summary>
     /// 组装状态响应对象。<br/>
     /// Build the status response payload.
     /// </summary>

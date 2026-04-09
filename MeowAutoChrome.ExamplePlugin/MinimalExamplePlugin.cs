@@ -3,11 +3,11 @@ using MeowAutoChrome.Contracts.Attributes;
 
 namespace MeowAutoChrome.ExamplePlugin;
 
-[Plugin("example.minimal", "Example Minimal Plugin", Description = "示例：展示新的 Host/Browser facade 契约。")]
 /// <summary>
 /// 示例最小插件实现，演示如何通过 Host facade 管理自己名下的浏览器实例，并访问当前实例上的页面与浏览器上下文。<br/>
 /// Minimal example plugin implementation demonstrating how to manage plugin-owned browser instances via the Host facade and access pages/browser context on the current instance.
 /// </summary>
+[Plugin("example.minimal", "Example Minimal Plugin", Description = "示例：展示新的 Host/Browser facade 契约。")]
 public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
 {
     private const string DefaultInstanceId = "ExamplePluginInstance";
@@ -34,7 +34,7 @@ public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
         if (instance is null) return Result.Fail("Host did not provide or create a browser instance.");
 
         await SelectBrowserInstanceAsync(instance.InstanceId);
-        await PublishUpdateAsync("插件已启动。", new Dictionary<string, string?>
+        await MessageAsync("插件已启动。", new Dictionary<string, string?>
         {
             ["pluginId"] = Host.PluginId,
             ["state"] = State.ToString(),
@@ -69,7 +69,7 @@ public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
             if (await CloseBrowserInstanceAsync(instance.InstanceId)) closed++;
         }
 
-        await PublishUpdateAsync("插件已停止。", new Dictionary<string, string?>
+        await MessageAsync("插件已停止。", new Dictionary<string, string?>
         {
             ["state"] = State.ToString(),
             ["closedInstances"] = closed.ToString()
@@ -89,67 +89,63 @@ public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
     [PAction(Name = "ReturnObject")]
     public async Task<IResult> ReturnObjectAsync() => Result.Ok(new { now = DateTime.UtcNow, message = "returned object" });
 
-    [PAction(Name = "ReturnGeneric")]
     /// <summary>
     /// 返回一个泛型结果。<br/>
     /// Return a generic result.
     /// </summary>
+    [PAction(Name = "ReturnGeneric")]
     public Task<Result<int>> ReturnGenericAsync() => Task.FromResult(Result<int>.Ok(42));
 
-    [PAction(Name = "VoidTask")]
     /// <summary>
     /// 返回无结果异步任务。<br/>
     /// Return an asynchronous task without a result payload.
     /// </summary>
+    [PAction(Name = "VoidTask")]
     public async Task VoidTaskAsync() => await Task.Delay(10, CancellationToken);
 
-    [PAction(Name = "Throw")]
     /// <summary>
     /// 抛出一个示例异常，用于观察宿主错误处理。<br/>
     /// Throw a sample exception so the host's error handling can be observed.
     /// </summary>
+    [PAction(Name = "Throw")]
     public Task<IResult> ThrowAsync() => throw new InvalidOperationException("示例异常");
 
-    [PAction(Name = "ReturnPrimitive")]
     /// <summary>
     /// 返回基础类型结果。<br/>
     /// Return a primitive result.
     /// </summary>
+    [PAction(Name = "ReturnPrimitive")]
     public Task<int> ReturnPrimitiveAsync() => Task.FromResult(7);
 
-    [PAction(Name = "ValueTaskResult")]
     /// <summary>
     /// 返回 ValueTask 包装的字符串结果。<br/>
     /// Return a string result wrapped in ValueTask.
     /// </summary>
+    [PAction(Name = "ValueTaskResult")]
     public ValueTask<Result<string>> ValueTaskResultAsync() => new(Result<string>.Ok("value-task-result"));
 
-    [PAction(Name = "EvaluateActivePage")]
     /// <summary>
     /// 在当前活动页面上执行 JavaScript 并返回标题。<br/>
     /// Execute JavaScript on the current active page and return the title.
     /// </summary>
+    [PAction(Name = "EvaluateActivePage")]
     public async Task<IResult> EvaluateActivePageAsync()
     {
         if (ActivePage is null)
             return Result.Fail("No active page available");
 
-        await PublishUpdateAsync("开始读取当前页面标题。", null);
+        await MessageAsync("开始读取当前页面标题。");
         var title = await ActivePage.EvaluateAsync<string>("() => document.title");
-        await PublishUpdateAsync("已读取页面标题。", new Dictionary<string, string?>
-        {
-            ["title"] = title,
-            ["baseAddress"] = Host?.BaseAddress
-        });
+        await MessageAsync($"已读取页面标题。通过JS {title}");
 
         return Result.Ok(new { title });
     }
 
-    [PAction(Name = "OpenBaiduAndGetTitle")]
     /// <summary>
     /// 在当前插件拥有的实例中打开百度并返回标题。若当前没有可用实例，则先请求宿主创建一个。<br/>
     /// Open Baidu in a plugin-owned instance and return the title. If no usable instance exists, ask the host to create one first.
     /// </summary>
+    [PAction(Name = "OpenBaiduAndGetTitle")]
     public async Task<IResult> OpenBaiduAndGetTitleAsync()
     {
         if (HostContext is null)
@@ -166,27 +162,15 @@ public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
             return Result.Fail("No browser context is available for the selected instance.");
 
         await SelectBrowserInstanceAsync(instance.InstanceId);
-        await PublishUpdateAsync("准备打开百度首页。", new Dictionary<string, string?>
-        {
-            ["url"] = "https://www.baidu.com",
-            ["instanceId"] = instance.InstanceId
-        });
+        await ToastAsync("准备打开百度首页。");
 
         var page = await instance.BrowserContext.NewPageAsync();
         try
         {
-            await PublishUpdateAsync("新页面已打开，开始导航。", new Dictionary<string, string?>
-            {
-                ["instanceId"] = instance.InstanceId,
-                ["step"] = "navigate"
-            });
+            await ToastAsync("新页面已打开，开始导航。");
             await page.GotoAsync("https://www.baidu.com");
             var title = await page.TitleAsync();
-            await ToastAsync("导航完成并取得标题。", new Dictionary<string, string?>
-            {
-                ["instanceId"] = instance.InstanceId,
-                ["title"] = title
-            });
+            await ToastAsync($"导航完成并取得标题。{title}");
             return Result.Ok(new { instanceId = instance.InstanceId, title });
         }
         finally

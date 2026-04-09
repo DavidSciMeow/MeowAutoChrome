@@ -47,10 +47,8 @@ public abstract class PluginBase : IPlugin
         get
         {
             var current = CurrentBrowserInstance;
-            if (current is not null && string.Equals(current.OwnerId, Host.PluginId, StringComparison.OrdinalIgnoreCase))
-                return current;
-
-            return Instances.FirstOrDefault();
+            if (current is not null && string.Equals(current.OwnerId, Host.PluginId, StringComparison.OrdinalIgnoreCase)) return current;
+            return Instances.Count > 0 ? Instances[0] : null;
         }
     }
 
@@ -106,7 +104,7 @@ public abstract class PluginBase : IPlugin
     /// 发布插件运行过程中的消息或结构化数据。默认只写入消息记录；当 toastRequested 为 true 时，宿主应额外推送一条 toast。<br/>
     /// Publish an in-progress plugin message or structured data payload. By default it only updates the message feed; when toastRequested is true, the host should also push a toast.
     /// </summary>
-    protected Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool toastRequested = false)
+    protected Task MessageAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool toastRequested = false)
         => Host.PublishUpdateAsync(message, data, toastRequested);
 
     /// <summary>

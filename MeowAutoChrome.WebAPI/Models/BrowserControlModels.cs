@@ -135,6 +135,18 @@ public sealed record BrowserStatusResponse(
     bool IsHeadless);
 
 /// <summary>
+/// 轻量资源指标响应。<br/>
+/// Lightweight resource metrics response.
+/// </summary>
+/// <param name="CpuUsagePercent">CPU 占用。<br/>CPU usage percent.</param>
+/// <param name="MemoryUsageMb">内存占用。<br/>Memory usage in MB.</param>
+/// <param name="TimestampUtc">采样时间。<br/>Sampling timestamp in UTC.</param>
+public sealed record BrowserResourceMetricsResponse(
+    double CpuUsagePercent,
+    double MemoryUsageMb,
+    DateTimeOffset TimestampUtc);
+
+/// <summary>
 /// 标签页信息 DTO。<br/>
 /// Tab information DTO.
 /// </summary>
