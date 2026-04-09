@@ -73,6 +73,20 @@ catch (Exception ex)
 
 try
 {
+    var playwrightRuntime = app.Services.GetRequiredService<IPlaywrightRuntimeService>();
+    var status = playwrightRuntime.GetStatus();
+    var message = status.IsInstalled
+        ? $"Playwright Chromium ready: {status.BrowserExecutablePath}"
+        : status.Message ?? "Playwright Chromium is not installed.";
+    appLogService.WriteEntry(status.IsInstalled ? LogLevel.Debug : LogLevel.Warning, message, "Startup.Playwright");
+}
+catch (Exception ex)
+{
+    appLogService.WriteEntry(LogLevel.Warning, ex.ToString(), "Startup.Playwright");
+}
+
+try
+{
     var settingsProvider = app.Services.GetRequiredService<IProgramSettingsProvider>();
     var settings = settingsProvider.GetAsync().GetAwaiter().GetResult();
     var currentPluginDir = settings.PluginDirectory ?? string.Empty;

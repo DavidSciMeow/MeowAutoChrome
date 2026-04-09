@@ -19,7 +19,8 @@ namespace MeowAutoChrome.Core;
 /// <param name="logger">记录器实例 / logger.</param>
 /// <param name="loggerFactory">可选的日志工厂 / optional logger factory.</param>
 /// <param name="settingsProvider">可选的程序设置提供者 / optional program settings provider.</param>
-public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logger, ILoggerFactory? loggerFactory = null, IProgramSettingsProvider? settingsProvider = null) : ICoreBrowserInstanceManager
+/// <param name="playwrightRuntime">可选的 Playwright 运行时服务 / optional Playwright runtime service.</param>
+public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logger, ILoggerFactory? loggerFactory = null, IProgramSettingsProvider? settingsProvider = null, IPlaywrightRuntimeService? playwrightRuntime = null) : ICoreBrowserInstanceManager
 {
     private readonly ConcurrentDictionary<string, ICoreBrowserInstance> _instances = new();
     private string? _currentInstanceId;
@@ -179,6 +180,13 @@ public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logg
     /// <returns>创建的实例 Id。<br/>The created instance id.</returns>
     public async Task<string> CreateAsync(string ownerId, string displayName, string userDataDir, bool headless = true, string? previewInstanceId = null)
     {
+        string? browserExecutablePath = null;
+        if (playwrightRuntime is not null)
+        {
+            await playwrightRuntime.EnsureInstalledAsync();
+            browserExecutablePath = playwrightRuntime.GetStatus().BrowserExecutablePath;
+        }
+
         // use a shorter id to keep per-instance directory names readable
         string id;
         if (!string.IsNullOrWhiteSpace(previewInstanceId))
@@ -190,9 +198,13 @@ public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logg
             var shortId = Guid.NewGuid().ToString("N").Substring(0, 8);
             id = $"{ownerId}-{shortId}";
         }
+
+        if (_instances.ContainsKey(id))
+            throw new InvalidOperationException($"Browser instance '{id}' already exists.");
+
         var inst = new PlaywrightInstance(loggerFactory?.CreateLogger<PlaywrightInstance>() ?? NullLogger<PlaywrightInstance>.Instance, id, displayName, ownerId);
         if (!_instances.TryAdd(id, inst))
-            throw new InvalidOperationException("Failed to add instance");
+            throw new InvalidOperationException($"Browser instance '{id}' already exists.");
 
         // Subscribe to instance tab-closed notifications and re-raise at core level
         try
@@ -209,7 +221,7 @@ public class BrowserInstanceManagerCore(ILogger<BrowserInstanceManagerCore> logg
         // persistent contexts run simultaneously. Use a subfolder under the provided root.
         var instanceUserDataDir = Path.Combine(userDataDir, id);
         Directory.CreateDirectory(instanceUserDataDir);
-        await inst.InitializeAsync(instanceUserDataDir, headless);
+        await inst.InitializeAsync(instanceUserDataDir, headless, browserExecutablePath: browserExecutablePath);
         _currentInstanceId = id;
         logger.LogInformation("Created instance {Id}", id);
         return id;

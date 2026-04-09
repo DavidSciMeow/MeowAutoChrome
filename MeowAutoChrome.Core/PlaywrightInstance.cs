@@ -156,7 +156,7 @@ public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string insta
     /// <param name="userAgent">可选的用户代理字符串 / optional user agent string.</param>
     /// <returns>异步操作。<br/>Asynchronous operation.</returns>
     /// <exception cref="Exception">当初始化或 Playwright 启动失败时抛出 / Thrown when initialization or Playwright startup fails.</exception>
-    public async Task InitializeAsync(string userDataDir, bool headless, string? userAgent = null)
+    public async Task InitializeAsync(string userDataDir, bool headless, string? userAgent = null, string? browserExecutablePath = null)
     {
         // remember the user data path for this instance so callers can read it later
         UserDataDirectoryPath = userDataDir;
@@ -166,6 +166,7 @@ public class PlaywrightInstance(ILogger<PlaywrightInstance> logger, string insta
             var playwright = await GetSharedPlaywrightAsync();
             _context = await playwright.Chromium.LaunchPersistentContextAsync(userDataDir, new BrowserTypeLaunchPersistentContextOptions
             {
+                ExecutablePath = string.IsNullOrWhiteSpace(browserExecutablePath) ? null : browserExecutablePath,
                 Headless = headless,
                 UserAgent = userAgent,
                 ViewportSize = null,

@@ -68,6 +68,9 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         return Task.FromResult<PluginBrowserInstanceInfo?>(info);
     }
 
+    private Task<IReadOnlyList<string>> GetPluginInstanceIdsAsync(string pluginId, CancellationToken ct)
+        => Task.FromResult(_browserInstances.GetPluginInstanceIds(pluginId));
+
     /// <summary>
     /// 异步释放：取消后台扫描并等待任务完成。<br/>
     /// Asynchronously disposes resources: cancels background scanning and awaits the scanning task.
@@ -314,6 +317,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token),
             RequestNewBrowserInstanceAsync,
             GetBrowserInstanceInfoAsync,
+            token => GetPluginInstanceIdsAsync(plugin.Id, token),
             (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
             combinedCts.Token
         );
@@ -366,6 +370,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token),
             RequestNewBrowserInstanceAsync,
             GetBrowserInstanceInfoAsync,
+            token => GetPluginInstanceIdsAsync(plugin.Id, token),
             (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
             combinedCts.Token
         );
@@ -397,6 +402,10 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             return null;
         var ownerId = string.IsNullOrWhiteSpace(options.OwnerId) ? "plugin" : options.OwnerId;
         var display = string.IsNullOrWhiteSpace(options.DisplayName) ? ownerId : options.DisplayName;
+        var requestedInstanceId = string.IsNullOrWhiteSpace(options.RequestedInstanceId) ? null : options.RequestedInstanceId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(requestedInstanceId) && requestedInstanceId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException($"Requested instance id '{requestedInstanceId}' contains invalid path characters.", nameof(options));
 
         // Load settings possibly provided by host
         var settings = new Struct.ProgramSettings();
@@ -446,7 +455,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
 
         try
         {
-            var instId = await _browserInstances.CreateAsync(ownerId, display, userData, options.Headless, previewInstanceId: null);
+            var instId = await _browserInstances.CreateAsync(ownerId, display, userData, options.Headless, previewInstanceId: requestedInstanceId);
             _logger.LogInformation("Created plugin instance {Inst} for {Plugin}", instId, ownerId);
             return instId;
         }

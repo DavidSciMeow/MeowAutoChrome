@@ -22,6 +22,11 @@ public interface IPluginContext
     /// </summary>
     IPage? ActivePage { get; }
     /// <summary>
+    /// 当前绑定到插件上下文的浏览器实例 ID。<br/>
+    /// Browser instance id currently bound to the plugin context.
+    /// </summary>
+    string BrowserInstanceId { get; }
+    /// <summary>
     /// 插件的唯一标识符。<br/>
     /// Unique identifier for the plugin.
     /// </summary>
@@ -53,6 +58,13 @@ public interface IPluginContext
     /// <param name="cancellationToken">可选的取消令牌。<br/>Optional cancellation token.</param>
     /// <returns>若找不到或宿主不公开元数据则返回 null。<br/>Returns null if the instance is not found or host does not expose metadata.</returns>
     Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// 请求宿主返回当前插件拥有的浏览器实例 ID 列表。<br/>
+    /// Request the list of browser instance ids owned by the current plugin.
+    /// </summary>
+    /// <param name="cancellationToken">可选的取消令牌。<br/>Optional cancellation token.</param>
+    /// <returns>当前插件拥有的实例 ID 列表。<br/>Instance ids owned by the current plugin.</returns>
+    Task<IReadOnlyList<string>> GetPluginInstanceIdsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 允许插件将日志写入宿主应用的集中日志系统。插件可以调用此方法来记录自己的运行时信息或错误。

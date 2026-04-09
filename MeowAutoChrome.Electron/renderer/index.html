@@ -15,6 +15,29 @@
 
     <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:10800;"></div>
 
+    <div id="playwrightGate" class="playwright-gate d-none" aria-live="polite">
+        <div class="playwright-gate-panel">
+            <div class="playwright-gate-eyebrow">运行时准备</div>
+            <h1 class="playwright-gate-title">需要先安装 Playwright Chromium</h1>
+            <p id="playwrightGateMessage" class="playwright-gate-message">正在检查 Playwright 运行时状态...</p>
+            <div class="playwright-gate-meta">
+                <div>安装目录：<span id="playwrightGateInstallDir">加载中...</span></div>
+                <div>安装器入口：<span id="playwrightGateScriptPath">加载中...</span></div>
+            </div>
+            <div class="playwright-gate-actions">
+                <select id="playwrightGateInstallMode" class="form-select form-select-sm"
+                    style="width:auto;min-width:180px;">
+                    <option value="online">在线安装</option>
+                    <option value="offline">离线安装（chrome-win64.zip）</option>
+                </select>
+                <button type="button" id="playwrightGateInstallBtn" class="btn btn-primary">安装 Chromium</button>
+                <button type="button" id="playwrightGateRetryBtn" class="btn btn-outline-secondary">重新检查</button>
+            </div>
+            <div id="playwrightGateStatus" class="playwright-gate-status">未开始</div>
+            <pre id="playwrightGateOutput" class="playwright-gate-output d-none"></pre>
+        </div>
+    </div>
+
     <main class="app-content px-3 px-xl-4">
         <div class="app-main">
             <section class="app-page app-page-browser" data-page="browser">
@@ -460,6 +483,49 @@
                                                 id="defaultPluginDirectory">加载中...</span>。支持多个根路径，用分号或竖线分隔。</div>
                                         <input id="PluginDirectoryPicker" type="file" webkitdirectory directory
                                             style="display:none;" />
+                                    </div>
+                                </section>
+
+                                <section id="playwrightSettingsCard" class="card shadow-sm settings-card">
+                                    <div class="card-header fw-semibold">Playwright 运行时</div>
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+                                            <div>
+                                                <div class="form-label mb-1">当前状态</div>
+                                                <div id="playwrightRuntimeState" class="small text-muted">检查中...</div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <select id="PlaywrightInstallMode" class="form-select form-select-sm"
+                                                    style="width:auto;min-width:220px;">
+                                                    <option value="online">在线安装</option>
+                                                    <option value="offline">离线安装（chrome-win64.zip）</option>
+                                                </select>
+                                                <button type="button" id="PlaywrightInstallBtn"
+                                                    class="btn btn-primary btn-sm">安装 Chromium</button>
+                                                <button type="button" id="PlaywrightUninstallBtn"
+                                                    class="btn btn-outline-danger btn-sm">卸载 Chromium</button>
+                                                <button type="button" id="PlaywrightUninstallAllBtn"
+                                                    class="btn btn-danger btn-sm">彻底卸载全部缓存</button>
+                                            </div>
+                                        </div>
+                                        <div class="form-text mt-2">安装由 Core 直接完成；前端调用 WebAPI，WebAPI 再调用 Core 运行时服务。
+                                        </div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div class="small text-muted mb-1">浏览器安装目录</div>
+                                        <div id="playwrightRuntimeLocation" class="settings-path-value">加载中...</div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div class="small text-muted mb-1">安装器入口</div>
+                                        <div id="playwrightRuntimeScriptPath" class="settings-path-value">加载中...</div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div id="playwrightRuntimeHelp" class="small text-muted">安装后才允许创建浏览器实例和打开页面。
+                                        </div>
+                                    </div>
+                                    <div id="playwrightRuntimeOutputPanel" class="card-body border-top d-none">
+                                        <div class="small text-muted mb-2">最近一次安装器输出</div>
+                                        <pre id="playwrightRuntimeOutput" class="playwright-runtime-output mb-0"></pre>
                                     </div>
                                 </section>
 

@@ -10,5 +10,13 @@
     ],
     "directories": {
         "output": "../Artifact/Electron"
+    },
+    "win": {
+        "target": [
+            "nsis"
+        ],
+        "signAndEditExecutable": false,
+        "verifyUpdateCodeSignature": false,
+        "forceCodeSigning": false
     }
 }

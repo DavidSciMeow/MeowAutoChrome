@@ -1,5 +1,6 @@
 ﻿using MeowAutoChrome.Contracts;
 using MeowAutoChrome.Contracts.Attributes;
+using Microsoft.Playwright;
 
 namespace MeowAutoChrome.ExamplePlugin;
 
@@ -15,6 +16,16 @@ namespace MeowAutoChrome.ExamplePlugin;
 public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
 {
     private Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = false) => HostContext?.PublishUpdateAsync(message, data, openModal) ?? Task.CompletedTask;
+
+    private async Task<(string? CurrentOwnedInstanceId, IReadOnlyList<string> OwnedInstanceIds)> GetOwnedInstancesAsync()
+    {
+        if (HostContext is null)
+            return (null, Array.Empty<string>());
+
+        var ownedInstanceIds = await HostContext.GetPluginInstanceIdsAsync(HostContext.CancellationToken);
+        var currentOwnedInstanceId = ownedInstanceIds.FirstOrDefault(id => string.Equals(id, HostContext.BrowserInstanceId, StringComparison.Ordinal));
+        return (currentOwnedInstanceId, ownedInstanceIds);
+    }
 
     /// <summary>
     /// 插件状态。<br/>
@@ -41,6 +52,8 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// <returns>返回操作结果（可能包含额外数据）。<br/>Returns an operation result (may include additional data).</returns>
     public async Task<IResult> StartAsync()
     {
+        if (HostContext is null) return Result.Fail("No host context available");
+
         State = PluginState.Running;
         await PublishUpdateAsync("插件已启动。", new Dictionary<string, string?>
         {
@@ -50,41 +63,21 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
 
         try
         {
-            // If host provided an active page, report its title (as before)
-            if (HostContext?.ActivePage is not null)
+            var (currentOwnedInstanceId, ownedInstanceIds) = await GetOwnedInstancesAsync();
+            if (!string.IsNullOrWhiteSpace(currentOwnedInstanceId))
             {
-                string? title = null;
-                try
+                await PublishUpdateAsync("已复用当前浏览器实例。", new Dictionary<string, string?>
                 {
-                    title = await HostContext.ActivePage.TitleAsync();
-                }
-                catch
-                {
-                    // swallow, best-effort
-                }
-
-                return Result.Ok(new { title });
+                    ["instanceId"] = currentOwnedInstanceId,
+                    ["displayName"] = "ExamplePluginInstance"
+                });
+                return Result.Ok(new { instanceId = currentOwnedInstanceId, reused = true });
             }
 
-            // Demonstrate requesting a fresh browser instance from the host.
-            if (HostContext is not null)
-            {
-                var opts = new BrowserCreationOptions(OwnerId: "example.minimal", UserDataDirectory: null, BrowserType: "chromium", Headless: false, UserAgent: null, DisplayName: "ExamplePluginInstance");
-                var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
-                if (!string.IsNullOrWhiteSpace(instanceId))
-                {
-                    await PublishUpdateAsync("已请求新的浏览器实例。", new Dictionary<string, string?>
-                    {
-                        ["instanceId"] = instanceId,
-                        ["displayName"] = "ExamplePluginInstance"
-                    });
-                    return Result.Ok(new { instanceId });
-                }
+            if (ownedInstanceIds.Count > 0)
+                return Result.Fail($"Plugin has existing instances ({string.Join(", ", ownedInstanceIds)}), but none is the current selected instance.");
 
-                return Result.Fail("Host refused to create a new browser instance.");
-            }
-
-            return Result.Ok(new { message = "Started. No active page available and no host context to request new one." });
+            return Result.Fail("No existing browser instance owned by this plugin is available to reuse.");
         }
         catch (Exception ex)
         {
@@ -97,14 +90,20 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// Stop the plugin and release resources.
     /// </summary>
     /// <returns>返回操作结果。<br/>Returns operation result.</returns>
-    public Task<IResult> StopAsync()
+    public async Task<IResult> StopAsync()
     {
+        if (HostContext is null) return Result.Fail("No host context available");
+        while (true)
+        {
+            if (HostContext.ActivePage is IPage a) await a.CloseAsync();
+            else break;
+        }
         State = PluginState.Stopped;
         _ = PublishUpdateAsync("插件已停止。", new Dictionary<string, string?>
         {
             ["state"] = State.ToString()
         });
-        return Task.FromResult<IResult>(Result.Ok(new { message = "Stopped." }));
+        return Result.Ok(new { message = "Stopped." });
     }
 
     /// <summary>
@@ -125,9 +124,7 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     /// 异步释放插件所持有的非托管资源（若有）。<br/>
     /// Asynchronously dispose unmanaged resources held by the plugin (if any).
     /// </summary>
-    public ValueTask DisposeAsync() =>
-        // No unmanaged resources in this minimal example.
-        ValueTask.CompletedTask;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     // Extra demo actions to illustrate different return shapes for plugins
     [PAction(Name = "ReturnObject")]
@@ -196,33 +193,34 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     {
         if (HostContext is null) return Result.Fail("No host context available");
 
-        await PublishUpdateAsync("准备请求新的浏览器实例。", new Dictionary<string, string?>
+        const string requestedInstanceId = "Example-With-Args";
+
+        var (_, ownedInstanceIds) = await GetOwnedInstancesAsync();
+        var reusableInstanceId = ownedInstanceIds.FirstOrDefault(id => string.Equals(id, requestedInstanceId, StringComparison.Ordinal));
+        if (!string.IsNullOrWhiteSpace(reusableInstanceId))
         {
-            ["browserType"] = "chromium",
-            ["headless"] = "true"
+            var existing = await HostContext.GetBrowserInstanceInfoAsync(reusableInstanceId, HostContext.CancellationToken);
+            await PublishUpdateAsync("复用已存在的浏览器实例。", new Dictionary<string, string?>
+            {
+                ["instanceId"] = reusableInstanceId,
+                ["mode"] = "with-args-reused"
+            });
+
+            return Result.Ok(new
+            {
+                instanceId = reusableInstanceId,
+                reused = true,
+                displayName = existing?.DisplayName
+            });
+        }
+
+        await PublishUpdateAsync("未找到可复用的浏览器实例。", new Dictionary<string, string?>
+        {
+            ["requestedInstanceId"] = requestedInstanceId,
+            ["mode"] = "with-args-missing"
         });
 
-        var opts = new BrowserCreationOptions(
-            OwnerId: HostContext.PluginId,
-            UserDataDirectory: null,
-            BrowserType: "chromium",
-            Headless: true,
-            UserAgent: "ExamplePlugin/1.0",
-            DisplayName: "Example-With-Args",
-            Args: new[] { "--no-sandbox", "--disable-setuid-sandbox" }
-        );
-
-        var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
-        if (string.IsNullOrWhiteSpace(instanceId))
-            return Result.Fail("Host refused to create a new browser instance.");
-
-        await PublishUpdateAsync("实例创建成功。", new Dictionary<string, string?>
-        {
-            ["instanceId"] = instanceId,
-            ["mode"] = "with-args"
-        });
-
-        return Result.Ok(new { instanceId });
+        return Result.Fail($"No reusable browser instance '{requestedInstanceId}' exists for plugin '{HostContext.PluginId}'.");
     }
 
     [PAction(Name = "EvaluateActivePage")]
@@ -291,50 +289,42 @@ public sealed class MinimalExamplePlugin : IPlugin, IAsyncDisposable
     {
         if (HostContext is null) return Result.Fail("No host context available");
 
+        var (currentOwnedInstanceId, ownedInstanceIds) = await GetOwnedInstancesAsync();
+        if (string.IsNullOrWhiteSpace(currentOwnedInstanceId))
+        {
+            if (ownedInstanceIds.Count > 0)
+                return Result.Fail($"Plugin has reusable instances ({string.Join(", ", ownedInstanceIds)}), but none is currently selected.");
+
+            return Result.Fail("No existing browser instance owned by this plugin is available to reuse.");
+        }
+
+        var browserContext = HostContext.BrowserContext;
+        if (browserContext is null) return Result.Fail("Host did not provide a browser context for the current reused instance.");
+
         await PublishUpdateAsync("准备打开百度首页。", new Dictionary<string, string?>
         {
-            ["url"] = "https://www.baidu.com"
-        });
-
-        var opts = new BrowserCreationOptions(
-            OwnerId: HostContext.PluginId,
-            UserDataDirectory: null,
-            BrowserType: "chromium",
-            Headless: true,
-            UserAgent: "ExamplePlugin/1.0",
-            DisplayName: "Example-Baidu"
-        );
-
-        var instanceId = await HostContext.RequestNewBrowserInstanceAsync(opts, HostContext.CancellationToken);
-        if (string.IsNullOrWhiteSpace(instanceId))
-            return Result.Fail("Host refused to create a new browser instance.");
-
-        await PublishUpdateAsync("浏览器实例已创建。", new Dictionary<string, string?>
-        {
-            ["instanceId"] = instanceId
+            ["url"] = "https://www.baidu.com",
+            ["instanceId"] = currentOwnedInstanceId
         });
 
         try
         {
-            var browserContext = HostContext.BrowserContext;
-            if (browserContext is null) return Result.Fail("Host did not provide a browser context.");
-
             var page = await browserContext.NewPageAsync();
             try
             {
                 await PublishUpdateAsync("新页面已打开，开始导航。", new Dictionary<string, string?>
                 {
-                    ["instanceId"] = instanceId,
+                    ["instanceId"] = currentOwnedInstanceId,
                     ["step"] = "navigate"
                 });
                 await page.GotoAsync("https://www.baidu.com");
                 var title = await page.TitleAsync();
                 await PublishUpdateAsync("导航完成并取得标题。", new Dictionary<string, string?>
                 {
-                    ["instanceId"] = instanceId,
+                    ["instanceId"] = currentOwnedInstanceId,
                     ["title"] = title
                 }, true);
-                return Result.Ok(new { instanceId, title });
+                return Result.Ok(new { instanceId = currentOwnedInstanceId, title, reused = true });
             }
             finally
             {

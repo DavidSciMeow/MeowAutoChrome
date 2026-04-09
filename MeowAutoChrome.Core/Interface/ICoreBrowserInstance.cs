@@ -95,7 +95,8 @@ public interface ICoreBrowserInstance
     /// <param name="userDataDir">用户数据目录路径 / user data directory path.</param>
     /// <param name="headless">是否以无头模式运行 / whether to run headless.</param>
     /// <param name="userAgent">可选的 User-Agent 字符串 / optional user agent string.</param>
-    Task InitializeAsync(string userDataDir, bool headless, string? userAgent = null);
+    /// <param name="browserExecutablePath">可选的浏览器可执行文件路径 / optional browser executable path.</param>
+    Task InitializeAsync(string userDataDir, bool headless, string? userAgent = null, string? browserExecutablePath = null);
     /// <summary>
     /// 关闭实例并释放资源。<br/>
     /// Close the instance and release resources.

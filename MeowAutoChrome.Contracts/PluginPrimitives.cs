@@ -131,6 +131,7 @@ public sealed record Result<T>(T? Value, bool Success = true, string? Message = 
 /// <param name="UserAgent">可选的用户代理字符串。<br/>Optional user agent string.</param>
 /// <param name="DisplayName">可选的显示名称。<br/>Optional display name.</param>
 /// <param name="Args">传递给浏览器的命令行参数数组。<br/>Array of command line arguments passed to the browser.</param>
+/// <param name="RequestedInstanceId">可选的目标实例 ID；提供时宿主会严格按该值创建，若已存在则失败。<br/>Optional requested instance id; when provided, the host uses this exact value and fails if it is already in use.</param>
 public sealed record BrowserCreationOptions
 (
     string? OwnerId = null,
@@ -139,7 +140,8 @@ public sealed record BrowserCreationOptions
     bool Headless = true,
     string? UserAgent = null,
     string? DisplayName = null,
-    string[]? Args = null
+    string[]? Args = null,
+    string? RequestedInstanceId = null
 );
 
 /// <summary>

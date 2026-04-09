@@ -6,12 +6,27 @@
     const fields = form.querySelectorAll("input, textarea, select");
     const settingsFilePath = document.getElementById("settingsFilePath");
     const defaultUserDataDirectory = document.getElementById("defaultUserDataDirectory");
+    const playwrightRuntimeState = document.getElementById("playwrightRuntimeState");
+    const playwrightRuntimeLocation = document.getElementById("playwrightRuntimeLocation");
+    const playwrightRuntimeScriptPath = document.getElementById("playwrightRuntimeScriptPath");
+    const playwrightRuntimeHelp = document.getElementById("playwrightRuntimeHelp");
+    const playwrightRuntimeOutputPanel = document.getElementById("playwrightRuntimeOutputPanel");
+    const playwrightRuntimeOutput = document.getElementById("playwrightRuntimeOutput");
+    const playwrightInstallMode = document.getElementById("PlaywrightInstallMode");
+    const playwrightInstallBtn = document.getElementById("PlaywrightInstallBtn");
+    const playwrightUninstallBtn = document.getElementById("PlaywrightUninstallBtn");
+    const playwrightUninstallAllBtn = document.getElementById("PlaywrightUninstallAllBtn");
     let saveTimer = null;
     let activeRequest = null;
     let lastSavedState = new URLSearchParams(new FormData(form)).toString();
 
     function resolveApi(key, fallback) {
-        return (window.__apiEndpoints && window.__apiEndpoints[key]) || fallback;
+        const resolved = (window.__apiEndpoints && window.__apiEndpoints[key]) || null;
+        if (resolved) return resolved;
+        if (fallback && typeof window.meow?.getApiUrl === "function" && /^\//.test(fallback)) {
+            return window.meow.getApiUrl(fallback);
+        }
+        return fallback;
     }
 
     function buildSettingsNav() {
@@ -128,6 +143,74 @@
         }
     }
 
+    function applyPlaywrightStatus(payload) {
+        if (!payload) {
+            if (playwrightRuntimeState) playwrightRuntimeState.textContent = "状态读取失败";
+            if (playwrightRuntimeLocation) playwrightRuntimeLocation.textContent = "未知";
+            if (playwrightRuntimeScriptPath) playwrightRuntimeScriptPath.textContent = "未知";
+            if (playwrightRuntimeHelp) playwrightRuntimeHelp.textContent = "无法读取 Playwright 运行时状态。";
+            if (playwrightUninstallAllBtn) playwrightUninstallAllBtn.disabled = true;
+            if (playwrightInstallMode) playwrightInstallMode.value = "online";
+            return;
+        }
+
+        const installed = !!payload.isInstalled;
+        const canUninstallFromApp = !!payload.canUninstallFromApp;
+        const sourceLabel = payload.runtimeSource === "bundled"
+            ? "随应用打包目录"
+            : payload.runtimeSource === "managed"
+                ? "应用私有目录"
+                : payload.runtimeSource === "managed-offline"
+                    ? "离线压缩包解压目录"
+                    : payload.runtimeSource === "global"
+                        ? "系统全局缓存"
+                        : "未检测到";
+        if (playwrightRuntimeState) playwrightRuntimeState.textContent = installed ? "已安装，可直接使用浏览器能力" : "未安装，当前必须先安装 Chromium";
+        if (playwrightRuntimeLocation) playwrightRuntimeLocation.textContent = payload.browserInstallDirectory || "未知";
+        if (playwrightRuntimeScriptPath) playwrightRuntimeScriptPath.textContent = payload.scriptPath || "未找到";
+        if (playwrightRuntimeHelp) playwrightRuntimeHelp.textContent = (payload.message || (installed ? "Playwright Chromium 已准备完成。" : "未安装时将阻止创建浏览器实例。")) + " 当前来源：" + sourceLabel + "。" + (payload.offlinePackageAvailable ? " 已检测到离线压缩包。" : " 未检测到离线压缩包。");
+        if (playwrightRuntimeOutput) playwrightRuntimeOutput.textContent = payload.output || "";
+        if (playwrightRuntimeOutputPanel) playwrightRuntimeOutputPanel.classList.toggle("d-none", !payload.output);
+        if (playwrightInstallBtn) playwrightInstallBtn.disabled = installed;
+        if (playwrightUninstallBtn) playwrightUninstallBtn.disabled = !installed || !canUninstallFromApp;
+        if (playwrightUninstallAllBtn) playwrightUninstallAllBtn.disabled = !installed;
+        if (playwrightInstallMode) {
+            const offlineOption = playwrightInstallMode.querySelector('option[value="offline"]');
+            if (offlineOption) offlineOption.disabled = !payload.offlinePackageAvailable;
+            if (payload.offlinePackageAvailable) {
+                playwrightInstallMode.value = "offline";
+            } else if (playwrightInstallMode.value === "offline" && !payload.offlinePackageAvailable) {
+                playwrightInstallMode.value = "online";
+            }
+        }
+    }
+
+    async function loadPlaywrightStatus() {
+        try {
+            const response = await fetch(resolveApi("playwrightStatus", "/api/playwright/status"), { cache: "no-store" });
+            if (!response.ok) throw new Error("Playwright 状态读取失败: " + response.status);
+            const payload = await response.json();
+            applyPlaywrightStatus(payload);
+            return payload;
+        } catch (error) {
+            applyPlaywrightStatus(null);
+            return null;
+        }
+    }
+
+    async function postPlaywrightAction(apiKey, fallback, successMessage) {
+        const response = await fetch(resolveApi(apiKey, fallback), { method: "POST" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload.error || payload.message || "操作失败");
+        }
+
+        applyPlaywrightStatus(payload);
+        window.dispatchEvent(new CustomEvent("meow:playwright-status", { detail: payload }));
+        if (successMessage) window.showNotification?.(successMessage, "success");
+        return payload;
+    }
+
     fields.forEach(field => { field.addEventListener("input", scheduleSave); field.addEventListener("change", scheduleSave); });
     // Plugin panel width control removed — no event bindings.
 
@@ -178,6 +261,62 @@
 
     buildSettingsNav();
     loadSettings().catch(() => { });
+    loadPlaywrightStatus().catch(() => { });
+
+    window.addEventListener("meow:playwright-status", event => {
+        applyPlaywrightStatus(event.detail || null);
+    });
+
+    playwrightInstallBtn?.addEventListener("click", async () => {
+        const mode = playwrightInstallMode?.value || "online";
+        playwrightInstallBtn.disabled = true;
+        if (playwrightUninstallBtn) playwrightUninstallBtn.disabled = true;
+        setStatus(mode === "offline" ? "正在离线安装 Playwright Chromium..." : "正在在线安装 Playwright Chromium...", "saving");
+        try {
+            const installUrl = "/api/playwright/install?mode=" + encodeURIComponent(mode);
+            await postPlaywrightAction("playwrightInstall", installUrl, mode === "offline" ? "Playwright Chromium 离线安装完成。" : "Playwright Chromium 在线安装完成。");
+            setStatus(mode === "offline" ? "Playwright Chromium 离线安装完成。" : "Playwright Chromium 在线安装完成。", "success");
+        } catch (error) {
+            setStatus(error.message || "安装失败。", "error");
+            window.showNotification?.(error.message || "Playwright Chromium 安装失败。", "danger");
+        } finally {
+            await loadPlaywrightStatus();
+        }
+    });
+
+    playwrightUninstallBtn?.addEventListener("click", async () => {
+        if (!confirm("卸载 Playwright Chromium 前会先关闭所有浏览器实例。确定继续吗？")) return;
+        playwrightInstallBtn && (playwrightInstallBtn.disabled = true);
+        playwrightUninstallBtn.disabled = true;
+        if (playwrightUninstallAllBtn) playwrightUninstallAllBtn.disabled = true;
+        setStatus("正在卸载 Playwright Chromium...", "saving");
+        try {
+            await postPlaywrightAction("playwrightUninstall", "/api/playwright/uninstall", "Playwright Chromium 已卸载。");
+            setStatus("Playwright Chromium 已卸载。", "success");
+        } catch (error) {
+            setStatus(error.message || "卸载失败。", "error");
+            window.showNotification?.(error.message || "Playwright Chromium 卸载失败。", "danger");
+        } finally {
+            await loadPlaywrightStatus();
+        }
+    });
+
+    playwrightUninstallAllBtn?.addEventListener("click", async () => {
+        if (!confirm("这会删除应用私有目录、离线打包目录以及系统全局 ms-playwright 缓存。确定继续吗？")) return;
+        if (playwrightInstallBtn) playwrightInstallBtn.disabled = true;
+        if (playwrightUninstallBtn) playwrightUninstallBtn.disabled = true;
+        playwrightUninstallAllBtn.disabled = true;
+        setStatus("正在彻底卸载全部 Playwright 缓存...", "saving");
+        try {
+            await postPlaywrightAction("playwrightUninstallAll", "/api/playwright/uninstall?all=true", "Playwright 浏览器缓存已全部卸载。");
+            setStatus("Playwright 浏览器缓存已全部卸载。", "success");
+        } catch (error) {
+            setStatus(error.message || "彻底卸载失败。", "error");
+            window.showNotification?.(error.message || "Playwright 彻底卸载失败。", "danger");
+        } finally {
+            await loadPlaywrightStatus();
+        }
+    });
 
     // One-click reset button
     const resetBtn = document.getElementById('ResetSettingsBtn');

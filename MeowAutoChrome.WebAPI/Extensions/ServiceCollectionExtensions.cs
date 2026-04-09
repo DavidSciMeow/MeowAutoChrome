@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
             // In case LINQ/Any isn't available for some reason, fall back to adding.
             services.AddSingleton<AppLogService>();
         }
+        services.AddSingleton<IPlaywrightRuntimeService, PlaywrightRuntimeService>();
         services.AddSingleton<BrowserInstanceManagerCore>();
         services.AddSingleton(sp =>
         {

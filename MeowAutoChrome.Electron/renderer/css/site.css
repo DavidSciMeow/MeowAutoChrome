@@ -45,6 +45,93 @@ body {
     background: #fff;
 }
 
+.playwright-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: 2rem;
+    background: rgba(241, 245, 249, 0.96);
+    backdrop-filter: blur(6px);
+}
+
+.playwright-gate-panel {
+    width: min(640px, 100%);
+    margin: auto;
+    padding: 2rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 1.25rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+}
+
+.playwright-gate-eyebrow {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+.playwright-gate-title {
+    margin: 0.5rem 0 0;
+    font-size: 1.8rem;
+    line-height: 1.2;
+    color: #0f172a;
+}
+
+.playwright-gate-message {
+    margin: 0.9rem 0 0;
+    color: #334155;
+    line-height: 1.6;
+}
+
+.playwright-gate-meta {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border-radius: 0.9rem;
+    background: #f8fafc;
+    color: #475569;
+    word-break: break-all;
+}
+
+.playwright-gate-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 1.25rem;
+}
+
+.playwright-gate-status {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: #0f172a;
+}
+
+.playwright-gate-output,
+.playwright-runtime-output {
+    margin-top: 1rem;
+    padding: 0.9rem;
+    border-radius: 0.85rem;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow: auto;
+}
+
+.settings-path-value {
+    word-break: break-all;
+    color: #0f172a;
+}
+
 .app-content {
     flex: 1 1 auto;
     min-height: 0;
@@ -258,6 +345,14 @@ body {
 }
 
 @media (max-width: 767.98px) {
+    .playwright-gate {
+        padding: 1rem;
+    }
+
+    .playwright-gate-panel {
+        padding: 1.25rem;
+    }
+
     .plugin-output-filters {
         grid-template-columns: 1fr;
     }

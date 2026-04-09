@@ -68,6 +68,18 @@ public sealed class ProgramSettings
     public static string GetDefaultUserDataDirectoryPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MeowAutoChrome", "instances");
 
     /// <summary>
+    /// 获取应用管理的 Playwright 运行时根目录。<br/>
+    /// Get the root directory used by the app-managed Playwright runtime.
+    /// </summary>
+    public static string GetPlaywrightRuntimeDirectoryPath() => Path.Combine(GetAppDataDirectoryPath(), "playwright-runtime");
+
+    /// <summary>
+    /// 获取应用管理的 Playwright 浏览器安装目录。<br/>
+    /// Get the app-managed Playwright browser installation directory.
+    /// </summary>
+    public static string GetPlaywrightBrowserDirectoryPath() => Path.Combine(GetPlaywrightRuntimeDirectoryPath(), "browsers");
+
+    /// <summary>
     /// <summary>
     /// 获取默认插件目录路径（基于本地应用数据的 AppData\Local\MeowAutoChrome\Plugins）。<br/>
     /// Get the default plugin directory path (under LocalApplicationData\MeowAutoChrome\Plugins).

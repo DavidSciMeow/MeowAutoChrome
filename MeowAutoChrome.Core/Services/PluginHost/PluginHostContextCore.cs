@@ -24,7 +24,8 @@ namespace MeowAutoChrome.Core.Services.PluginHost;
 /// <param name="publishUpdate">用于发布插件更新的回调 / callback to publish plugin updates.</param>
 /// <param name="requestNewInstance">用于请求新浏览器实例的回调（可空）/ optional callback to request a new browser instance.</param>
 /// <param name="getInstanceInfo">用于查询实例信息的回调（可空）/ optional callback to get instance info.</param>
-public sealed class PluginHostContextCore(IBrowserContext? browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<LogLevel, string, string?, Task>? logCallback = null, CancellationToken cancellationToken = default) : IPluginContext
+/// <param name="getPluginInstanceIds">用于查询当前插件实例 ID 列表的回调（可空）/ optional callback to get instance ids for the current plugin.</param>
+public sealed class PluginHostContextCore(IBrowserContext? browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<CancellationToken, Task<IReadOnlyList<string>>>? getPluginInstanceIds = null, Func<LogLevel, string, string?, Task>? logCallback = null, CancellationToken cancellationToken = default) : IPluginContext
 {
 
     /// <summary>
@@ -99,6 +100,15 @@ public sealed class PluginHostContextCore(IBrowserContext? browserContext, IPage
     /// <returns>实例信息或 null / instance info or null.</returns>
     public Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken cancellationToken = default)
         => getInstanceInfo is null ? Task.FromResult<PluginBrowserInstanceInfo?>(null) : getInstanceInfo(instanceId, cancellationToken);
+
+    /// <summary>
+    /// 获取当前插件拥有的浏览器实例 ID 列表（如果宿主提供该能力）。<br/>
+    /// Get browser instance ids owned by the current plugin if the host provides that capability.
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
+    /// <returns>实例 ID 列表 / instance id list.</returns>
+    public Task<IReadOnlyList<string>> GetPluginInstanceIdsAsync(CancellationToken cancellationToken = default)
+        => getPluginInstanceIds is null ? Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()) : getPluginInstanceIds(cancellationToken);
 
     /// <summary>
     /// 将日志写入宿主（接受字符串形式的级别并转换为 LogLevel）。
