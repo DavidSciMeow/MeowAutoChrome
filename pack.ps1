@@ -9,7 +9,7 @@ param(
     [string]$Runtime = 'win-x64',
 
     [ValidateSet('installer', 'dir', 'zip')]
-    [string]$PackageTarget = 'installer',
+    [string]$PackageTarget = 'dir',
 
     [string]$BuilderCacheDir = '.\Artifact\ElectronBuilderCache',
 
