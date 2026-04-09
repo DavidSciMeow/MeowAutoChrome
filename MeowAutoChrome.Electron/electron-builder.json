@@ -12,11 +12,16 @@
         "output": "../Artifact/Electron"
     },
     "win": {
+        "icon": "../favicon.ico",
         "target": [
             "nsis"
         ],
         "signAndEditExecutable": false,
         "verifyUpdateCodeSignature": false,
         "forceCodeSigning": false
+    },
+    "nsis": {
+        "installerIcon": "../favicon.ico",
+        "uninstallerIcon": "../favicon.ico"
     }
 }

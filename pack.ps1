@@ -8,8 +8,12 @@ param(
 
     [string]$Runtime = 'win-x64',
 
-    [ValidateSet('installer', 'dir')]
+    [ValidateSet('installer', 'dir', 'zip')]
     [string]$PackageTarget = 'installer',
+
+    [string]$BuilderCacheDir = '.\Artifact\ElectronBuilderCache',
+
+    [switch]$PrepareInstallerCacheOnly,
 
     [switch]$Clean,
 
@@ -28,9 +32,11 @@ $webApiProjectPath = Join-Path $repoRoot 'MeowAutoChrome.WebAPI\MeowAutoChrome.W
 $electronDir = Join-Path $repoRoot 'MeowAutoChrome.Electron'
 $webApiPublishDir = Join-Path $electronDir 'webapi'
 $artifactDir = Join-Path $repoRoot 'Artifact\Electron'
+$resolvedBuilderCacheDir = if ([System.IO.Path]::IsPathRooted($BuilderCacheDir)) { $BuilderCacheDir } else { Join-Path $repoRoot $BuilderCacheDir }
 $offlineArchiveSource = Join-Path $repoRoot 'chrome-win64.zip'
 $offlineArchiveTarget = Join-Path $webApiPublishDir 'chrome-win64.zip'
 $electronBuilderCli = Join-Path $electronDir 'node_modules\electron-builder\cli.js'
+$appBuilderPath = Join-Path $electronDir 'node_modules\app-builder-bin\win\x64\app-builder.exe'
 $packageLockPath = Join-Path $electronDir 'package-lock.json'
 
 function Write-Step {
@@ -62,7 +68,8 @@ function Invoke-ExternalCommand {
     param(
         [string]$FilePath,
         [string[]]$Arguments,
-        [string]$WorkingDirectory = $repoRoot
+        [string]$WorkingDirectory = $repoRoot,
+        [hashtable]$Environment = @{}
     )
 
     Push-Location $WorkingDirectory
@@ -73,13 +80,75 @@ function Invoke-ExternalCommand {
         }
 
         Write-Host $commandLine -ForegroundColor DarkGray
-        & $FilePath @Arguments
+        $previousValues = @{}
+        foreach ($key in $Environment.Keys) {
+            $previousValues[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+            [Environment]::SetEnvironmentVariable($key, [string]$Environment[$key], 'Process')
+        }
+
+        try {
+            & $FilePath @Arguments
+        }
+        finally {
+            foreach ($key in $Environment.Keys) {
+                [Environment]::SetEnvironmentVariable($key, $previousValues[$key], 'Process')
+            }
+        }
+
         if ($LASTEXITCODE -ne 0) {
             throw "Command failed with exit code: $LASTEXITCODE"
         }
     }
     finally {
         Pop-Location
+    }
+}
+
+function Ensure-Directory {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
+}
+
+function Ensure-ElectronBuilderInstallerTools {
+    param([string]$CacheDir)
+
+    Ensure-Directory -Path $CacheDir
+
+    $envMap = @{ 'ELECTRON_BUILDER_CACHE' = $CacheDir }
+    $artifacts = @(
+        @(
+            'nsis-3.0.4.1',
+            'https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z',
+            'VKMiizYdmNdJOWpRGz4trl4lD++BvYP2irAXpMilheUP0pc93iKlWAoP843Vlraj8YG19CVn0j+dCo/hURz9+Q=='
+        ),
+        @(
+            'nsis-resources-3.4.1',
+            'https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z',
+            'Dqd6g+2buwwvoG1Vyf6BHR1b+25QMmPcwZx40atOT57gH27rkjOei1L0JTldxZu4NFoEmW4kJgZ3DlSWVON3+Q=='
+        )
+    )
+
+    foreach ($artifact in $artifacts) {
+        $name = $artifact[0]
+        $url = $artifact[1]
+        $sha512 = $artifact[2]
+        $artifactPath = Join-Path $CacheDir $name
+
+        if (Test-Path -LiteralPath $artifactPath) {
+            Write-Step "Using cached installer tool $name"
+            continue
+        }
+
+        Write-Step "Downloading installer tool $name"
+        Invoke-ExternalCommand -FilePath $appBuilderPath -Arguments @(
+            'download-artifact',
+            '--name', $name,
+            '--url', $url,
+            '--sha512', $sha512
+        ) -WorkingDirectory $electronDir -Environment $envMap
     }
 }
 
@@ -90,6 +159,8 @@ Assert-PathExists -Path $electronDir -Description 'Electron 项目目录'
 Assert-CommandAvailable -Name 'dotnet'
 Assert-CommandAvailable -Name 'npm'
 Assert-CommandAvailable -Name 'node'
+
+Ensure-Directory -Path $resolvedBuilderCacheDir
 
 if ($Clean) {
     Write-Step 'Cleaning previous WebAPI publish output and Electron artifacts'
@@ -106,10 +177,17 @@ if ($Clean) {
 if (-not $SkipDotnetRestore) {
     Write-Step 'Restoring .NET dependencies'
     Invoke-ExternalCommand -FilePath 'dotnet' -Arguments @('restore', $solutionPath)
+
+    Write-Step 'Restoring WebAPI runtime-specific assets'
+    Invoke-ExternalCommand -FilePath 'dotnet' -Arguments @(
+        'restore',
+        $webApiProjectPath,
+        '-r', $Runtime
+    )
 }
 
 Write-Step 'Publishing WebAPI into Electron webapi folder'
-Invoke-ExternalCommand -FilePath 'dotnet' -Arguments @(
+$publishArguments = @(
     'publish',
     $webApiProjectPath,
     '-c', $Configuration,
@@ -117,6 +195,12 @@ Invoke-ExternalCommand -FilePath 'dotnet' -Arguments @(
     '--self-contained', 'false',
     '-o', $webApiPublishDir
 )
+
+if (-not $SkipDotnetRestore) {
+    $publishArguments += '--no-restore'
+}
+
+Invoke-ExternalCommand -FilePath 'dotnet' -Arguments $publishArguments
 
 if ($Mode -eq 'offline') {
     Write-Step 'Copying offline Chromium archive'
@@ -149,16 +233,35 @@ else {
     Write-Step 'Electron dependencies already present, skipping npm install'
 }
 
+if ($PackageTarget -eq 'installer') {
+    Ensure-ElectronBuilderInstallerTools -CacheDir $resolvedBuilderCacheDir
+    if ($PrepareInstallerCacheOnly) {
+        Write-Step 'Installer tool cache is ready'
+        Write-Host "BuilderCacheDir: $resolvedBuilderCacheDir"
+        return
+    }
+}
+
 if ($PackageTarget -eq 'dir') {
     Write-Step 'Running Electron directory packaging'
-    Invoke-ExternalCommand -FilePath 'npm' -Arguments @('run', 'pack') -WorkingDirectory $electronDir
+    Invoke-ExternalCommand -FilePath 'npm' -Arguments @('run', 'pack') -WorkingDirectory $electronDir -Environment @{ 'ELECTRON_BUILDER_CACHE' = $resolvedBuilderCacheDir }
+}
+elseif ($PackageTarget -eq 'zip') {
+    Write-Step 'Running Electron zip packaging'
+    Invoke-ExternalCommand -FilePath 'node' -Arguments @(
+        $electronBuilderCli,
+        '--win',
+        'zip',
+        '--x64'
+    ) -WorkingDirectory $electronDir -Environment @{ 'ELECTRON_BUILDER_CACHE' = $resolvedBuilderCacheDir }
 }
 else {
     Write-Step 'Running Electron installer packaging'
-    Invoke-ExternalCommand -FilePath 'npm' -Arguments @('run', 'dist') -WorkingDirectory $electronDir
+    Invoke-ExternalCommand -FilePath 'npm' -Arguments @('run', 'dist') -WorkingDirectory $electronDir -Environment @{ 'ELECTRON_BUILDER_CACHE' = $resolvedBuilderCacheDir }
 }
 
 Write-Step 'Packaging completed'
 Write-Host "Mode: $Mode"
 Write-Host "PackageTarget: $PackageTarget"
+Write-Host "BuilderCacheDir: $resolvedBuilderCacheDir"
 Write-Host "Artifacts: $artifactDir"

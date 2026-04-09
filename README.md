@@ -32,6 +32,7 @@ Playwright 运行时说明：
 4. 默认执行 Electron 安装包打包，产物输出到 `Artifact/Electron`
 5. 如果你不想带离线浏览器压缩包，可以执行 `./pack.ps1 -Mode online`
 6. 如果当前网络下 electron-builder 无法下载 NSIS，可执行 `./pack.ps1 -PackageTarget dir` 生成可直接分发的目录版
+7. 如果你想要单文件压缩包而不是安装器，可执行 `./pack.ps1 -PackageTarget zip`
 
 打包说明：
 
@@ -39,7 +40,8 @@ Playwright 运行时说明：
 2. `./pack.ps1 -Mode online` 会生成不带离线压缩包的安装包，体积更小
 3. `./pack.ps1 -Clean` 会先删除旧的 `MeowAutoChrome.Electron/webapi` 和 `Artifact/Electron` 再重新打包
 4. `./pack.ps1 -PackageTarget dir` 会生成 `Artifact/Electron/win-unpacked`，不依赖 NSIS 下载
-5. 如果本机已经装好了 Electron 依赖，可配合 `-SkipNpmInstall` 跳过 npm 安装检查
+5. `./pack.ps1 -PackageTarget zip` 会生成 zip 压缩包，也不依赖 NSIS 下载
+6. 如果本机已经装好了 Electron 依赖，可配合 `-SkipNpmInstall` 跳过 npm 安装检查
 
 也可以拆开运行：
 
