@@ -103,8 +103,8 @@
     let applyingScreencastSettings = false;
     let pointerResizeActive = false;
     let pluginPanelWidth = Number(config.defaultPluginPanelWidth) || 320;
-    // 默认不展开插件区
-    let pluginDrawerOpen = false;
+    // 默认展开插件区
+    let pluginDrawerOpen = true;
     let selectedInstanceId = null;
     let currentViewport = null;
     // `instanceHeadless` tracks the current instance's headless state (from /api/status).
@@ -342,6 +342,8 @@
         browserWorkspace?.classList.toggle('plugin-drawer-open', pluginDrawerOpen);
         pluginDrawerBackdrop?.classList.toggle('d-none', !pluginDrawerOpen);
         pluginDrawerOpenBtn?.setAttribute('aria-expanded', pluginDrawerOpen ? 'true' : 'false');
+        pluginDrawerOpenBtn?.setAttribute('title', pluginDrawerOpen ? '隐藏插件区' : '打开插件区');
+        pluginDrawerOpenBtn?.setAttribute('aria-label', pluginDrawerOpen ? '隐藏插件区' : '打开插件区');
         pluginDrawerPane?.setAttribute('aria-hidden', pluginDrawerOpen ? 'false' : 'true');
         // Plugin pane opened/closed affects available canvas size — force viewport sync.
         if (selectedInstanceId) {

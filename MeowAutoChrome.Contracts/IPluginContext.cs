@@ -1,87 +1,64 @@
-﻿using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 
 namespace MeowAutoChrome.Contracts;
 
 /// <summary>
-/// 最小化的插件可见上下文，只包含只读句柄和取消令牌，插件应仅依赖此外观接口。<br/>
-/// Minimal plugin-facing context containing only readonly handles and a cancellation token. Plugins should depend only on this facade.
+/// 插件执行期间由宿主注入的上下文。它聚合了宿主能力、当前浏览器实例以及调用参数。<br/>
+/// Host-injected context available during plugin execution. It aggregates host capabilities, the current browser instance, and invocation arguments.
 /// </summary>
 public interface IPluginContext
 {
     /// <summary>
-    /// 宿主提供的浏览器上下文句柄；当生命周期控制在没有当前实例的情况下执行时可能为 null。<br/>
-    /// Browser context handle provided by the host; may be null when lifecycle controls run without a current instance.
+    /// 宿主能力入口。插件通过该实例访问宿主信息、浏览器实例管理能力、日志和消息发布能力。<br/>
+    /// Host capability entry point. Plugins use this instance to access host information, browser-instance management, logging, and message publishing.
+    /// </summary>
+    IPluginHost Host { get; }
+
+    /// <summary>
+    /// 当前与本次调用绑定的浏览器实例；当宿主当前没有选中的实例时可能为 null。<br/>
+    /// Browser instance bound to the current invocation. May be null when the host has no selected instance.
+    /// </summary>
+    IPluginBrowserInstance? CurrentBrowserInstance { get; }
+
+    /// <summary>
+    /// 当前插件拥有的浏览器实例只读列表快照。宿主会在创建、关闭或切换实例时更新该列表。<br/>
+    /// Read-only snapshot of browser instances owned by the current plugin. The host updates this list when instances are created, closed, or switched.
+    /// </summary>
+    IReadOnlyList<IPluginBrowserInstance> Instances { get; }
+
+    /// <summary>
+    /// 当前浏览器实例的 Playwright BrowserContext；当没有绑定实例时为 null。<br/>
+    /// Playwright BrowserContext of the current browser instance, or null when no instance is bound.
     /// </summary>
     IBrowserContext? BrowserContext { get; }
+
     /// <summary>
-    /// 当前活动页面（可能为 null）。<br/>
-    /// The currently active page, or null if none.
+    /// 当前浏览器实例对应的 Playwright Browser；当浏览器上下文不可用时为 null。<br/>
+    /// Playwright Browser associated with the current browser instance, or null when the browser context is unavailable.
+    /// </summary>
+    IBrowser? Browser { get; }
+
+    /// <summary>
+    /// 当前浏览器实例的活动页面；当没有活动页面时为 null。<br/>
+    /// Active page of the current browser instance, or null when no page is active.
     /// </summary>
     IPage? ActivePage { get; }
+
     /// <summary>
-    /// 当前绑定到插件上下文的浏览器实例 ID。<br/>
-    /// Browser instance id currently bound to the plugin context.
+    /// 当前绑定到插件上下文的浏览器实例 ID；当没有绑定实例时为空字符串。<br/>
+    /// Browser instance id currently bound to this plugin context, or an empty string when no instance is bound.
     /// </summary>
     string BrowserInstanceId { get; }
-    /// <summary>
-    /// 插件的唯一标识符。<br/>
-    /// Unique identifier for the plugin.
-    /// </summary>
-    string PluginId { get; }
+
     /// <summary>
     /// 传递给插件的只读参数字典（参数名 -> 值或 null）。<br/>
-    /// Read-only dictionary of arguments passed to the plugin (name -> value or null).
+    /// Read-only dictionary of arguments passed to the plugin (parameter name -> value or null).
     /// </summary>
     IReadOnlyDictionary<string, string?> Arguments { get; }
+
     /// <summary>
-    /// 用于取消插件操作的取消令牌。<br/>
-    /// Cancellation token used to cancel plugin operations.
+    /// 用于取消插件操作的取消令牌。该值等同于 Host.CancellationToken，保留为便捷访问。<br/>
+    /// Cancellation token used to cancel plugin operations. This mirrors Host.CancellationToken for convenience.
     /// </summary>
     CancellationToken CancellationToken { get; }
-
-    /// <summary>
-    /// 请求宿主创建新的浏览器实例或上下文，使用提供的选项进行配置。<br/>
-    /// Request the host to create a new browser instance or context configured by the provided options.
-    /// </summary>
-    /// <param name="options">浏览器创建选项。<br/>Browser creation options.</param>
-    /// <param name="cancellationToken">可选的取消令牌。<br/>Optional cancellation token.</param>
-    /// <returns>返回新的实例 ID，失败时为 null。<br/>Returns the new instance id string, or null on failure.</returns>
-    Task<string?> RequestNewBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken cancellationToken = default);
-    /// <summary>
-    /// 请求宿主关于已知浏览器实例的信息。<br/>
-    /// Request information about a browser instance known to the host.
-    /// </summary>
-    /// <param name="instanceId">要查询的实例 ID。<br/>Instance id to query.</param>
-    /// <param name="cancellationToken">可选的取消令牌。<br/>Optional cancellation token.</param>
-    /// <returns>若找不到或宿主不公开元数据则返回 null。<br/>Returns null if the instance is not found or host does not expose metadata.</returns>
-    Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken cancellationToken = default);
-    /// <summary>
-    /// 请求宿主返回当前插件拥有的浏览器实例 ID 列表。<br/>
-    /// Request the list of browser instance ids owned by the current plugin.
-    /// </summary>
-    /// <param name="cancellationToken">可选的取消令牌。<br/>Optional cancellation token.</param>
-    /// <returns>当前插件拥有的实例 ID 列表。<br/>Instance ids owned by the current plugin.</returns>
-    Task<IReadOnlyList<string>> GetPluginInstanceIdsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 允许插件将日志写入宿主应用的集中日志系统。插件可以调用此方法来记录自己的运行时信息或错误。
-    /// </summary>
-    /// <param name="level">日志级别字符串（例如 Debug/Information/Warning/Error）。</param>
-    /// <param name="message">日志消息文本。</param>
-    /// <param name="category">可选日志类别；若为空，宿主将使用插件 ID 作为类别。</param>
-    /// <returns>异步完成任务。</returns>
-    Task WriteLogAsync(string level, string message, string? category = null);
-
-    /// <summary>
-    /// 向宿主推送插件运行过程中的消息或结构化数据更新。<br/>
-    /// Publish an in-progress plugin message or structured data update to the host.
-    /// </summary>
-    /// <param name="message">可选消息文本。<br/>Optional message text.</param>
-    /// <param name="data">可选结构化数据。<br/>Optional structured data payload.</param>
-    /// <param name="openModal">是否建议宿主直接打开消息窗口。<br/>Whether the host should prefer opening the message modal immediately.</param>
-    /// <returns>异步完成任务。<br/>Asynchronous completion task.</returns>
-    Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = true);
 }

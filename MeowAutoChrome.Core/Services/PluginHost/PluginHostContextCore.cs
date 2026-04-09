@@ -1,139 +1,223 @@
-﻿using Microsoft.Playwright;
+﻿using System.Collections.ObjectModel;
 using MeowAutoChrome.Contracts;
 using Microsoft.Extensions.Logging;
+using Microsoft.Playwright;
 
 namespace MeowAutoChrome.Core.Services.PluginHost;
 
 /// <summary>
-/// Core 管理的插件宿主上下文实现：用于在执行插件时为插件提供浏览器上下文、页面、参数与回调。<br/>
-/// Core-owned implementation of the host context used when executing plugins; provides browser context, active page, arguments and callbacks.
-/// 它实现 Contracts 的 IPluginContext 以兼容依赖 Contracts 的插件。<br/>
-/// It implements the Contracts IPluginContext facade so plugins depending on Contracts continue to work.
+/// Core 管理的插件宿主上下文实现。它同时实现插件上下文与宿主 facade，向插件暴露当前实例、宿主基础地址以及实例管理能力。<br/>
+/// Core-owned plugin host context implementation. It implements both the plugin context and host facade, exposing the current instance, host base address, and instance-management capabilities to plugins.
 /// </summary>
-/// <remarks>
-/// 构造一个新的宿主上下文实例。<br/>
-/// Construct a new host context instance.
-/// </remarks>
-/// <param name="browserContext">Playwright 浏览器上下文（可空）/ Playwright browser context (optional).</param>
-/// <param name="activePage">当前激活页面（可空）/ currently active page (optional).</param>
-/// <param name="browserInstanceId">浏览器实例 Id / browser instance identifier.</param>
-/// <param name="arguments">传递给插件的参数字典 / arguments dictionary provided to the plugin.</param>
-/// <param name="pluginId">插件 Id / plugin identifier.</param>
-/// <param name="targetId">目标 Id（例如触发源）/ target id (e.g. trigger source).</param>
-/// <param name="cancellationToken">插件生命周期的取消令牌 / cancellation token for plugin lifecycle.</param>
-/// <param name="publishUpdate">用于发布插件更新的回调 / callback to publish plugin updates.</param>
-/// <param name="requestNewInstance">用于请求新浏览器实例的回调（可空）/ optional callback to request a new browser instance.</param>
-/// <param name="getInstanceInfo">用于查询实例信息的回调（可空）/ optional callback to get instance info.</param>
-/// <param name="getPluginInstanceIds">用于查询当前插件实例 ID 列表的回调（可空）/ optional callback to get instance ids for the current plugin.</param>
-public sealed class PluginHostContextCore(IBrowserContext? browserContext, IPage? activePage, string browserInstanceId, IReadOnlyDictionary<string, string?> arguments, string pluginId, string targetId, Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate, Func<BrowserCreationOptions, CancellationToken, Task<string?>>? requestNewInstance = null, Func<string, CancellationToken, Task<PluginBrowserInstanceInfo?>>? getInstanceInfo = null, Func<CancellationToken, Task<IReadOnlyList<string>>>? getPluginInstanceIds = null, Func<LogLevel, string, string?, Task>? logCallback = null, CancellationToken cancellationToken = default) : IPluginContext
+public sealed class PluginHostContextCore : IPluginContext, IPluginHost
 {
+    private readonly Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? _publishUpdate;
+    private readonly Func<CancellationToken, Task<IReadOnlyList<IPluginBrowserInstance>>>? _getOwnedBrowserInstances;
+    private readonly Func<string, CancellationToken, Task<IPluginBrowserInstance?>>? _getBrowserInstance;
+    private readonly Func<BrowserCreationOptions, CancellationToken, Task<IPluginBrowserInstance?>>? _createBrowserInstance;
+    private readonly Func<string, CancellationToken, Task<bool>>? _closeBrowserInstance;
+    private readonly Func<string, CancellationToken, Task<bool>>? _selectBrowserInstance;
+    private readonly Func<LogLevel, string, string?, Task>? _logCallback;
+    private readonly List<IPluginBrowserInstance> _instances;
+    private readonly ReadOnlyCollection<IPluginBrowserInstance> _instancesView;
+    private IPluginBrowserInstance? _currentBrowserInstance;
 
-    /// <summary>
-    /// 当前的 Playwright 浏览器上下文；当宿主当前没有实例时可能为 null。<br/>
-    /// The active Playwright browser context; may be null when the host has no current instance.
-    /// </summary>
-    public IBrowserContext? BrowserContext { get; } = browserContext;
+    public PluginHostContextCore(
+        IPluginBrowserInstance? currentBrowserInstance,
+        IReadOnlyList<IPluginBrowserInstance>? instances,
+        IReadOnlyDictionary<string, string?> arguments,
+        string pluginId,
+        string targetId,
+        PluginState state,
+        string? baseAddress,
+        Func<string?, IReadOnlyDictionary<string, string?>?, bool, Task>? publishUpdate,
+        Func<CancellationToken, Task<IReadOnlyList<IPluginBrowserInstance>>>? getOwnedBrowserInstances = null,
+        Func<string, CancellationToken, Task<IPluginBrowserInstance?>>? getBrowserInstance = null,
+        Func<BrowserCreationOptions, CancellationToken, Task<IPluginBrowserInstance?>>? createBrowserInstance = null,
+        Func<string, CancellationToken, Task<bool>>? closeBrowserInstance = null,
+        Func<string, CancellationToken, Task<bool>>? selectBrowserInstance = null,
+        Func<LogLevel, string, string?, Task>? logCallback = null,
+        CancellationToken cancellationToken = default)
+    {
+        _currentBrowserInstance = currentBrowserInstance;
+        _instances = instances?.ToList() ?? [];
+        _instancesView = _instances.AsReadOnly();
+        Arguments = arguments ?? new Dictionary<string, string?>();
+        PluginId = pluginId;
+        TargetId = targetId;
+        State = state;
+        BaseAddress = baseAddress;
+        _publishUpdate = publishUpdate;
+        _getOwnedBrowserInstances = getOwnedBrowserInstances;
+        _getBrowserInstance = getBrowserInstance;
+        _createBrowserInstance = createBrowserInstance;
+        _closeBrowserInstance = closeBrowserInstance;
+        _selectBrowserInstance = selectBrowserInstance;
+        _logCallback = logCallback;
+        CancellationToken = cancellationToken;
+    }
 
-    /// <summary>
-    /// 当前激活的页面（如果有）。<br/>
-    /// Currently active page, if any.
-    /// </summary>
-    public IPage? ActivePage { get; } = activePage;
+    public IPluginHost Host => this;
 
-    /// <summary>
-    /// 浏览器实例 Id。<br/>
-    /// Browser instance id.
-    /// </summary>
-    public string BrowserInstanceId { get; } = browserInstanceId;
+    public IPluginBrowserInstance? CurrentBrowserInstance => _currentBrowserInstance;
 
-    /// <summary>
-    /// 传递给插件的只读参数字典。<br/>
-    /// Read-only dictionary of arguments passed to the plugin.
-    /// </summary>
-    public IReadOnlyDictionary<string, string?> Arguments { get; } = arguments ?? new Dictionary<string, string?>();
+    public IReadOnlyList<IPluginBrowserInstance> Instances => _instancesView;
 
-    /// <summary>
-    /// 插件 Id。<br/>
-    /// Plugin id.
-    /// </summary>
-    public string PluginId { get; } = pluginId;
+    public IBrowserContext? BrowserContext => CurrentBrowserInstance?.BrowserContext;
 
-    /// <summary>
-    /// 目标 Id（例如触发源）。<br/>
-    /// Target id (for example, trigger source).
-    /// </summary>
-    public string TargetId { get; } = targetId;
+    public IBrowser? Browser => CurrentBrowserInstance?.Browser;
 
-    /// <summary>
-    /// 插件执行期间使用的取消令牌。<br/>
-    /// Cancellation token used during plugin execution.
-    /// </summary>
-    public CancellationToken CancellationToken { get; } = cancellationToken;
+    public IPage? ActivePage => CurrentBrowserInstance?.ActivePage;
 
-    /// <summary>
-    /// 发布插件状态/进度更新。<br/>
-    /// Publish a plugin update/status message.
-    /// </summary>
-    /// <param name="message">可选消息文本 / optional message text.</param>
-    /// <param name="data">可选的键值数据 / optional key/value data.</param>
-    /// <param name="openModal">是否以模态方式展示 / whether to open as modal.</param>
-    /// <returns>任务 / task.</returns>
-    public Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool openModal = true)
-        => publishUpdate?.Invoke(message, data, openModal) ?? Task.CompletedTask;
+    public string BrowserInstanceId => CurrentBrowserInstance?.InstanceId ?? string.Empty;
 
-    /// <summary>
-    /// 请求创建新的浏览器实例（如果宿主支持）。<br/>
-    /// Request creation of a new browser instance if the host supports it.
-    /// </summary>
-    /// <param name="options">浏览器创建选项 / browser creation options.</param>
-    /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
-    /// <returns>新实例 Id（如果创建成功）或 null / new instance id or null.</returns>
-    public Task<string?> RequestNewBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken cancellationToken = default)
-        => requestNewInstance is null ? Task.FromResult<string?>(null) : requestNewInstance(options, cancellationToken);
+    public IReadOnlyDictionary<string, string?> Arguments { get; }
 
-    /// <summary>
-    /// 获取指定实例的元信息（如果宿主提供该能力）。<br/>
-    /// Get metadata for the specified instance if the host provides that capability.
-    /// </summary>
-    /// <param name="instanceId">实例 Id / instance id.</param>
-    /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
-    /// <returns>实例信息或 null / instance info or null.</returns>
-    public Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken cancellationToken = default)
-        => getInstanceInfo is null ? Task.FromResult<PluginBrowserInstanceInfo?>(null) : getInstanceInfo(instanceId, cancellationToken);
+    public string PluginId { get; }
 
-    /// <summary>
-    /// 获取当前插件拥有的浏览器实例 ID 列表（如果宿主提供该能力）。<br/>
-    /// Get browser instance ids owned by the current plugin if the host provides that capability.
-    /// </summary>
-    /// <param name="cancellationToken">取消令牌 / cancellation token.</param>
-    /// <returns>实例 ID 列表 / instance id list.</returns>
-    public Task<IReadOnlyList<string>> GetPluginInstanceIdsAsync(CancellationToken cancellationToken = default)
-        => getPluginInstanceIds is null ? Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()) : getPluginInstanceIds(cancellationToken);
+    public string TargetId { get; }
 
-    /// <summary>
-    /// 将日志写入宿主（接受字符串形式的级别并转换为 LogLevel）。
-    /// </summary>
+    public PluginState State { get; }
+
+    public string? BaseAddress { get; }
+
+    public CancellationToken CancellationToken { get; }
+
+    public Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool toastRequested = false)
+        => _publishUpdate?.Invoke(message, data, toastRequested) ?? Task.CompletedTask;
+
+    public Task ToastAsync(string message, IReadOnlyDictionary<string, string?>? data = null)
+        => PublishUpdateAsync(message, data, toastRequested: true);
+
+    public Task<IReadOnlyList<IPluginBrowserInstance>> GetOwnedBrowserInstancesAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<IPluginBrowserInstance>>(Instances);
+
+    public Task<IPluginBrowserInstance?> GetBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+        => _getBrowserInstance is null ? Task.FromResult<IPluginBrowserInstance?>(null) : _getBrowserInstance(instanceId, cancellationToken);
+
+    public async Task<IPluginBrowserInstance?> CreateBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken cancellationToken = default)
+    {
+        if (_createBrowserInstance is null)
+            return null;
+
+        var created = await _createBrowserInstance(options, cancellationToken);
+        if (created is null)
+            return null;
+
+        await RefreshInstancesAsync(cancellationToken);
+        return FindInstance(created.InstanceId) ?? created;
+    }
+
+    public async Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        if (_closeBrowserInstance is null)
+            return false;
+
+        var closed = await _closeBrowserInstance(instanceId, cancellationToken);
+        if (!closed)
+            return false;
+
+        RemoveInstance(instanceId);
+        if (string.Equals(_currentBrowserInstance?.InstanceId, instanceId, StringComparison.Ordinal))
+            _currentBrowserInstance = null;
+
+        await RefreshInstancesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        if (_selectBrowserInstance is null)
+            return false;
+
+        var selected = await _selectBrowserInstance(instanceId, cancellationToken);
+        if (!selected)
+            return false;
+
+        await RefreshInstancesAsync(cancellationToken);
+        _currentBrowserInstance = FindInstance(instanceId) ?? await GetBrowserInstanceAsync(instanceId, cancellationToken);
+        return true;
+    }
+
     public Task WriteLogAsync(string level, string message, string? category = null)
     {
-        if (logCallback is null)
+        if (_logCallback is null)
             return Task.CompletedTask;
 
         try
         {
-            // 尝试按名称解析（区分大小写不敏感），回退到 Information
             if (Enum.TryParse<LogLevel>(level, true, out var parsed))
-            {
-                return logCallback(parsed, message, category ?? PluginId);
-            }
+                return _logCallback(parsed, message, category ?? PluginId);
 
-            // 尝试按数字解析
             if (int.TryParse(level, out var num) && Enum.IsDefined(typeof(LogLevel), num))
-            {
-                return logCallback((LogLevel)num, message, category ?? PluginId);
-            }
+                return _logCallback((LogLevel)num, message, category ?? PluginId);
         }
-        catch { }
+        catch
+        {
+        }
 
-        return logCallback(LogLevel.Information, message, category ?? PluginId);
+        return _logCallback(LogLevel.Information, message, category ?? PluginId);
     }
+
+    private async Task RefreshInstancesAsync(CancellationToken cancellationToken)
+    {
+        if (_getOwnedBrowserInstances is null)
+            return;
+
+        var instances = await _getOwnedBrowserInstances(cancellationToken);
+        _instances.Clear();
+        _instances.AddRange(instances);
+
+        if (_currentBrowserInstance is not null)
+        {
+            var refreshedCurrent = FindInstance(_currentBrowserInstance.InstanceId);
+            if (refreshedCurrent is not null)
+                _currentBrowserInstance = refreshedCurrent;
+        }
+    }
+
+    private IPluginBrowserInstance? FindInstance(string instanceId)
+        => _instances.FirstOrDefault(instance => string.Equals(instance.InstanceId, instanceId, StringComparison.Ordinal));
+
+    private void RemoveInstance(string instanceId)
+    {
+        var index = _instances.FindIndex(instance => string.Equals(instance.InstanceId, instanceId, StringComparison.Ordinal));
+        if (index >= 0)
+            _instances.RemoveAt(index);
+    }
+}
+
+internal sealed class PluginBrowserPageHandleCore(string pageId, IPage page, bool isSelected) : IPluginBrowserPage
+{
+    public string PageId { get; } = pageId;
+    public IPage Page { get; } = page;
+    public bool IsSelected { get; } = isSelected;
+}
+
+internal sealed class PluginBrowserInstanceHandleCore : IPluginBrowserInstance
+{
+    public PluginBrowserInstanceHandleCore(string instanceId, string? displayName, string? userDataDirectory, string? ownerId, bool isCurrent, IBrowser? browser, IBrowserContext? browserContext, IPage? activePage, string? selectedPageId, IReadOnlyList<IPluginBrowserPage> pages)
+    {
+        InstanceId = instanceId;
+        DisplayName = displayName;
+        UserDataDirectory = userDataDirectory;
+        OwnerId = ownerId;
+        IsCurrent = isCurrent;
+        Browser = browser;
+        BrowserContext = browserContext;
+        ActivePage = activePage;
+        SelectedPageId = selectedPageId;
+        Pages = pages;
+    }
+
+    public string InstanceId { get; }
+    public string? DisplayName { get; }
+    public string? UserDataDirectory { get; }
+    public string? OwnerId { get; }
+    public bool IsCurrent { get; }
+    public IBrowser? Browser { get; }
+    public IBrowserContext? BrowserContext { get; }
+    public IPage? ActivePage { get; }
+    public string? SelectedPageId { get; }
+    public IReadOnlyList<IPluginBrowserPage> Pages { get; }
 }

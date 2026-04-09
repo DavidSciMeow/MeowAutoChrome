@@ -20,7 +20,7 @@ public sealed class SignalRPluginOutputPublisher(IHubContext<BrowserHub> hub) : 
     /// 发布插件输出到所有客户端或指定客户端。<br/>
     /// Publish plugin output to all clients or to a specified client.
     /// </summary>
-    public Task PublishPluginOutputAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool openModal, string? connectionId, CancellationToken cancellationToken)
+    public Task PublishPluginOutputAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool toastRequested, string? connectionId, CancellationToken cancellationToken)
     {
         var payload = new
         {
@@ -28,7 +28,7 @@ public sealed class SignalRPluginOutputPublisher(IHubContext<BrowserHub> hub) : 
             TargetId = targetId,
             Message = message,
             Data = data ?? new Dictionary<string, string?>(),
-            OpenModal = openModal,
+            ToastRequested = toastRequested,
             TimestampUtc = DateTimeOffset.UtcNow
         };
         var clients = string.IsNullOrWhiteSpace(connectionId) ? hub.Clients.All : hub.Clients.Client(connectionId);

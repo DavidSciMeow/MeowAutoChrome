@@ -192,8 +192,23 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
             try
             {
                 var type = assembly.GetType(candidateTypeName, throwOnError: false, ignoreCase: false);
-                if (type is not { IsAbstract: false, IsInterface: false } || !typeof(Contracts.IPlugin).IsAssignableFrom(type))
+                if (type is null)
+                {
+                    errors.Add($"插件类型 {candidateTypeName} 无法从程序集 {Path.GetFileName(pluginPath)} 中加载。");
                     continue;
+                }
+
+                if (type.IsAbstract || type.IsInterface)
+                {
+                    errors.Add($"插件类型 {candidateTypeName} 已标记为插件导出，但它是抽象类型或接口，无法实例化。");
+                    continue;
+                }
+
+                if (!typeof(Contracts.IPlugin).IsAssignableFrom(type))
+                {
+                    errors.Add($"插件类型 {candidateTypeName} 已标记为插件导出，但未实现 {nameof(Contracts.IPlugin)}。继承 PluginBase 也可以满足该要求。");
+                    continue;
+                }
 
                 var pluginAttribute = type.GetCustomAttribute<Contracts.Attributes.PluginAttribute>();
                 if (pluginAttribute is null)

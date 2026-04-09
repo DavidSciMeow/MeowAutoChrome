@@ -1,5 +1,7 @@
 ﻿namespace MeowAutoChrome.Contracts;
 
+using Microsoft.Playwright;
+
 /// <summary>
 /// 插件状态枚举，表示插件当前的运行状态，包括停止、运行和暂停三种状态。<br/>
 /// Plugin state enum indicating the current running state of a plugin: Stopped, Running, or Paused.
@@ -145,13 +147,178 @@ public sealed record BrowserCreationOptions
 );
 
 /// <summary>
-/// 当插件查询宿主管理的浏览器实例时返回的描述信息，保持最小以避免泄露宿主内部细节。<br/>
-/// Descriptor returned to plugins when querying information about a browser instance managed by the host.
+/// 插件可见的宿主入口。它暴露宿主元数据、浏览器实例管理能力以及日志/消息发布能力。<br/>
+/// Host entry point visible to plugins. It exposes host metadata, browser-instance management capabilities, and logging/message publishing.
 /// </summary>
-public sealed record PluginBrowserInstanceInfo(
-    string InstanceId,
-    string? DisplayName,
-    string? UserDataDirectory,
-    string? OwnerId,
-    bool IsCurrent
-);
+public interface IPluginHost
+{
+    /// <summary>
+    /// 当前插件的唯一标识符。<br/>
+    /// Unique identifier of the current plugin.
+    /// </summary>
+    string PluginId { get; }
+
+    /// <summary>
+    /// 当前调用目标标识，例如生命周期命令或动作 Id。<br/>
+    /// Identifier of the current invocation target, such as a lifecycle command or action id.
+    /// </summary>
+    string TargetId { get; }
+
+    /// <summary>
+    /// 当前插件的运行状态。该值由宿主维护，插件只读不可写。<br/>
+    /// Current runtime state of the plugin. The host owns this value and plugins can only read it.
+    /// </summary>
+    PluginState State { get; }
+
+    /// <summary>
+    /// 宿主当前对外暴露的基础地址；当宿主未提供时可能为 null。<br/>
+    /// Host base address currently exposed externally; may be null when the host does not provide one.
+    /// </summary>
+    string? BaseAddress { get; }
+
+    /// <summary>
+    /// 当前插件执行对应的取消令牌。<br/>
+    /// Cancellation token associated with the current plugin execution.
+    /// </summary>
+    CancellationToken CancellationToken { get; }
+
+    /// <summary>
+    /// 返回当前插件拥有的全部浏览器实例。<br/>
+    /// Return all browser instances owned by the current plugin.
+    /// </summary>
+    Task<IReadOnlyList<IPluginBrowserInstance>> GetOwnedBrowserInstancesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 根据实例 Id 返回当前插件可访问的浏览器实例。<br/>
+    /// Return a browser instance accessible to the current plugin by instance id.
+    /// </summary>
+    Task<IPluginBrowserInstance?> GetBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 请求宿主创建新的浏览器实例，并返回创建后的实例句柄。<br/>
+    /// Request the host to create a new browser instance and return the resulting instance handle.
+    /// </summary>
+    Task<IPluginBrowserInstance?> CreateBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 请求宿主关闭指定浏览器实例。<br/>
+    /// Request the host to close the specified browser instance.
+    /// </summary>
+    Task<bool> CloseBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 请求宿主将指定浏览器实例切换为当前实例。<br/>
+    /// Request the host to switch the specified browser instance to become the current instance.
+    /// </summary>
+    Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 允许插件将日志写入宿主应用的集中日志系统。<br/>
+    /// Allow the plugin to write logs into the host application's centralized log system.
+    /// </summary>
+    Task WriteLogAsync(string level, string message, string? category = null);
+
+    /// <summary>
+    /// 向宿主推送插件运行过程中的消息或结构化数据更新。默认仅写入消息记录；当 toastRequested 为 true 时，宿主应额外显示 toast。<br/>
+    /// Publish an in-progress plugin message or structured data update to the host. By default it only updates the message feed; when toastRequested is true, the host should additionally display a toast.
+    /// </summary>
+    Task PublishUpdateAsync(string? message, IReadOnlyDictionary<string, string?>? data = null, bool toastRequested = false);
+
+    /// <summary>
+    /// 向宿主推送一条应额外显示 toast 的消息。<br/>
+    /// Publish a message that should additionally be displayed as a toast by the host.
+    /// </summary>
+    Task ToastAsync(string message, IReadOnlyDictionary<string, string?>? data = null);
+}
+
+/// <summary>
+/// 插件可见的浏览器页面句柄。<br/>
+/// Plugin-visible browser page handle.
+/// </summary>
+public interface IPluginBrowserPage
+{
+    /// <summary>
+    /// 页面对应的宿主内部页签 Id。<br/>
+    /// Host-internal tab identifier associated with the page.
+    /// </summary>
+    string PageId { get; }
+
+    /// <summary>
+    /// Playwright 页面对象。<br/>
+    /// Playwright page object.
+    /// </summary>
+    IPage Page { get; }
+
+    /// <summary>
+    /// 当前页面是否为该实例的选中页面。<br/>
+    /// Whether this page is currently selected for the instance.
+    /// </summary>
+    bool IsSelected { get; }
+}
+
+/// <summary>
+/// 插件可见的浏览器实例句柄。<br/>
+/// Plugin-visible browser instance handle.
+/// </summary>
+public interface IPluginBrowserInstance
+{
+    /// <summary>
+    /// 浏览器实例 Id。<br/>
+    /// Browser instance id.
+    /// </summary>
+    string InstanceId { get; }
+
+    /// <summary>
+    /// 浏览器实例显示名称。<br/>
+    /// Browser instance display name.
+    /// </summary>
+    string? DisplayName { get; }
+
+    /// <summary>
+    /// 浏览器实例使用的用户数据目录。<br/>
+    /// User-data directory used by the browser instance.
+    /// </summary>
+    string? UserDataDirectory { get; }
+
+    /// <summary>
+    /// 浏览器实例的拥有者标识。<br/>
+    /// Owner identifier of the browser instance.
+    /// </summary>
+    string? OwnerId { get; }
+
+    /// <summary>
+    /// 当前实例是否为宿主选中的实例。<br/>
+    /// Whether the instance is currently selected by the host.
+    /// </summary>
+    bool IsCurrent { get; }
+
+    /// <summary>
+    /// Playwright Browser 对象；在持久化上下文未公开 Browser 时可能为 null。<br/>
+    /// Playwright Browser object; may be null when the persistent context does not expose a Browser instance.
+    /// </summary>
+    IBrowser? Browser { get; }
+
+    /// <summary>
+    /// Playwright BrowserContext 对象。<br/>
+    /// Playwright BrowserContext object.
+    /// </summary>
+    IBrowserContext? BrowserContext { get; }
+
+    /// <summary>
+    /// 当前活动页面。<br/>
+    /// Current active page.
+    /// </summary>
+    IPage? ActivePage { get; }
+
+    /// <summary>
+    /// 当前选中的页面 Id。<br/>
+    /// Currently selected page id.
+    /// </summary>
+    string? SelectedPageId { get; }
+
+    /// <summary>
+    /// 当前实例下的页面列表。<br/>
+    /// Pages currently available under this instance.
+    /// </summary>
+    IReadOnlyList<IPluginBrowserPage> Pages { get; }
+}

@@ -154,6 +154,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IPluginDiscoveryService, PluginDiscoveryService>();
         }
         services.AddSingleton<IPluginOutputPublisher>(sp => new SignalRPluginOutputPublisher(sp.GetRequiredService<IHubContext<BrowserHub>>()));
+        services.AddSingleton<HostAddressProvider>();
+        services.AddSingleton<IHostAddressProvider>(sp => sp.GetRequiredService<HostAddressProvider>());
 
         // Plugin host dependencies
         services.AddSingleton<Core.Services.PluginHost.PluginAssemblyLoader, Core.Services.PluginHost.PluginAssemblyLoader>();
@@ -173,7 +175,8 @@ public static class ServiceCollectionExtensions
                 ExecutionService = sp.GetRequiredService<Core.Services.PluginHost.PluginExecutionService>(),
                 PublishingService = sp.GetRequiredService<Core.Services.PluginHost.PluginPublishingService>(),
                 SettingsProvider = sp.GetRequiredService<IProgramSettingsProvider>(),
-                AppLogService = sp.GetRequiredService<AppLogService>()
+                AppLogService = sp.GetRequiredService<AppLogService>(),
+                HostAddressProvider = sp.GetService<IHostAddressProvider>()
             }, sp.GetRequiredService<ILogger<Core.Services.PluginHost.BrowserPluginHostCore>>()));
         services.AddSingleton<IPluginHostCore>(sp => sp.GetRequiredService<Core.Services.PluginHost.BrowserPluginHostCore>());
 

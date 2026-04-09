@@ -114,7 +114,7 @@
                                         <button type="button"
                                             class="btn btn-outline-secondary btn-md ms-2 plugin-drawer-toggle d-none"
                                             id="pluginDrawerOpenBtn" aria-controls="pluginDrawerPane"
-                                            aria-expanded="false" title="打开插件区" aria-label="插件区">
+                                            aria-expanded="true" title="隐藏插件区" aria-label="隐藏插件区">
                                             <i class="fa-solid fa-puzzle-piece me-1"></i>插件区
                                         </button>
                                     </div>
@@ -263,7 +263,7 @@
                     </div>
                     <div class="browser-pane-divider" id="browserPaneDivider" role="separator"
                         aria-orientation="vertical" aria-label="调整浏览器区与插件区宽度" tabindex="0"></div>
-                    <div class="browser-pane browser-pane-right" id="pluginDrawerPane">
+                    <div class="browser-pane browser-pane-right" id="pluginDrawerPane" aria-hidden="false">
                         <div class="card h-100 plugin-panel">
                             <div class="card-body">
                                 <div id="pluginHost" class="vstack gap-3"></div>

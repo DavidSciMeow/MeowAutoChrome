@@ -49,7 +49,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
                     plugin.Id,
                     plugin.Name,
                     plugin.Description,
-                    instance.Instance.State.ToString(),
+                    instance.State.ToString(),
                     instance.Instance.SupportsPause,
                     [.. plugin.Controls
                         .Where(control => instance.Instance.SupportsPause || (control.Command != "pause" && control.Command != "resume"))

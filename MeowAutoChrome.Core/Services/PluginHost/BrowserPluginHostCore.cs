@@ -28,6 +28,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
     private readonly IPluginExecutor _executor;
     private readonly BrowserPluginDiscovery _pluginDiscovery;
     private readonly IProgramSettingsProvider? _settingsProvider;
+    private readonly IHostAddressProvider? _hostAddressProvider;
     // cached discovery snapshot maintained by background scanner
     private CoreModels.PluginDiscoverySnapshot _latestSnapshot = new([], [], []);
     private readonly object _snapshotLock = new();
@@ -54,22 +55,86 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         _executionService = deps.ExecutionService;
         _publishingService = deps.PublishingService;
         _settingsProvider = deps.SettingsProvider;
+        _hostAddressProvider = deps.HostAddressProvider;
 
         // initialize discovery helper and start background scanning loop
         _pluginDiscovery = new BrowserPluginDiscovery(_discovery, _assemblyLoader, _logger, _instanceManager);
         _scanTask = Task.Run(() => _pluginDiscovery.ScanLoopAsync(_scanCts.Token));
     }
 
-    private Task<PluginBrowserInstanceInfo?> GetBrowserInstanceInfoAsync(string instanceId, CancellationToken ct)
+    private IPluginBrowserInstance? GetCurrentBrowserInstanceHandle()
     {
-        var inst = _browserInstances.GetInstance(instanceId);
-        if (inst is null) return Task.FromResult<PluginBrowserInstanceInfo?>(null);
-        var info = new PluginBrowserInstanceInfo(inst.InstanceId, inst.DisplayName, inst.UserDataDirectoryPath, inst.OwnerId, string.Equals(inst.InstanceId, _browserInstances.CurrentInstanceId, StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult<PluginBrowserInstanceInfo?>(info);
+        if (string.IsNullOrWhiteSpace(_browserInstances.CurrentInstanceId))
+            return null;
+
+        var instance = _browserInstances.GetInstance(_browserInstances.CurrentInstanceId);
+        return instance is null ? null : BuildBrowserInstanceHandle(instance);
     }
 
-    private Task<IReadOnlyList<string>> GetPluginInstanceIdsAsync(string pluginId, CancellationToken ct)
-        => Task.FromResult(_browserInstances.GetPluginInstanceIds(pluginId));
+    private IPluginBrowserInstance BuildBrowserInstanceHandle(ICoreBrowserInstance instance)
+    {
+        var pages = instance.TabIds
+            .Select(tabId =>
+            {
+                var page = instance.GetPageById(tabId);
+                return page is null
+                    ? null
+                    : new PluginBrowserPageHandleCore(tabId, page, string.Equals(tabId, instance.SelectedPageId, StringComparison.Ordinal));
+            })
+            .Where(page => page is not null)
+            .Cast<IPluginBrowserPage>()
+            .ToArray();
+
+        return new PluginBrowserInstanceHandleCore(
+            instance.InstanceId,
+            instance.DisplayName,
+            instance.UserDataDirectoryPath,
+            instance.OwnerId,
+            string.Equals(instance.InstanceId, _browserInstances.CurrentInstanceId, StringComparison.OrdinalIgnoreCase),
+            instance.BrowserContext?.Browser,
+            instance.BrowserContext,
+            instance.GetSelectedPage(),
+            instance.SelectedPageId,
+            pages);
+    }
+
+    private IReadOnlyList<IPluginBrowserInstance> GetOwnedBrowserInstancesSnapshot(string pluginId)
+        => _browserInstances.Instances
+            .Where(instance => string.Equals(instance.OwnerId, pluginId, StringComparison.OrdinalIgnoreCase))
+            .Select(BuildBrowserInstanceHandle)
+            .ToArray();
+
+    private Task<IReadOnlyList<IPluginBrowserInstance>> GetOwnedBrowserInstancesAsync(string pluginId, CancellationToken ct)
+        => Task.FromResult(GetOwnedBrowserInstancesSnapshot(pluginId));
+
+    private Task<IPluginBrowserInstance?> GetBrowserInstanceAsync(string pluginId, string instanceId, CancellationToken ct)
+    {
+        var instance = _browserInstances.GetInstance(instanceId);
+        if (instance is null)
+            return Task.FromResult<IPluginBrowserInstance?>(null);
+
+        var isOwned = string.Equals(instance.OwnerId, pluginId, StringComparison.OrdinalIgnoreCase);
+        var isCurrent = string.Equals(instance.InstanceId, _browserInstances.CurrentInstanceId, StringComparison.OrdinalIgnoreCase);
+        return Task.FromResult(isOwned || isCurrent ? BuildBrowserInstanceHandle(instance) : null);
+    }
+
+    private async Task<bool> CloseBrowserInstanceAsync(string pluginId, string instanceId, CancellationToken ct)
+    {
+        var instance = _browserInstances.GetInstance(instanceId);
+        if (instance is null || !string.Equals(instance.OwnerId, pluginId, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return await _browserInstances.CloseInstanceAsync(instanceId);
+    }
+
+    private async Task<bool> SelectBrowserInstanceAsync(string pluginId, string instanceId, CancellationToken ct)
+    {
+        var instance = _browserInstances.GetInstance(instanceId);
+        if (instance is null || !string.Equals(instance.OwnerId, pluginId, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return await _browserInstances.SelectBrowserInstanceAsync(instanceId, ct);
+    }
 
     /// <summary>
     /// 异步释放：取消后台扫描并等待任务完成。<br/>
@@ -304,41 +369,52 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
             return null;
         var instance = _instanceManager.GetOrCreateInstance(plugin);
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
-        _instanceManager.EnsureFreshLifecycleToken(plugin);
-        var instanceCtn = _instanceManager.GetOrCreateInstance(plugin);
-        var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
-        var hostContext = new PluginHostContextCore(
-            _browserInstances.BrowserContext,
-            _browserInstances.ActivePage,
-            _browserInstances.CurrentInstanceId,
-            normalizedArguments,
-            plugin.Id,
-            command,
-            (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, openModal, connectionId, combinedCts.Token),
-            RequestNewBrowserInstanceAsync,
-            GetBrowserInstanceInfoAsync,
-            token => GetPluginInstanceIdsAsync(plugin.Id, token),
-            (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
-            combinedCts.Token
-        );
-        if (string.Equals(command, "stop", StringComparison.OrdinalIgnoreCase))
+        var normalizedCommand = command.ToLowerInvariant();
+        if (normalizedCommand is "start" or "resume")
+            _instanceManager.EnsureFreshLifecycleToken(plugin);
+
+        if (string.Equals(normalizedCommand, "stop", StringComparison.OrdinalIgnoreCase))
         {
             try { _instanceManager.CancelLifecycle(plugin); } catch { }
         }
+
+        var instanceCtn = _instanceManager.GetOrCreateInstance(plugin);
+        using var combinedCts = string.Equals(normalizedCommand, "stop", StringComparison.OrdinalIgnoreCase)
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instanceCtn.LifecycleCancellationToken);
+        var hostContext = new PluginHostContextCore(
+            GetCurrentBrowserInstanceHandle(),
+            GetOwnedBrowserInstancesSnapshot(plugin.Id),
+            normalizedArguments,
+            plugin.Id,
+            command,
+            instance.State,
+            _hostAddressProvider?.BaseAddress,
+            (message, data, toastRequested) => _publisher.PublishPluginOutputAsync(plugin.Id, command, message, data, toastRequested, connectionId, combinedCts.Token),
+            token => GetOwnedBrowserInstancesAsync(plugin.Id, token),
+            (instanceId, token) => GetBrowserInstanceAsync(plugin.Id, instanceId, token),
+            (options, token) => CreateBrowserInstanceAsync(plugin.Id, options, token),
+            (instanceId, token) => CloseBrowserInstanceAsync(plugin.Id, instanceId, token),
+            (instanceId, token) => SelectBrowserInstanceAsync(plugin.Id, instanceId, token),
+            (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
+            combinedCts.Token
+        );
         try
         {
+            if ((normalizedCommand == "pause" || normalizedCommand == "resume") && !instance.Instance.SupportsPause)
+                return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, "Plugin does not support pause/resume.", instance.State.ToString(), null);
+
             var result = await _executionService.ExecuteControlAsync(instance, command, hostContext, combinedCts.Token);
-            return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.Instance.State.ToString(), result.Data);
+            if (result.Success)
+                ApplyLifecycleState(instance, normalizedCommand);
+
+            return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, command, result.Message, instance.State.ToString(), result.Data);
         }
         catch (Exception ex)
         {
             try { _appLogService.WriteEntry(LogLevel.Error, ex.ToString(), $"Plugin.{plugin.Id}"); } catch { }
             _logger.LogError(ex, "Plugin control failed for {PluginId}/{Command}", plugin.Id, command);
             throw;
-        }
-        finally
-        {
-            combinedCts.Dispose();
         }
     }
 
@@ -359,25 +435,27 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         var normalizedArguments = arguments ?? new Dictionary<string, string?>();
         _instanceManager.EnsureFreshLifecycleToken(plugin);
         using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, instance.LifecycleCancellationToken);
-        var browserContext = _browserInstances.BrowserContext ?? throw new InvalidOperationException("Browser context is not available");
         var hostContext = new PluginHostContextCore(
-            browserContext,
-            _browserInstances.ActivePage,
-            _browserInstances.CurrentInstanceId,
+            GetCurrentBrowserInstanceHandle(),
+            GetOwnedBrowserInstancesSnapshot(plugin.Id),
             normalizedArguments,
             plugin.Id,
             action.Id,
-            (message, data, openModal) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, openModal, connectionId, combinedCts.Token),
-            RequestNewBrowserInstanceAsync,
-            GetBrowserInstanceInfoAsync,
-            token => GetPluginInstanceIdsAsync(plugin.Id, token),
+            instance.State,
+            _hostAddressProvider?.BaseAddress,
+            (message, data, toastRequested) => _publisher.PublishPluginOutputAsync(plugin.Id, action.Id, message, data, toastRequested, connectionId, combinedCts.Token),
+            token => GetOwnedBrowserInstancesAsync(plugin.Id, token),
+            (instanceId, token) => GetBrowserInstanceAsync(plugin.Id, instanceId, token),
+            (options, token) => CreateBrowserInstanceAsync(plugin.Id, options, token),
+            (instanceId, token) => CloseBrowserInstanceAsync(plugin.Id, instanceId, token),
+            (instanceId, token) => SelectBrowserInstanceAsync(plugin.Id, instanceId, token),
             (level, msg, cat) => { try { _appLogService.WriteEntry(level, msg, cat ?? plugin.Id); } catch { } return Task.CompletedTask; },
             combinedCts.Token
         );
         try
         {
             var result = await _executionService.ExecuteActionAsync(instance, action, hostContext, combinedCts.Token);
-            return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.Instance.State.ToString(), result.Data);
+            return new CoreModels.BrowserPluginExecutionResponse(plugin.Id, action.Id, result.Message, instance.State.ToString(), result.Data);
         }
         catch (Exception ex)
         {
@@ -395,12 +473,12 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
     /// 工厂辅助方法：根据选项请求创建新的浏览器实例（由宿主执行具体创建）。<br/>
     /// Factory helper to request creation of a new browser instance based on provided options.
     /// </summary>
-    private async Task<string?> RequestNewBrowserInstanceAsync(BrowserCreationOptions options, CancellationToken ct)
+    private async Task<IPluginBrowserInstance?> CreateBrowserInstanceAsync(string pluginId, BrowserCreationOptions options, CancellationToken ct)
     {
         var browserType = (options.BrowserType ?? "chromium").ToLowerInvariant();
         if (browserType != "chromium" && browserType != "firefox" && browserType != "webkit")
             return null;
-        var ownerId = string.IsNullOrWhiteSpace(options.OwnerId) ? "plugin" : options.OwnerId;
+        var ownerId = pluginId;
         var display = string.IsNullOrWhiteSpace(options.DisplayName) ? ownerId : options.DisplayName;
         var requestedInstanceId = string.IsNullOrWhiteSpace(options.RequestedInstanceId) ? null : options.RequestedInstanceId.Trim();
 
@@ -457,7 +535,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         {
             var instId = await _browserInstances.CreateAsync(ownerId, display, userData, options.Headless, previewInstanceId: requestedInstanceId);
             _logger.LogInformation("Created plugin instance {Inst} for {Plugin}", instId, ownerId);
-            return instId;
+            return await GetBrowserInstanceAsync(pluginId, instId, ct);
         }
         catch (Exception ex)
         {
@@ -465,6 +543,18 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         }
 
         return null;
+    }
+
+    private static void ApplyLifecycleState(CoreModels.RuntimeBrowserPluginInstance instance, string command)
+    {
+        instance.State = command switch
+        {
+            "start" => PluginState.Running,
+            "stop" => PluginState.Stopped,
+            "pause" => PluginState.Paused,
+            "resume" => PluginState.Running,
+            _ => instance.State
+        };
     }
 
     // Helper to get a settings provider from DI via dependencies (best-effort)

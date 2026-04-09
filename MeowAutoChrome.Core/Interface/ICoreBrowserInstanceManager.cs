@@ -82,6 +82,15 @@ public interface ICoreBrowserInstanceManager
     /// </summary>
     /// <param name="instanceId">要关闭的实例 ID / instance id to close.</param>
     Task<bool> CloseInstanceAsync(string instanceId);
+
+    /// <summary>
+    /// 将指定实例切换为当前实例。<br/>
+    /// Switch the specified instance to become the current instance.
+    /// </summary>
+    /// <param name="instanceId">要切换到的实例 ID / instance id to switch to.</param>
+    /// <param name="cancellationToken">可选取消令牌 / optional cancellation token.</param>
+    Task<bool> SelectBrowserInstanceAsync(string instanceId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// 更新启动配置并可强制重载。<br/>
     /// Update launch settings and optionally force reload.

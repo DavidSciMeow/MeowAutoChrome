@@ -32,6 +32,25 @@ var app = builder.Build();
 app.Lifetime.ApplicationStarted.Register(() => appLogService.WriteEntry(LogLevel.Debug, "WebAPI started.", "System"));
 app.Lifetime.ApplicationStopping.Register(() => appLogService.WriteEntry(LogLevel.Debug, "WebAPI stopping.", "System"));
 app.Lifetime.ApplicationStopping.Register(() => app.Services.GetService<MeowAutoChrome.Core.Services.PluginHost.BrowserPluginHostCore>()?.DisposeAsync().AsTask().GetAwaiter().GetResult());
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    try
+    {
+        var provider = app.Services.GetService<HostAddressProvider>();
+        if (provider is null)
+            return;
+
+        provider.BaseAddress = app.Urls.FirstOrDefault(url => url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            ?? app.Urls.FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(provider.BaseAddress))
+            appLogService.WriteEntry(LogLevel.Debug, $"Resolved host base address: {provider.BaseAddress}", "System");
+    }
+    catch (Exception ex)
+    {
+        appLogService.WriteEntry(LogLevel.Warning, ex.ToString(), "Startup.BaseAddress");
+    }
+});
 
 app.UseRouting();
 app.UseAuthorization();

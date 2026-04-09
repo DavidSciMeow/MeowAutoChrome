@@ -202,6 +202,32 @@
 
         if (isCurrentModal)
             renderPluginOutputModal(update.pluginId);
+
+        if (update.toastRequested === true || update.ToastRequested === true) {
+            const summary = summarizePluginOutput(update.message, update.data || {}) || '插件有新消息';
+            if (typeof window.showToast === 'function') {
+                window.showToast('插件消息', summary, false);
+            } else {
+                try {
+                    const container = document.getElementById('toastContainer') || (() => {
+                        const c = document.createElement('div');
+                        c.id = 'toastContainer';
+                        c.className = 'toast-container position-fixed top-0 end-0 p-3';
+                        document.body.appendChild(c);
+                        return c;
+                    })();
+                    const el = document.createElement('div');
+                    el.className = 'toast align-items-center text-bg-success border-0';
+                    el.setAttribute('role', 'status');
+                    el.setAttribute('aria-live', 'polite');
+                    el.setAttribute('aria-atomic', 'true');
+                    el.innerHTML = `<div class="d-flex"><div class="toast-body"><strong>插件消息</strong><div>${summary}</div></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+                    container.appendChild(el);
+                    bootstrap.Toast.getOrCreateInstance(el, { delay: 4000 }).show();
+                } catch {
+                }
+            }
+        }
     }
 
     function createPluginParameterField(parameter, parameterInputs) { const field = document.createElement('div'); const label = document.createElement('label'); label.className = 'form-label mb-1'; label.textContent = parameter.label + (parameter.required ? ' *' : ''); field.appendChild(label); let input; if (parameter.inputType === 'checkbox') { input = document.createElement('input'); input.type = 'checkbox'; input.className = 'form-check-input'; input.checked = String(parameter.defaultValue || 'false').toLowerCase() === 'true'; const wrapper = document.createElement('div'); wrapper.className = 'form-check'; wrapper.appendChild(input); field.appendChild(wrapper); } else if (parameter.inputType === 'select') { input = document.createElement('select'); input.className = 'form-select form-select-sm'; if (!parameter.required) { const emptyOption = document.createElement('option'); emptyOption.value = ''; emptyOption.textContent = '请选择'; input.appendChild(emptyOption); } for (const option of parameter.options || []) { const element = document.createElement('option'); element.value = option.value; element.textContent = option.label; if ((parameter.defaultValue ?? '') === option.value) element.selected = true; input.appendChild(element); } field.appendChild(input); } else { input = document.createElement('input'); input.type = parameter.inputType === 'number' ? 'number' : parameter.inputType === 'datetime-local' ? 'datetime-local' : 'text'; input.className = 'form-control form-control-sm'; input.value = parameter.defaultValue ?? ''; input.placeholder = parameter.description || parameter.label; if (parameter.inputType === 'number') input.step = 'any'; if (parameter.inputType === 'datetime-local') input.step = '1'; if (parameter.inputType === 'guid') { input.placeholder = parameter.description || '00000000-0000-0000-0000-000000000000'; input.pattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; input.spellcheck = false; input.autocomplete = 'off'; } field.appendChild(input); } if (parameter.description) { const help = document.createElement('div'); help.className = 'form-text mt-1'; help.textContent = parameter.description; field.appendChild(help); } parameterInputs[parameter.name] = { input, parameter }; return field; }

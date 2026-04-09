@@ -18,5 +18,5 @@ public sealed class PluginPublishingService(IPluginOutputPublisher publisher)
     /// 将插件的输出（消息/数据）发布到订阅方或客户端。<br/>
     /// Publish plugin output (message/data) to subscribers or clients.
     /// </summary>
-    public Task PublishAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool openModal, string? connectionId, CancellationToken cancellationToken) => publisher.PublishPluginOutputAsync(pluginId, targetId, message, data, openModal, connectionId, cancellationToken);
+    public Task PublishAsync(string pluginId, string targetId, string? message, IReadOnlyDictionary<string, string?>? data, bool toastRequested, string? connectionId, CancellationToken cancellationToken) => publisher.PublishPluginOutputAsync(pluginId, targetId, message, data, toastRequested, connectionId, cancellationToken);
 }

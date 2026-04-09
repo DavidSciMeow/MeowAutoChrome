@@ -7,7 +7,7 @@ namespace MeowAutoChrome.Contracts;
 
 /// <summary>
 /// 插件接口，定义插件的基本属性与生命周期操作。<br/>
-/// Plugin interface defining basic plugin properties and lifecycle operations.
+/// Plugin interface defining plugin capabilities and lifecycle operations.
 /// </summary>
 public interface IPlugin
 {
@@ -40,20 +40,14 @@ public interface IPlugin
     Task<IResult> ResumeAsync();
 
     /// <summary>
-    /// 当前插件状态。<br/>
-    /// Current plugin state.
-    /// </summary>
-    PluginState State { get; }
-
-    /// <summary>
-    /// 是否支持暂停/恢复操作。<br/>
-    /// Whether the plugin supports pause/resume operations.
+    /// 是否支持暂停/恢复操作。宿主会根据该能力决定是否暴露暂停/恢复控制。<br/>
+    /// Whether the plugin supports pause/resume operations. The host uses this capability to decide whether pause/resume controls should be exposed.
     /// </summary>
     bool SupportsPause { get; }
 
     /// <summary>
-    /// 宿主提供的上下文。宿主在调用插件动作前会设置该属性，调用后会清除。插件可通过该上下文访问宿主服务（例如浏览器上下文）。<br/>
-    /// Host-provided context. The host will set this before invoking plugin actions and clear it afterwards. Plugins can use this to access host services such as browser context.
+    /// 宿主提供的上下文。宿主在调用插件生命周期方法和动作前会设置该属性，调用后会清除。<br/>
+    /// Host-provided context. The host sets this before invoking plugin lifecycle methods and actions, and clears it afterwards.
     /// </summary>
     IPluginContext? HostContext { get; set; }
 }

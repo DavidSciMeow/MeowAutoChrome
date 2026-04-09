@@ -58,4 +58,9 @@ public sealed class BrowserPluginHostDependencies
     /// 应用日志服务，供插件宿主将插件日志写入应用级日志。/ App log service used by plugin host to write plugin logs.
     /// </summary>
     public AppLogService AppLogService { get; init; } = null!;
+
+    /// <summary>
+    /// 宿主基础地址提供者。/ Host base-address provider.
+    /// </summary>
+    public IHostAddressProvider? HostAddressProvider { get; init; }
 }

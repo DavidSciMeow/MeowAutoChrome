@@ -98,7 +98,7 @@
             message: response?.message ?? fallbackMessage,
             data: normalizedData,
             state: response?.state,
-            openModal: false,
+            toastRequested: false,
             timestampUtc: new Date().toISOString()
         });
     }
@@ -185,7 +185,6 @@
                             const url = api('pluginsControl', '/api/plugins/control');
                             const res = await postJsonUrl(url, { pluginId: plugin.id, command: c.command, arguments: {} });
                             pushExecutionResponseToPluginOutput(plugin.id, c.command, res);
-                            showToast('控制', (res?.message || ('状态: ' + (res?.state || 'ok'))), false);
                             await (window.BrowserUI.loadPlugins?.() || Promise.resolve());
                         } catch (e) { showToast('控制失败', formatRequestError(e), true); } finally { btn.disabled = false; }
                     });
@@ -205,7 +204,6 @@
                             const url = api('pluginsRun', '/api/plugins/run');
                             const res = await postJsonUrl(url, { pluginId: plugin.id, functionId: fn.id, arguments: {} });
                             pushExecutionResponseToPluginOutput(plugin.id, fn.id, res);
-                            showToast('执行', '返回: ' + ((res?.message && !res?.data) ? res.message : JSON.stringify(res?.data ?? res)), false);
                         } catch (e) { showToast('执行失败', formatRequestError(e), true); } finally { btn.disabled = false; }
                     });
                     functionsWrap.appendChild(btn);

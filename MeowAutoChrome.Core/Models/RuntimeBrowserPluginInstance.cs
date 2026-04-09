@@ -20,6 +20,13 @@ public sealed class RuntimeBrowserPluginInstance(Type type, IPlugin instance)
     /// Plugin instance object.
     /// </summary>
     public IPlugin Instance { get; } = instance;
+
+    /// <summary>
+    /// 由宿主管理的当前插件运行状态。插件返回成功后由宿主统一更新该值。<br/>
+    /// Current plugin runtime state managed by the host. The host updates this value after successful lifecycle operations.
+    /// </summary>
+    public PluginState State { get; set; } = PluginState.Stopped;
+
     /// <summary>
     /// 执行锁，用于同步插件执行。<br/>
     /// Execution lock used to synchronize plugin execution.

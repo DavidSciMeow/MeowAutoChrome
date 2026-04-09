@@ -109,9 +109,9 @@ public sealed record BrowserPluginExecutionResponse(string PluginId, string Targ
 /// <param name="TargetId">目标 ID / target id.</param>
 /// <param name="Message">消息文本 / message text.</param>
 /// <param name="Data">附带的键值数据 / attached key/value data.</param>
-/// <param name="OpenModal">是否以模态方式展示 / whether to open as modal.</param>
+/// <param name="ToastRequested">是否请求额外显示 toast / whether an additional toast should be requested.</param>
 /// <param name="TimestampUtc">事件时间戳（UTC）/ event timestamp (UTC).</param>
-public sealed record BrowserPluginOutputUpdate(string PluginId, string TargetId, string? Message, IReadOnlyDictionary<string, string?> Data, bool OpenModal, DateTimeOffset TimestampUtc);
+public sealed record BrowserPluginOutputUpdate(string PluginId, string TargetId, string? Message, IReadOnlyDictionary<string, string?> Data, bool ToastRequested, DateTimeOffset TimestampUtc);
 
 /// <summary>
 /// 插件错误描述符，包含程序集、摘要与详细信息。<br/>
