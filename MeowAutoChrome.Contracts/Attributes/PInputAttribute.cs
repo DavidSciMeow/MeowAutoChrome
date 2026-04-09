@@ -3,53 +3,40 @@
 namespace MeowAutoChrome.Contracts.Attributes;
 
 /// <summary>
-/// 浏览器插件输入特性，用于标记方法或参数为浏览器插件的输入项。
+/// 标注方法参数或属性为插件输入元数据（名称、标签、描述等）。<br/>
+/// Attribute to annotate a parameter or property as plugin input metadata (name, label, description, etc.).
 /// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Parameter, AllowMultiple = true, Inherited = false)]
+[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, AllowMultiple = true)]
 public sealed class PInputAttribute : Attribute
 {
     /// <summary>
-    /// 浏览器插件输入特性的构造函数，接受一个标签参数，用于描述输入项的名称或用途。
-    /// </summary>
-    /// <param name="label">输入项的名称或用途</param>
-    public PInputAttribute(string label)
-    {
-        Label = label;
-    }
-    /// <summary>
-    /// 浏览器插件输入特性的构造函数，接受一个标签参数和一个描述参数，用于描述输入项的名称、用途和详细信息。
-    /// </summary>
-    /// <param name="label">输入项的名称或用途</param>
-    /// <param name="description">输入项的详细描述</param>
-    public PInputAttribute(string label, string description)
-    {
-        Label = label;
-        Description = description;
-    }
-    /// <summary>
-    /// 输入项的名称或用途
-    /// </summary>
-    public string Label { get; }
-    /// <summary>
-    /// 输入项的详细描述
-    /// </summary>
-    public string? Description { get; init; }
-    /// <summary>
-    /// 输入项的名称，默认为null，如果不为null，则表示输入项的名称，否则使用参数名作为输入项的名称。
+    /// 输入参数的名称（键）。<br/>
+    /// Name/key of the input parameter.
     /// </summary>
     public string? Name { get; set; }
     /// <summary>
-    /// 默认值，默认为null，如果不为null，则表示输入项的默认值，否则没有默认值。
+    /// 显示标签。<br/>
+    /// Display label.
+    /// </summary>
+    public string? Label { get; set; }
+    /// <summary>
+    /// 参数描述。<br/>
+    /// Description of the parameter.
+    /// </summary>
+    public string? Description { get; set; }
+    /// <summary>
+    /// 默认值（字符串形式）。<br/>
+    /// Default value (as string).
     /// </summary>
     public string? DefaultValue { get; set; }
     /// <summary>
-    /// 是否必填，默认为false，如果为true，则表示输入项是必填的，否则是可选的。
+    /// 是否必填。<br/>
+    /// Whether the input is required.
     /// </summary>
     public bool Required { get; set; }
     /// <summary>
-    /// 输入类型，默认为"text"，表示输入项的类型，可以是"text"、"number"、"password"等常见的输入类型，也可以是自定义的输入类型，根据实际需求进行设置。
+    /// 输入类型提示（例如 text、password 等）。<br/>
+    /// Hint for input type (e.g., text, password).
     /// </summary>
-    public string InputType { get; set; } = "text";
+    public string? InputType { get; set; }
 }
-
-

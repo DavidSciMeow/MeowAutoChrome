@@ -1,32 +1,30 @@
-﻿using MeowAutoChrome.Contracts.BrowserPlugin;
-using System;
+﻿using System;
 
 namespace MeowAutoChrome.Contracts.Attributes;
 
 /// <summary>
-/// 浏览器插件特性，用于标记浏览器插件的类。
+/// 标记插件类型并携带元数据（id、name、description）。<br/>
+/// Attribute that marks a plugin type and carries metadata (id, name, description).
 /// </summary>
-/// <param name="id">导出插件的唯一标识符</param>
-/// <param name="name">导出的插件名称</param>
+/// <param name="id">插件 ID。<br/>Plugin identifier.</param>
+/// <param name="name">插件名称。<br/>Plugin name.</param>
+/// <param name="description">可选的插件描述。<br/>Optional plugin description.</param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
-public sealed class PluginAttribute(string id, string name) : Attribute
+public sealed class PluginAttribute(string id, string name, string? description = null) : Attribute
 {
     /// <summary>
-    /// 导出插件的唯一标识符，必须在同一插件中唯一。
+    /// 插件 ID。<br/>
+    /// Plugin identifier.
     /// </summary>
     public string Id { get; } = id;
     /// <summary>
-    /// 导出插件的名称
+    /// 插件名称。<br/>
+    /// Plugin name.
     /// </summary>
     public string Name { get; } = name;
     /// <summary>
-    /// 导出插件的描述信息
+    /// 可选的插件描述。<br/>
+    /// Optional plugin description.
     /// </summary>
-    public string? Description { get; init; }
-    /// <summary>
-    /// 导出插件版本，默认为当前版本号，必须符合语义化版本规范。
-    /// </summary>
-    public string ApiVersion { get; init; } = PluginApi.CurrentVersion;
+    public string? Description { get; set; } = description;
 }
-
-

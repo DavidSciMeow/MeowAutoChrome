@@ -363,3 +363,9 @@ MigrationBackup/
 FodyWeavers.xsd
 /MeowAutoChrome.Web/Plugins
 /MeowAutoChrome.Web/user_data
+/NDependOut
+*.ndproj
+/.github
+/Artifact
+/MeowAutoChrome.Electron/webapi
+chrome-win64.zip

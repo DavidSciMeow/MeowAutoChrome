@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MeowAutoChrome</title>
+    <link rel="icon" href="../favicon.ico" sizes="any" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="css/site.css" />
+</head>
+
+<body class="app-shell">
+
+    <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:10800;"></div>
+
+    <div id="playwrightGate" class="playwright-gate d-none" aria-live="polite">
+        <div class="playwright-gate-panel">
+            <div class="playwright-gate-eyebrow">运行时准备</div>
+            <h1 class="playwright-gate-title">需要先安装 Playwright Chromium</h1>
+            <p id="playwrightGateMessage" class="playwright-gate-message">正在检查 Playwright 运行时状态...</p>
+            <div class="playwright-gate-meta">
+                <div>安装目录：<span id="playwrightGateInstallDir">加载中...</span></div>
+                <div>安装器入口：<span id="playwrightGateScriptPath">加载中...</span></div>
+            </div>
+            <div class="playwright-gate-actions">
+                <select id="playwrightGateInstallMode" class="form-select form-select-sm"
+                    style="width:auto;min-width:180px;">
+                    <option value="online">在线安装</option>
+                    <option value="offline">离线安装（chrome-win64.zip）</option>
+                </select>
+                <button type="button" id="playwrightGateInstallBtn" class="btn btn-primary">安装 Chromium</button>
+                <button type="button" id="playwrightGateRetryBtn" class="btn btn-outline-secondary">重新检查</button>
+            </div>
+            <div id="playwrightGateStatus" class="playwright-gate-status">未开始</div>
+            <pre id="playwrightGateOutput" class="playwright-gate-output d-none"></pre>
+        </div>
+    </div>
+
+    <main class="app-content px-3 px-xl-4">
+        <div class="app-main">
+            <section class="app-page app-page-browser" data-page="browser">
+                <div class="browser-workspace" id="browserWorkspace">
+                    <div class="plugin-drawer-backdrop d-none" id="pluginDrawerBackdrop"></div>
+                    <div class="browser-pane browser-pane-left">
+                        <div class="browser-control-panel mb-3">
+                            <div class="browser-chrome">
+                                <div class="browser-tabstrip-meta">
+                                    <div class="browser-tabs-shell" id="tabsShell">
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn"
+                                            id="tabsScrollLeftBtn" title="向左滚动" aria-label="向左滚动">
+                                            <i class="fa-solid fa-chevron-left"></i>
+                                        </button>
+                                        <div id="tabsBar" class="browser-tabs"></div>
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-secondary browser-chrome-icon-btn"
+                                            id="tabsScrollRightBtn" title="向右滚动" aria-label="向右滚动">
+                                            <i class="fa-solid fa-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                    <div class="browser-tabstrip-controls">
+                                        <button type="button" class="toolbar-pill pill-primary browser-live-toggle"
+                                            id="liveToggleBtn">实时画面</button>
+                                        <small class="toolbar-pill pill-muted toolbar-pill--action" id="fpsDisplay"
+                                            role="button" tabindex="0" title="点击设置推流 FPS" aria-label="设置推流 FPS">FPS
+                                            --</small>
+                                        <span id="connStatus" class="toolbar-pill pill-secondary">未连接</span>
+                                        <button type="button" class="ms-2 d-inline-flex align-items-center"
+                                            id="headlessToggleBtn" title="切换 Headless 模式">
+                                            <i id="headlessToggleIcon" class="fa-solid fa-eye-slash me-1"></i>
+                                            <span id="headlessBadge" class="toolbar-pill pill-success">Headful</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="browser-toolbar">
+                                    <div class="address-panel">
+                                        <div class="browser-nav-buttons">
+                                            <button type="button"
+                                                class="btn btn-outline-secondary browser-chrome-icon-btn" id="backBtn"
+                                                title="Back" aria-label="Back"><i
+                                                    class="fa-solid fa-arrow-left"></i></button>
+                                            <button type="button"
+                                                class="btn btn-outline-secondary browser-chrome-icon-btn"
+                                                id="forwardBtn" title="Forward" aria-label="Forward"><i
+                                                    class="fa-solid fa-arrow-right"></i></button>
+                                            <button type="button"
+                                                class="btn btn-outline-secondary browser-chrome-icon-btn" id="reloadBtn"
+                                                title="Reload" aria-label="Reload"><i
+                                                    class="fa-solid fa-rotate-right"></i></button>
+                                        </div>
+
+                                        <div class="browser-omnibox">
+                                            <span class="browser-omnibox-icon"><i class="fa-solid fa-globe"></i></span>
+                                            <input id="urlInput" class="form-control" />
+                                            <!-- screenshot button moved into the omnibox, next to the go button -->
+                                            <button type="button"
+                                                class="btn btn-outline-primary browser-chrome-icon-btn ms-2"
+                                                id="shotBtn" title="Screenshot" aria-label="Screenshot"><i
+                                                    class="fa-solid fa-camera"></i></button>
+                                            <button type="button" class="btn btn-primary browser-omnibox-go" id="goBtn"
+                                                title="Go" aria-label="Go"><i
+                                                    class="fa-solid fa-up-right-from-square"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="browser-toolbar-group">
+                                        <button type="button" class="btn btn-primary btn-md ms-2" id="newInstanceBtn"
+                                            title="新建实例" aria-label="新建实例"
+                                            style="font-weight:600;padding:.35rem .85rem"><i
+                                                class="fa-solid fa-plus me-1"></i>新建实例</button>
+                                        <button type="button"
+                                            class="btn btn-outline-secondary btn-md ms-2 plugin-drawer-toggle d-none"
+                                            id="pluginDrawerOpenBtn" aria-controls="pluginDrawerPane"
+                                            aria-expanded="true" title="隐藏插件区" aria-label="隐藏插件区">
+                                            <i class="fa-solid fa-puzzle-piece me-1"></i>插件区
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div id="browserError" class="alert alert-warning d-none mt-3 mb-0" role="alert"></div>
+                            </div>
+                        </div>
+
+                        <div class="browser-stage">
+                            <canvas id="browserCanvas" tabindex="0">
+                            </canvas>
+                            <div id="noSignal" class="no-signal" style="display:flex;">实时画面未就绪或未连接</div>
+                            <div id="tabsStatusPanel" class="tabs-status-panel d-none"></div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="instanceSettingsModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="instanceSettingsModalTitle">实例设置</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="instanceSettingsModalSummary" class="text-muted small mb-3"></div>
+                                    <input type="hidden" id="instanceSettingsInstanceId" />
+                                    <input type="hidden" id="instanceSettingsCurrentUserDataDirectory" />
+                                    <input type="hidden" id="instanceSettingsIsSelected" />
+
+                                    <div class="mb-3">
+                                        <label class="form-label" for="instanceUserDataDirectoryInput">UserData
+                                            目录</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="instanceUserDataDirectoryInput"
+                                                placeholder="输入浏览器 UserData 目录" />
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="instanceUserDataDirectoryOpenBtn" title="打开目录"><i
+                                                    class="fa-solid fa-folder-open"></i></button>
+                                        </div>
+                                        <div class="form-text">切换目录时会询问是否把旧目录一起迁移过去。</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label" for="instanceUserAgentInput">实例 User-Agent</label>
+                                        <div class="form-check form-switch mb-2">
+                                            <input class="form-check-input" type="checkbox"
+                                                id="instanceUseProgramUserAgentInput" />
+                                            <label class="form-check-label"
+                                                for="instanceUseProgramUserAgentInput">跟随程序设置
+                                                User-Agent</label>
+                                        </div>
+                                        <input type="text" class="form-control" id="instanceUserAgentInput"
+                                            placeholder="留空时使用浏览器默认 User-Agent" />
+                                        <div id="instanceUserAgentProgramHint" class="form-text">程序设置 UA：未设置</div>
+                                        <div id="instanceUserAgentEffectiveHint" class="form-text">当前生效 UA：浏览器默认</div>
+                                        <div id="instanceUserAgentLockHint" class="form-text text-warning d-none">
+                                            程序设置已锁定全局
+                                            UA，当前实例不能覆盖。</div>
+                                    </div>
+
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-sm-6">
+                                            <label class="form-label" for="instanceViewportWidthInput">默认宽度</label>
+                                            <input type="number" min="320" step="1" class="form-control"
+                                                id="instanceViewportWidthInput" />
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label class="form-label" for="instanceViewportHeightInput">默认高度</label>
+                                            <input type="number" min="240" step="1" class="form-control"
+                                                id="instanceViewportHeightInput" />
+                                        </div>
+                                    </div>
+
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox"
+                                            id="instancePreserveAspectRatioInput" />
+                                        <label class="form-check-label"
+                                            for="instancePreserveAspectRatioInput">跟随时保持宽高比</label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox"
+                                            id="instanceAutoResizeViewportInput" />
+                                        <label class="form-check-label"
+                                            for="instanceAutoResizeViewportInput">跟随浏览器区域大小自动调整网页尺寸</label>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary"
+                                        data-bs-dismiss="modal">取消</button>
+                                    <button type="button" class="btn btn-primary"
+                                        id="instanceSettingsSubmitBtn">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="createInstanceModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-scrollable modal-lg" style="max-width:920px;">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">新建实例</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="createInstanceDisplayName">实例显示名（可选）</label>
+                                        <input id="createInstanceDisplayName" class="form-control"
+                                            placeholder="留空使用默认名" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="createInstanceUserDataDirectory">UserData
+                                            目录（可选）</label>
+                                        <input id="createInstanceUserDataDirectory" class="form-control"
+                                            placeholder="留空使用默认目录" />
+                                        <div class="form-text">指定用户数据目录可为每个实例指定独立配置。</div>
+                                    </div>
+                                    <div id="createInstancePathTooltip" class="small bg-light border rounded p-2"
+                                        style="display:none; position:relative; z-index:20000; max-width:880px;">
+                                        <div class="create-path-text" aria-live="polite"></div>
+                                        <div class="create-path-actions">
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-secondary create-path-open-btn"
+                                                title="打开创建位置">
+                                                <i class="fa-regular fa-folder-open"></i>
+                                            </button>
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-secondary create-path-copy-btn"
+                                                title="复制路径">
+                                                <i class="fa-regular fa-copy"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="createInstanceOwnerPluginId" value="ui" />
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary"
+                                        data-bs-dismiss="modal">取消</button>
+                                    <button type="button" class="btn btn-primary"
+                                        id="createInstanceSubmitBtn">创建</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="browser-pane-divider" id="browserPaneDivider" role="separator"
+                        aria-orientation="vertical" aria-label="调整浏览器区与插件区宽度" tabindex="0"></div>
+                    <div class="browser-pane browser-pane-right" id="pluginDrawerPane" aria-hidden="false">
+                        <div class="card h-100 plugin-panel">
+                            <div class="card-body">
+                                <div id="pluginHost" class="vstack gap-3"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="pluginArgumentModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="pluginArgumentModalTitle">插件参数</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="pluginArgumentModalDescription" class="text-muted small mb-3 d-none"></div>
+                                    <div id="pluginArgumentForm" class="vstack gap-2"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary"
+                                        data-bs-dismiss="modal">取消</button>
+                                    <button type="button" class="btn btn-primary"
+                                        id="pluginArgumentSubmitBtn">执行</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="pluginOutputModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="pluginOutputModalTitle">插件输出</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="pluginOutputModalSummary" class="text-muted small mb-3 d-none"></div>
+                                    <div class="plugin-output-filters mb-3">
+                                        <div>
+                                            <label for="pluginOutputFilterInput"
+                                                class="form-label small text-muted mb-1">搜索消息</label>
+                                            <input id="pluginOutputFilterInput" type="search"
+                                                class="form-control form-control-sm" placeholder="按消息、字段、值筛选" />
+                                        </div>
+                                        <div>
+                                            <label for="pluginOutputFilterTarget"
+                                                class="form-label small text-muted mb-1">目标</label>
+                                            <select id="pluginOutputFilterTarget" class="form-select form-select-sm">
+                                                <option value="">全部目标</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="border rounded p-3 bg-light-subtle mb-3">
+                                        <div class="fw-semibold small mb-2">当前返回值</div>
+                                        <div id="pluginOutputModalData" class="vstack gap-2 small"></div>
+                                    </div>
+                                    <div class="fw-semibold small mb-2">输出时间线</div>
+                                    <div id="pluginOutputModalEntries" class="vstack gap-2"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-danger me-auto"
+                                        id="pluginOutputClearBtn">清空历史</button>
+                                    <button type="button" class="btn btn-outline-secondary"
+                                        data-bs-dismiss="modal">关闭</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="screenshotPreviewModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">截图预览</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-center bg-dark-subtle">
+                                    <img id="screenshotPreviewImage" class="img-fluid rounded" alt="截图预览" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="app-page d-none app-page-surface" data-page="logs">
+                <div class="container-fluid px-0">
+                    <div class="logs-page">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <h2 class="h4 mb-0">程序日志</h2>
+                            <div class="btn-group">
+                                <button id="exportLogsBtn" class="btn btn-outline-secondary btn-sm">导出 CSV</button>
+                                <button id="clearLogsBtn" class="btn btn-outline-danger btn-sm">清空日志</button>
+                                <button id="refreshLogsBtn" class="btn btn-outline-secondary btn-sm">刷新</button>
+                            </div>
+                        </div>
+
+                        <!-- 使用单个表格（thead 为筛选输入，tbody 用于追加 tr/td 日志行），保证列宽对齐 -->
+                        <div id="logsContainerWrapper" class="border rounded p-2 bg-white"
+                            style="overflow-y:auto; overflow-x:hidden;">
+                            <table id="logsTable" class="table table-sm mb-0"
+                                style="table-layout: fixed; width: 100%; margin-bottom:0;">
+                                <colgroup>
+                                    <col style="width:180px" />
+                                    <col style="width:100px" />
+                                    <col style="width:200px" />
+                                    <col />
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th class="p-1"><input id="filterTimestamp" class="form-control form-control-sm"
+                                                placeholder="时间筛选" /></th>
+                                        <th class="p-1">
+                                            <select id="filterLevel" class="form-select form-select-sm">
+                                                <option value="">所有级别</option>
+                                                <option value="error">错误</option>
+                                                <option value="warn">警告</option>
+                                                <option value="info">信息</option>
+                                                <option value="debug">调试</option>
+                                                <option value="trace">追踪</option>
+                                            </select>
+                                        </th>
+                                        <th class="p-1">
+                                            <select id="filterCategory" class="form-select form-select-sm">
+                                                <option value="">所有插件/类别</option>
+                                            </select>
+                                        </th>
+                                        <th class="p-1"><input id="filterText" class="form-control form-control-sm"
+                                                placeholder="关键字" /></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="app-page d-none settings-page-shell app-page-surface" data-page="settings">
+                <div class="container-fluid px-0 settings-page-shell">
+                    <div class="settings-page">
+                        <aside class="settings-sidebar">
+                            <div class="card shadow-sm settings-sidebar-card">
+                                <div class="card-header fw-semibold">设置导航</div>
+                                <div class="card-body vstack gap-2">
+                                    <a class="settings-nav-link settings-nav-link-primary" href="#settings">程序设置</a>
+                                    <div id="settingsNavLinks" class="vstack gap-2"></div>
+                                </div>
+                            </div>
+                        </aside>
+
+                        <div class="settings-content">
+                            <div class="settings-page-header">
+                                <div>
+                                    <h1 class="h4 mb-1">程序设置</h1>
+                                    <div class="text-muted small">修改后会自动保存并立即应用。</div>
+                                    <div class="text-muted small">设置文件位置：<span id="settingsFilePath">加载中...</span></div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div id="settingsAutoSaveStatus"
+                                        class="settings-autosave-status settings-autosave-status-success">已加载设置</div>
+                                    <button type="button" id="ResetSettingsBtn" class="btn btn-outline-danger btn-sm"
+                                        title="重置所有设置"><i class="fa-solid fa-rotate-left"></i>&nbsp;重置</button>
+                                </div>
+                                <div id="pageNotifications" class="toast-container p-3 position-fixed top-0 end-0"
+                                    style="z-index:1050"></div>
+                            </div>
+
+                            <form id="settingsForm" action="/api/settings/autosave" method="post"
+                                class="settings-card-stack">
+                                <section id="searchSettingsCard" class="card shadow-sm settings-card">
+                                    <div class="card-header fw-semibold">搜索设置</div>
+                                    <div class="card-body">
+                                        <label class="form-label" for="SearchUrlTemplate">搜索地址模板</label>
+                                        <input id="SearchUrlTemplate" name="SearchUrlTemplate" class="form-control"
+                                            placeholder="https://www.baidu.com/s?wd={query}" />
+                                        <div class="form-text">当地址栏输入内容不是网址时，会使用这个模板进行搜索。必须包含 {query} 占位符。</div>
+                                    </div>
+                                    <div class="card-body">
+                                        <p>模板示例</p>
+                                        <div><code>https://www.baidu.com/s?wd={query}</code></div>
+                                        <div><code>https://www.google.com/search?q={query}</code></div>
+                                        <div><code>https://www.bing.com/search?q={query}</code></div>
+                                    </div>
+                                </section>
+
+                                <section id="profileSettingsCard" class="card shadow-sm settings-card">
+                                    <div class="card-header fw-semibold">浏览器用户数据</div>
+                                    <div class="card-body">
+                                        <label class="form-label" for="UserDataDirectory">浏览器用户数据目录</label>
+                                        <div class="input-group">
+                                            <input id="UserDataDirectory" name="UserDataDirectory"
+                                                class="form-control" />
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="UserDataDirectoryOpenBtn" title="打开目录"><i
+                                                    class="fa-solid fa-folder-open"></i></button>
+                                        </div>
+                                        <div class="form-text">
+                                            默认目录：<span id="defaultUserDataDirectory">加载中...</span>。
+                                        </div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <label class="form-label" for="PluginDirectory">插件根目录</label>
+                                        <div class="input-group">
+                                            <input id="PluginDirectory" name="PluginDirectory" class="form-control" />
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="PluginDirectoryOpenBtn" title="打开目录"><i
+                                                    class="fa-solid fa-folder-open"></i></button>
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                id="PluginDirectoryChooseBtn" title="选择目录"><i
+                                                    class="fa-solid fa-folder-tree"></i></button>
+                                        </div>
+                                        <div class="form-text">默认目录：<span
+                                                id="defaultPluginDirectory">加载中...</span>。支持多个根路径，用分号或竖线分隔。</div>
+                                        <input id="PluginDirectoryPicker" type="file" webkitdirectory directory
+                                            style="display:none;" />
+                                    </div>
+                                </section>
+
+                                <section id="playwrightSettingsCard" class="card shadow-sm settings-card">
+                                    <div class="card-header fw-semibold">Playwright 运行时</div>
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+                                            <div>
+                                                <div class="form-label mb-1">当前状态</div>
+                                                <div id="playwrightRuntimeState" class="small text-muted">检查中...</div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <select id="PlaywrightInstallMode" class="form-select form-select-sm"
+                                                    style="width:auto;min-width:220px;">
+                                                    <option value="online">在线安装</option>
+                                                    <option value="offline">离线安装（chrome-win64.zip）</option>
+                                                </select>
+                                                <button type="button" id="PlaywrightInstallBtn"
+                                                    class="btn btn-primary btn-sm">安装 Chromium</button>
+                                                <button type="button" id="PlaywrightUninstallBtn"
+                                                    class="btn btn-outline-danger btn-sm">卸载 Chromium</button>
+                                                <button type="button" id="PlaywrightUninstallAllBtn"
+                                                    class="btn btn-danger btn-sm">彻底卸载全部缓存</button>
+                                            </div>
+                                        </div>
+                                        <div class="form-text mt-2">安装由 Core 直接完成；前端调用 WebAPI，WebAPI 再调用 Core 运行时服务。
+                                        </div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div class="small text-muted mb-1">浏览器安装目录</div>
+                                        <div id="playwrightRuntimeLocation" class="settings-path-value">加载中...</div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div class="small text-muted mb-1">安装器入口</div>
+                                        <div id="playwrightRuntimeScriptPath" class="settings-path-value">加载中...</div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div id="playwrightRuntimeHelp" class="small text-muted">安装后才允许创建浏览器实例和打开页面。
+                                        </div>
+                                    </div>
+                                    <div id="playwrightRuntimeOutputPanel" class="card-body border-top d-none">
+                                        <div class="small text-muted mb-2">最近一次安装器输出</div>
+                                        <pre id="playwrightRuntimeOutput" class="playwright-runtime-output mb-0"></pre>
+                                    </div>
+                                </section>
+
+                                <section id="userAgentSettingsCard" class="card shadow-sm settings-card">
+                                    <div class="card-header fw-semibold">User-Agent</div>
+                                    <div class="card-body">
+                                        <label class="form-label" for="UserAgent">全局 User-Agent</label>
+                                        <textarea id="UserAgent" name="UserAgent" class="form-control" rows="3"
+                                            placeholder="留空时使用浏览器默认 User-Agent"></textarea>
+                                        <div class="form-text">这里设置后会作为程序级默认 UA。留空则不强制注入全局 UA。</div>
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div class="form-check form-switch">
+                                            <input id="AllowInstanceUserAgentOverride"
+                                                name="AllowInstanceUserAgentOverride" class="form-check-input"
+                                                type="checkbox" />
+                                            <label class="form-check-label"
+                                                for="AllowInstanceUserAgentOverride">允许实例覆盖全局 User-Agent</label>
+                                        </div>
+                                        <div class="form-text">默认关闭。关闭后，只要程序设置了全局 UA，实例设置里就不能再单独覆盖。</div>
+                                    </div>
+                                </section>
+
+                                <!-- Headless 控件已从设置页移除；请在 浏览器 页面使用顶部切换按钮进行设置 -->
+
+                                <!-- 界面布局：插件区宽度控件已移除 -->
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="app-page d-none app-page-surface" data-page="plugin-upload">
+                <div class="d-flex align-items-start gap-4 flex-wrap flex-xl-nowrap">
+                    <div class="flex-shrink-0" style="width:520px; max-width:100%;">
+                        <h2 class="h4 mb-3">插件上传与管理</h2>
+                        <div class="card">
+                            <div class="card-body">
+                                <div id="uploadDropZone" class="border rounded p-3 mb-3"
+                                    style="min-height:140px; display:flex; align-items:center;">
+                                    <div class="w-100">
+                                        <label class="form-label fw-semibold">选择要上传的插件文件或文件夹</label>
+                                        <div class="small text-muted mb-2">支持 DLL、ZIP。Chrome/Chromium 支持目录上传。也可将插件目录打包为
+                                            ZIP 后上传以兼容更多浏览器。</div>
+                                        <input id="pluginUploadInput" type="file" webkitdirectory directory multiple
+                                            accept=".dll,.zip" class="form-control mb-2" />
+                                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                                            <button id="pluginUploadBtn" class="btn btn-primary"
+                                                type="button">上传并扫描</button>
+                                            <button id="pluginClearBtn" type="button"
+                                                class="btn btn-outline-secondary">清除选择</button>
+                                            <!-- 打开插件目录按钮已移除；请使用设置页中的插件目录控件 -->
+                                            <div id="uploadSpinner" class="spinner-border text-primary" role="status"
+                                                style="display:none; width:1.2rem; height:1.2rem;"></div>
+                                        </div>
+                                        <div id="uploadHint" class="form-text small text-muted mt-2">提示：请选择 DLL 或 ZIP
+                                            文件，或直接选择包含 DLL 的文件夹。</div>
+                                    </div>
+                                </div>
+                                <div id="selectedFilesInfo" class="small text-muted">尚未选择文件。</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex-grow-1 min-w-0">
+                        <h2 class="h5 mb-3">扫描结果</h2>
+                        <div id="uploadResult" class="card" style="min-height:160px;">
+                            <div class="card-body">
+                                <div id="resultPlaceholder" class="text-muted">上传并扫描后，这里会显示每个 DLL 的解析结果。</div>
+                                <div id="resultList" class="accordion mt-2"></div>
+                            </div>
+                        </div>
+
+                        <h2 class="h5 mt-4 mb-3">已安装插件 <button id="refreshPluginsBtn"
+                                class="btn btn-sm btn-outline-secondary ms-2">刷新插件</button></h2>
+                        <div id="installedPlugins" class="card">
+                            <div class="card-body">
+                                <div id="installedPlaceholder" class="text-muted">正在加载已安装插件列表…</div>
+                                <div id="installedList" class="list-group mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="confirmModalTitle">确认</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                    aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body" id="confirmModalBody">确认操作？</div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary"
+                                    data-bs-dismiss="modal">取消</button>
+                                <button id="confirmModalOk" type="button" class="btn btn-danger">确认删除</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="app-page d-none app-page-surface" data-page="privacy">
+                <div class="container-fluid px-0">
+                    <div class="card shadow-sm">
+                        <div class="card-header fw-semibold">Privacy</div>
+                        <div class="card-body">
+                            <p class="mb-2">当前程序会在本地保存浏览器用户数据目录以及程序设置。</p>
+                            <p class="mb-0">搜索引擎模板等程序级设置会保存在应用目录下的 <code>program-settings.json</code> 中。</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="modal fade" id="screencastFpsModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-sm">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">推流 FPS</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <label class="form-label" for="screencastFpsQuickInput">目标 FPS</label>
+                            <input id="screencastFpsQuickInput" type="number" min="1" max="60" class="form-control" />
+                            <div class="form-text">这里设置的是实时画面的目标推流 FPS，范围 1 到 60。</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="screencastFpsQuickSaveBtn">保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="app-footer text-muted">
+        <div class="container-fluid px-3 px-xl-4 d-flex align-items-center justify-content-between">
+            <div>@Electronicute 萌喵电子</div>
+            <div>
+                <button id="systemInfoBtn" class="toolbar-pill pill-muted system-info-btn" title="系统信息"
+                    aria-label="系统信息" type="button">CPU -- · RAM --</button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Logs detail modal -->
+    <div class="modal fade" id="logDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">日志详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2"><strong>时间:</strong> <span id="logDetailTimestamp" class="text-muted"></span>
+                    </div>
+                    <div class="mb-2"><strong>级别:</strong> <span id="logDetailLevel" class="badge bg-secondary"></span>
+                    </div>
+                    <div class="mb-2"><strong>类别:</strong> <code id="logDetailCategory"></code></div>
+                    <div class="mb-2"><strong>消息:</strong>
+                        <div id="logDetailMessage" style="white-space:pre-wrap; margin-top:.25rem;"></div>
+                    </div>
+                    <div class="mt-3"><strong>Raw JSON</strong>
+                        <pre id="logDetailRaw" class="small bg-light p-2 border rounded"
+                            style="white-space:pre-wrap;"></pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button id="logDetailCopyBtn" type="button" class="btn btn-primary">复制 JSON</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core libs (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.5/dist/browser/signalr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Early shim: ensure api base is available when running from file:// -->
+    <script>
+        (function () {
+            try {
+                // preload exposes window.meow.apiBase; prefer that
+                if (window.meow && window.meow.apiBase) {
+                    window.__apiBase = window.meow.apiBase;
+                } else {
+                    // fallback to query param if provided by loadFile
+                    try {
+                        const p = new URLSearchParams(window.location.search);
+                        const q = p.get('apiBase');
+                        if (q) window.__apiBase = q;
+                    } catch (e) { /* ignore */ }
+                }
+                window.__apiEndpoints = window.__apiEndpoints || {};
+                if (window.__apiBase) {
+                    const base = window.__apiBase.replace(/\/$/, '');
+                    const mk = (p) => base + (p.startsWith('/') ? p : '/' + p);
+                    // Populate the common endpoints early so other scripts can use them synchronously
+                    Object.assign(window.__apiEndpoints, {
+                        status: mk('/api/status'),
+                        settings: mk('/api/settings'),
+                        settingsAutosave: mk('/api/settings/autosave'),
+                        plugins: mk('/api/plugins'),
+                        pluginsControl: mk('/api/plugins/control'),
+                        pluginsRun: mk('/api/plugins/run'),
+                        pluginsUpload: mk('/api/plugins/upload'),
+                        pluginsLoad: mk('/api/plugins/load'),
+                        pluginsRefresh: mk('/api/plugins/refresh'),
+                        pluginsUnload: mk('/api/plugins/unload'),
+                        pluginsDelete: mk('/api/plugins/delete'),
+                        tabsClose: mk('/api/tabs/close'),
+                        tabsSelect: mk('/api/tabs/select'),
+                        tabsNew: mk('/api/tabs/new'),
+                        instances: mk('/api/instances'),
+                        instancesPreview: mk('/api/instances/preview'),
+                        instancesValidateFolder: mk('/api/instances/validate-folder'),
+                        instancesClose: mk('/api/instances/close'),
+                        instancesHeadless: mk('/api/instances/headless'),
+                        instancesViewport: mk('/api/instances/viewport'),
+                        instancesSettings: mk('/api/instances/settings'),
+                        screencastSettings: mk('/api/screencast/settings'),
+                        screenshot: mk('/api/screenshot'),
+                        navigation: mk('/api/navigation/navigate'),
+                        navigationBack: mk('/api/navigation/back'),
+                        navigationForward: mk('/api/navigation/forward'),
+                        navigationReload: mk('/api/navigation/reload'),
+                        layout: mk('/api/layout'),
+                        logsContent: mk('/api/logs/content'),
+                        logsClear: mk('/api/logs/clear'),
+                        input: mk('/api/input')
+                    });
+
+                    // Also add a global fetch wrapper so legacy code using relative
+                    // '/api/...' or plain 'api/...' paths will be rewritten to the
+                    // discovered backend base. This runs very early so scripts
+                    // loaded later will use absolute URLs.
+                    try {
+                        const origFetch = window.fetch.bind(window);
+                        window.fetch = function (resource, init) {
+                            try {
+                                let url = resource;
+                                let isRequestObject = false;
+                                if (resource && typeof resource === 'object' && resource.url) {
+                                    url = resource.url; isRequestObject = true;
+                                }
+                                if (typeof url === 'string') {
+                                    const trimmed = url.trim();
+                                    // leave absolute URLs alone
+                                    if (!/^https?:\/\//i.test(trimmed) && !/^wss?:\/\//i.test(trimmed)) {
+                                        const b = window.__apiBase || (window.meow && window.meow.apiBase) || null;
+                                        if (b) {
+                                            const baseNoSlash = b.replace(/\/$/, '');
+                                            if (trimmed.startsWith('/')) url = baseNoSlash + trimmed;
+                                            else if (!trimmed.startsWith('file:') && !trimmed.includes('://')) url = baseNoSlash + '/' + trimmed.replace(/^\/+/, '');
+                                        }
+                                    }
+                                }
+                                if (isRequestObject) {
+                                    const newReq = Object.assign({}, resource, { url });
+                                    return origFetch(newReq, init);
+                                }
+                                return origFetch(url, init);
+                            } catch (e) {
+                                return origFetch(resource, init);
+                            }
+                        };
+                    } catch (e) { /* ignore if wrapping fetch fails */ }
+                }
+            } catch (e) { console.warn('apiBase shim failed', e); }
+        })();
+    </script>
+
+    <!-- App scripts (migrated from Web/wwwroot/js) -->
+    <script src="js/browser-index.js"></script>
+    <script src="js/render-plugins.js"></script>
+    <script src="js/browser-ui.js"></script>
+    <script src="js/browser-input.js"></script>
+    <script src="js/browser-plugins.js"></script>
+    <script src="js/browser-screencast.js"></script>
+    <script src="js/browser-tabs.js"></script>
+    <script src="js/plugin-upload.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/site.js"></script>
+    <script src="js/logs.js"></script>
+
+    <!-- bootstrap/init script to set endpoints and start hub -->
+    <script src="js/init.js"></script>
+</body>
+
+</html>

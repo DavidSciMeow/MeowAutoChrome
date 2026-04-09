@@ -1,0 +1,1 @@
+dotnet build .\MeowAutoChrome.Contracts\MeowAutoChrome.Contracts.csproj -c Release
