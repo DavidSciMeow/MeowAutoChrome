@@ -384,6 +384,104 @@ body {
     background: #fff;
 }
 
+.plugin-output-timeline {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    padding-left: 1.5rem;
+}
+
+.plugin-output-timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.48rem;
+    top: 0.15rem;
+    bottom: 0.15rem;
+    width: 1px;
+    background: linear-gradient(180deg, rgba(148, 163, 184, 0.65), rgba(203, 213, 225, 0.55));
+}
+
+.plugin-output-timeline-item {
+    position: relative;
+}
+
+.plugin-output-timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -1.28rem;
+    top: 1rem;
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 999px;
+    background: #cbd5e1;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+
+.plugin-output-timeline-item.is-selected::before {
+    background: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.plugin-output-entry-button {
+    width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 0.9rem;
+    background: #fff;
+    padding: 0.85rem 0.9rem;
+    text-align: left;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.plugin-output-entry-button:hover,
+.plugin-output-entry-button:focus-visible {
+    border-color: rgba(59, 130, 246, 0.45);
+    background: rgba(239, 246, 255, 0.72);
+    box-shadow: 0 0 0 0.18rem rgba(59, 130, 246, 0.12);
+}
+
+.plugin-output-timeline-item.is-selected .plugin-output-entry-button {
+    border-color: rgba(37, 99, 235, 0.55);
+    background: rgba(239, 246, 255, 0.94);
+    box-shadow: 0 0.85rem 2rem rgba(15, 23, 42, 0.08);
+}
+
+.plugin-output-entry-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.plugin-output-entry-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.plugin-output-entry-time {
+    flex: 0 0 auto;
+    font-size: 0.76rem;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.plugin-output-entry-summary {
+    font-size: 0.84rem;
+    color: #334155;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plugin-output-current-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
 .plugin-output-empty {
     color: #64748b;
 }

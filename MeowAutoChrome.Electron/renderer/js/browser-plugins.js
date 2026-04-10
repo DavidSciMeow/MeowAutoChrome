@@ -15,6 +15,7 @@
     const pluginOutputModal = pluginOutputModalElement ? new bootstrap.Modal(pluginOutputModalElement) : null;
     const pluginOutputModalTitle = document.getElementById('pluginOutputModalTitle');
     const pluginOutputModalSummary = document.getElementById('pluginOutputModalSummary');
+    const pluginOutputModalCurrentSummary = document.getElementById('pluginOutputModalCurrentSummary');
     const pluginOutputModalData = document.getElementById('pluginOutputModalData');
     const pluginOutputModalEntries = document.getElementById('pluginOutputModalEntries');
     const pluginOutputFilterInput = document.getElementById('pluginOutputFilterInput');
@@ -22,6 +23,7 @@
     const pluginOutputClearBtn = document.getElementById('pluginOutputClearBtn');
     let pendingPluginInvocation = null;
     let activePluginOutputPluginId = null;
+    let activePluginOutputEntryId = null;
 
     function getPluginName(pluginId) {
         return pluginCatalog.get(pluginId)?.name || pluginId || '插件';
@@ -41,6 +43,44 @@
         return first ? (first[0] + ': ' + (first[1] || '')) : '暂无返回值';
     }
 
+    function getPluginOutputEntryId(entry, index) {
+        return entry?.entryId || [entry?.timestampUtc || '', entry?.targetId || '', index].join('|');
+    }
+
+    function renderSelectedPluginOutput(container, plugin, entry, emptyText) {
+        container.replaceChildren();
+        if (!entry) {
+            if (pluginOutputModalCurrentSummary) {
+                pluginOutputModalCurrentSummary.textContent = '';
+                pluginOutputModalCurrentSummary.classList.add('d-none');
+            }
+            renderPluginOutputRows(container, {}, emptyText);
+            return;
+        }
+
+        const summaryParts = [
+            getPluginTarget(plugin, entry.targetId)?.name || entry.targetId || '插件输出',
+            formatPluginOutputTime(entry.timestampUtc),
+            entry.message || ''
+        ].filter(Boolean);
+        if (pluginOutputModalCurrentSummary) {
+            pluginOutputModalCurrentSummary.textContent = summaryParts.join(' · ');
+            pluginOutputModalCurrentSummary.classList.toggle('d-none', !pluginOutputModalCurrentSummary.textContent);
+        }
+
+        if (entry.message) {
+            const message = document.createElement('div');
+            message.className = 'plugin-output-entry-message mb-2';
+            message.textContent = entry.message;
+            container.appendChild(message);
+        }
+
+        const dataContainer = document.createElement('div');
+        dataContainer.className = 'vstack gap-2';
+        renderPluginOutputRows(dataContainer, entry.data, '本次输出没有附加字段。');
+        container.appendChild(dataContainer);
+    }
+
     function renderPluginOutputRows(container, data, emptyText) {
         container.replaceChildren();
         const entries = Object.entries(data || {});
@@ -54,7 +94,7 @@
         pluginOutputModalTitle.textContent = plugin?.name || '插件输出';
         pluginOutputModalSummary.textContent = '还没有输出记录。';
         pluginOutputModalSummary.classList.remove('d-none');
-        renderPluginOutputRows(pluginOutputModalData, {}, '当前还没有结构化返回值。');
+        renderSelectedPluginOutput(pluginOutputModalData, plugin, null, '当前还没有结构化返回值。');
         pluginOutputModalEntries.replaceChildren();
         const empty = document.createElement('div');
         empty.className = 'plugin-output-empty';
@@ -72,6 +112,7 @@
         }
         if (pluginOutputClearBtn)
             pluginOutputClearBtn.disabled = true;
+        activePluginOutputEntryId = null;
     }
 
     function syncPluginOutputUi(pluginId) {
@@ -122,8 +163,6 @@
             }
             pluginOutputFilterTarget.value = targetOptions.includes(selectedTarget) ? selectedTarget : '';
         }
-        renderPluginOutputRows(pluginOutputModalData, output.data, '当前还没有结构化返回值。');
-        pluginOutputModalEntries.replaceChildren();
         const keyword = (pluginOutputFilterInput?.value || '').trim().toLowerCase();
         const targetFilter = pluginOutputFilterTarget?.value || '';
         const entries = (output.entries || []).filter(entry => {
@@ -138,16 +177,48 @@
             ].join(' ').toLowerCase();
             return haystack.includes(keyword);
         });
+
+        const selectedEntry = entries.find((entry, index) => getPluginOutputEntryId(entry, index) === activePluginOutputEntryId) || entries[0] || null;
+        activePluginOutputEntryId = selectedEntry ? getPluginOutputEntryId(selectedEntry, entries.indexOf(selectedEntry)) : null;
+        renderSelectedPluginOutput(pluginOutputModalData, plugin, selectedEntry, '当前还没有结构化返回值。');
+        pluginOutputModalEntries.replaceChildren();
         if (!entries.length) { const empty = document.createElement('div'); empty.className = 'plugin-output-empty'; empty.textContent = '没有匹配的输出记录。'; pluginOutputModalEntries.appendChild(empty); return; }
-        for (const entry of entries) {
-            const item = document.createElement('div'); item.className = 'plugin-output-entry';
-            const header = document.createElement('div'); header.className = 'd-flex justify-content-between align-items-start gap-2 mb-2';
-            const name = document.createElement('div'); name.className = 'fw-semibold small'; name.textContent = getPluginTarget(plugin, entry.targetId)?.name || entry.targetId || '插件输出';
-            const time = document.createElement('div'); time.className = 'text-muted small'; time.textContent = formatPluginOutputTime(entry.timestampUtc);
-            header.appendChild(name); header.appendChild(time); item.appendChild(header);
-            if (entry.message) { const message = document.createElement('div'); message.className = 'plugin-output-entry-message mb-2'; message.textContent = entry.message; item.appendChild(message); }
-            const dataContainer = document.createElement('div'); renderPluginOutputRows(dataContainer, entry.data, '本次输出没有附加字段。'); item.appendChild(dataContainer); pluginOutputModalEntries.appendChild(item);
-        }
+        entries.forEach((entry, index) => {
+            const entryId = getPluginOutputEntryId(entry, index);
+            const selected = entryId === activePluginOutputEntryId;
+            const item = document.createElement('div');
+            item.className = 'plugin-output-timeline-item' + (selected ? ' is-selected' : '');
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'plugin-output-entry-button';
+            button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+
+            const header = document.createElement('div');
+            header.className = 'plugin-output-entry-header';
+            const title = document.createElement('div');
+            title.className = 'plugin-output-entry-title';
+            title.textContent = getPluginTarget(plugin, entry.targetId)?.name || entry.targetId || '插件输出';
+            const time = document.createElement('div');
+            time.className = 'plugin-output-entry-time';
+            time.textContent = formatPluginOutputTime(entry.timestampUtc);
+            header.appendChild(title);
+            header.appendChild(time);
+
+            const summary = document.createElement('div');
+            summary.className = 'plugin-output-entry-summary';
+            summary.textContent = summarizePluginOutput(entry.message, entry.data);
+
+            button.appendChild(header);
+            button.appendChild(summary);
+            button.addEventListener('click', () => {
+                activePluginOutputEntryId = entryId;
+                renderPluginOutputModal(pluginId);
+            });
+
+            item.appendChild(button);
+            pluginOutputModalEntries.appendChild(item);
+        });
     }
 
     function openPluginOutputModal(pluginId) {
@@ -156,6 +227,7 @@
 
         const output = pluginOutputStore.get(pluginId);
         activePluginOutputPluginId = pluginId;
+        activePluginOutputEntryId = output?.entries?.length ? getPluginOutputEntryId(output.entries[0], 0) : null;
         if (output) {
             try {
                 const updated = { ...(output || {}) };
@@ -188,7 +260,7 @@
         };
 
         if (update.message || Object.keys(update.data || {}).length) {
-            next.entries.unshift({ targetId: next.targetId, message: update.message || '', data: update.data || {}, timestampUtc: next.updatedAt });
+            next.entries.unshift({ entryId: [next.updatedAt, next.targetId || '', Math.random().toString(36).slice(2, 8)].join('|'), targetId: next.targetId, message: update.message || '', data: update.data || {}, timestampUtc: next.updatedAt });
             next.entries = next.entries.slice(0, 100);
             if (!isCurrentModal) next.unreadCount = (Number(existing?.unreadCount || 0) || 0) + 1;
             else next.unreadCount = 0;
@@ -322,6 +394,7 @@
 
     pluginOutputModalElement?.addEventListener('hidden.bs.modal', () => {
         activePluginOutputPluginId = null;
+        activePluginOutputEntryId = null;
         if (pluginOutputFilterInput)
             pluginOutputFilterInput.value = '';
         if (pluginOutputFilterTarget)
