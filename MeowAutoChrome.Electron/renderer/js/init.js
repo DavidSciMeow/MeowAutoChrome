@@ -11,11 +11,16 @@
     const gateStatus = document.getElementById('playwrightGateStatus');
     const gateInstallDir = document.getElementById('playwrightGateInstallDir');
     const gateScriptPath = document.getElementById('playwrightGateScriptPath');
-    const gateInstallMode = document.getElementById('playwrightGateInstallMode');
+    const gateArchivePanel = document.getElementById('playwrightGateArchivePanel');
+    const gateArchivePath = document.getElementById('playwrightGateArchivePath');
+    const gateArchiveChooseBtn = document.getElementById('playwrightGateArchiveChooseBtn');
+    const gateArchiveValidation = document.getElementById('playwrightGateArchiveValidation');
+    const gateDownloadLinks = document.getElementById('playwrightGateDownloadLinks');
     const gateInstallBtn = document.getElementById('playwrightGateInstallBtn');
     const gateRetryBtn = document.getElementById('playwrightGateRetryBtn');
     const gateOutput = document.getElementById('playwrightGateOutput');
     let initialized = false;
+    let validatingGateArchive = false;
 
     async function probe(url) {
         try {
@@ -46,14 +51,129 @@
         gateElement?.classList.toggle('d-none', !visible);
     }
 
-    function applyInstallModeOptions(select, status) {
-        if (!select) return;
-        const offlineOption = select.querySelector('option[value="offline"]');
-        if (offlineOption) offlineOption.disabled = !status?.offlinePackageAvailable;
-        if (status?.offlinePackageAvailable) {
-            select.value = 'offline';
-        } else if (select.value === 'offline' && !status?.offlinePackageAvailable) {
-            select.value = 'online';
+    function renderDownloadLinks(container, links) {
+        if (!container) return;
+        container.replaceChildren();
+        for (const link of links || []) {
+            const row = document.createElement('div');
+            const anchor = document.createElement('a');
+            anchor.href = link.url;
+            anchor.target = '_blank';
+            anchor.rel = 'noreferrer noopener';
+            anchor.textContent = link.label || link.url;
+            row.appendChild(anchor);
+            if (link.description) {
+                const text = document.createElement('span');
+                text.className = 'text-muted';
+                text.textContent = ' - ' + link.description;
+                row.appendChild(text);
+            }
+            container.appendChild(row);
+        }
+    }
+
+    function renderArchiveValidation(container, result, idleText) {
+        if (!container) return;
+        if (!result) {
+            container.replaceChildren();
+            container.className = 'playwright-archive-validation d-none';
+            if (idleText) {
+                const title = document.createElement('div');
+                title.className = 'playwright-archive-validation-title';
+                title.textContent = idleText;
+                container.appendChild(title);
+                container.className = 'playwright-archive-validation';
+            }
+            return;
+        }
+
+        container.replaceChildren();
+        container.className = 'playwright-archive-validation ' + (result.isValid ? 'is-valid' : 'is-invalid');
+        const title = document.createElement('div');
+        title.className = 'playwright-archive-validation-title';
+        title.textContent = result.summary || (result.isValid ? '校验通过' : '校验失败');
+        container.appendChild(title);
+        const detail = document.createElement('div');
+        detail.className = 'playwright-archive-validation-detail';
+        detail.textContent = result.detail || '';
+        container.appendChild(detail);
+        const checks = document.createElement('div');
+        checks.className = 'playwright-archive-validation-checks';
+        const items = [
+            ['文件存在', !!result.exists],
+            ['文件名是 chrome-win64.zip', !!result.fileNameMatches],
+            ['压缩包可读取', !!result.archiveReadable],
+            ['包含 chrome-win64/chrome.exe', !!result.containsExpectedLayout]
+        ];
+        for (const [label, ok] of items) {
+            const item = document.createElement('div');
+            item.className = 'playwright-archive-validation-check ' + (ok ? 'is-pass' : 'is-fail');
+            item.textContent = (ok ? '通过' : '失败') + ' · ' + label;
+            checks.appendChild(item);
+        }
+        container.appendChild(checks);
+    }
+
+    async function validateGateArchive() {
+        const archivePath = gateArchivePath?.value?.trim() || '';
+        if (!archivePath) {
+            renderArchiveValidation(gateArchiveValidation, null, '请选择一个 chrome-win64.zip 后，系统会在这里显示校验结果。');
+            return null;
+        }
+
+        if (validatingGateArchive) return null;
+        validatingGateArchive = true;
+        renderArchiveValidation(gateArchiveValidation, {
+            isValid: false,
+            exists: false,
+            fileNameMatches: false,
+            archiveReadable: false,
+            containsExpectedLayout: false,
+            summary: '正在校验压缩包...',
+            detail: '正在检查文件是否存在、文件名是否正确，以及压缩包内部结构是否符合预期。'
+        });
+        try {
+            const response = await fetch(window.__apiEndpoints.playwrightValidateArchive, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ archivePath })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.error || payload.message || '压缩包校验失败');
+            }
+            renderArchiveValidation(gateArchiveValidation, payload);
+            return payload;
+        } catch (error) {
+            renderArchiveValidation(gateArchiveValidation, {
+                isValid: false,
+                exists: false,
+                fileNameMatches: false,
+                archiveReadable: false,
+                containsExpectedLayout: false,
+                summary: '校验请求失败',
+                detail: error.message || '无法完成压缩包校验。'
+            });
+            return null;
+        } finally {
+            validatingGateArchive = false;
+        }
+    }
+
+    function syncGateInstallControls(status) {
+        if (gateArchivePanel)
+            gateArchivePanel.classList.remove('d-none');
+
+        if (gateInstallBtn)
+            gateInstallBtn.textContent = '导入并识别压缩包';
+
+        if (gateDownloadLinks)
+            renderDownloadLinks(gateDownloadLinks, status?.downloadLinks || []);
+
+        if (gateArchivePath?.value?.trim()) {
+            validateGateArchive().catch(() => { });
+        } else {
+            renderArchiveValidation(gateArchiveValidation, null, '请选择一个 chrome-win64.zip 后，系统会在这里显示校验结果。');
         }
     }
 
@@ -69,7 +189,7 @@
                 gateOutput.textContent = '';
                 gateOutput.classList.add('d-none');
             }
-            applyInstallModeOptions(gateInstallMode, null);
+            syncGateInstallControls(null);
             return;
         }
 
@@ -77,7 +197,7 @@
         if (gateScriptPath) gateScriptPath.textContent = status.scriptPath || '未找到';
         if (gateMessage) gateMessage.textContent = status.message || (status.isInstalled ? 'Playwright Chromium 已就绪。' : 'Playwright Chromium 尚未安装。');
         if (gateStatus) gateStatus.textContent = status.isInstalled ? '已安装，可继续使用。' : '未安装，浏览器能力已被阻断。';
-        applyInstallModeOptions(gateInstallMode, status);
+        syncGateInstallControls(status);
         if (gateOutput) {
             const output = status.output || '';
             gateOutput.textContent = output;
@@ -186,18 +306,40 @@
     }
 
     async function installPlaywrightFromGate() {
-        const mode = gateInstallMode?.value || 'online';
+        const archivePath = gateArchivePath?.value?.trim() || null;
+        if (!archivePath) {
+            if (gateStatus) gateStatus.textContent = '请先选择本地 chrome-win64.zip';
+            window.showNotification?.('在线安装已移除，请先下载并选择 chrome-win64.zip。', 'warning');
+            return;
+        }
+
         if (gateInstallBtn) gateInstallBtn.disabled = true;
         if (gateRetryBtn) gateRetryBtn.disabled = true;
-        if (gateStatus) gateStatus.textContent = mode === 'offline' ? '正在离线安装 Chromium，请稍候...' : '正在在线安装 Chromium，请稍候...';
+        if (gateStatus) gateStatus.textContent = '正在识别并导入本地压缩包，请稍候...';
 
         try {
-            const payload = await getJson(window.__apiEndpoints.playwrightInstall + '?mode=' + encodeURIComponent(mode), { method: 'POST' });
+            const validation = await validateGateArchive();
+            if (!validation?.isValid) {
+                if (gateStatus) gateStatus.textContent = validation?.summary || '压缩包校验失败';
+                return;
+            }
+
+            const payload = await getJson(window.__apiEndpoints.playwrightInstall, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ archivePath })
+            });
             applyPlaywrightStatus(payload);
+            if (payload.operationState === 'skipped') {
+                if (gateStatus) gateStatus.textContent = payload.message || '已检测到浏览器已安装，未重复安装。';
+                window.showNotification?.(payload.message || '已检测到浏览器已安装，未重复安装。', 'warning');
+                return;
+            }
+
             if (payload.isInstalled) {
                 await bootstrapBrowser();
                 try { window.BrowserUI?.refreshStatus?.(); } catch { }
-                window.showNotification?.(mode === 'offline' ? 'Playwright Chromium 离线安装完成。' : 'Playwright Chromium 在线安装完成。', 'success');
+                window.showNotification?.('已根据压缩包识别结果完成导入。', 'success');
             }
         } catch (error) {
             applyPlaywrightStatus(window.__playwrightRuntimeStatus || null);
@@ -249,11 +391,26 @@
         input: mk('/api/input'),
         playwrightStatus: mk('/api/playwright/status'),
         playwrightInstall: mk('/api/playwright/install'),
+        playwrightValidateArchive: mk('/api/playwright/validate-archive'),
         playwrightUninstall: mk('/api/playwright/uninstall'),
         playwrightUninstallAll: mk('/api/playwright/uninstall?all=true')
     });
 
     gateInstallBtn?.addEventListener('click', () => { installPlaywrightFromGate().catch(() => { }); });
+    gateArchiveChooseBtn?.addEventListener('click', async () => {
+        try {
+            const result = await window.meow?.chooseFile?.([{ name: 'ZIP Archives', extensions: ['zip'] }]);
+            if (!result || result.canceled || !result.path) return;
+            if (gateArchivePath) gateArchivePath.value = result.path;
+            await validateGateArchive();
+            syncGateInstallControls(window.__playwrightRuntimeStatus || null);
+        } catch (error) {
+            console.warn('选择离线压缩包失败', error);
+        }
+    });
+    gateArchivePath?.addEventListener('input', () => syncGateInstallControls(window.__playwrightRuntimeStatus || null));
+    gateArchivePath?.addEventListener('change', () => { validateGateArchive().catch(() => { }); syncGateInstallControls(window.__playwrightRuntimeStatus || null); });
+    gateArchivePath?.addEventListener('blur', () => { validateGateArchive().catch(() => { }); syncGateInstallControls(window.__playwrightRuntimeStatus || null); });
     gateRetryBtn?.addEventListener('click', () => {
         loadPlaywrightStatus().catch((error) => {
             console.warn('重新检查 Playwright 状态失败', error);

@@ -106,6 +106,92 @@ body {
     margin-top: 1.25rem;
 }
 
+.playwright-archive-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.playwright-download-links a {
+    color: #0f5cc0;
+    text-decoration: none;
+}
+
+.playwright-download-links a:hover,
+.playwright-download-links a:focus-visible {
+    text-decoration: underline;
+}
+
+.playwright-archive-validation {
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 0.85rem;
+    background: rgba(248, 250, 252, 0.96);
+}
+
+.playwright-archive-validation.is-valid {
+    border-color: rgba(34, 197, 94, 0.34);
+    background: rgba(240, 253, 244, 0.96);
+}
+
+.playwright-archive-validation.is-invalid {
+    border-color: rgba(239, 68, 68, 0.28);
+    background: rgba(254, 242, 242, 0.98);
+}
+
+.playwright-archive-validation-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.playwright-archive-validation-detail {
+    margin-top: 0.35rem;
+    font-size: 0.82rem;
+    color: #475569;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.playwright-archive-validation-checks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 0.75rem;
+    margin-top: 0.7rem;
+}
+
+.playwright-archive-validation-check {
+    font-size: 0.8rem;
+    color: #334155;
+}
+
+.playwright-archive-validation-check.is-pass {
+    color: #166534;
+}
+
+.playwright-archive-validation-check.is-fail {
+    color: #b91c1c;
+}
+
+.playwright-installed-browser-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.playwright-installed-browser-meta {
+    margin-top: 0.2rem;
+    font-size: 0.78rem;
+    color: #64748b;
+    word-break: break-word;
+}
+
+.playwright-installed-browser-empty {
+    color: #64748b;
+    font-size: 0.84rem;
+}
+
 .playwright-gate-status {
     margin-top: 1rem;
     font-size: 0.9rem;
@@ -351,6 +437,14 @@ body {
 
     .playwright-gate-panel {
         padding: 1.25rem;
+    }
+
+    .playwright-archive-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .playwright-archive-validation-checks {
+        grid-template-columns: 1fr;
     }
 
     .plugin-output-filters {

@@ -530,3 +530,19 @@ ipcMain.handle('meow:choose-directory', async () => {
         return { canceled: true, error: err?.message || '选择目录失败' };
     }
 });
+
+ipcMain.handle('meow:choose-file', async (_event, filters) => {
+    try {
+        const normalizedFilters = Array.isArray(filters) && filters.length
+            ? filters.map(filter => ({
+                name: typeof filter?.name === 'string' && filter.name.trim() ? filter.name.trim() : 'Files',
+                extensions: Array.isArray(filter?.extensions) && filter.extensions.length ? filter.extensions.map(item => String(item)) : ['*']
+            }))
+            : [{ name: 'Files', extensions: ['*'] }];
+        const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: normalizedFilters });
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) return { canceled: true };
+        return { canceled: false, path: result.filePaths[0] };
+    } catch (err) {
+        return { canceled: true, error: err?.message || '选择文件失败' };
+    }
+});

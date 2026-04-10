@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('offline', 'online')]
-    [string]$Mode = 'offline',
+    [string]$Mode = 'online',
 
     [ValidateSet('Release', 'Debug')]
     [string]$Configuration = 'Release',
@@ -33,8 +33,6 @@ $electronDir = Join-Path $repoRoot 'MeowAutoChrome.Electron'
 $webApiPublishDir = Join-Path $electronDir 'webapi'
 $artifactDir = Join-Path $repoRoot 'Artifact\Electron'
 $resolvedBuilderCacheDir = if ([System.IO.Path]::IsPathRooted($BuilderCacheDir)) { $BuilderCacheDir } else { Join-Path $repoRoot $BuilderCacheDir }
-$offlineArchiveSource = Join-Path $repoRoot 'chrome-win64.zip'
-$offlineArchiveTarget = Join-Path $webApiPublishDir 'chrome-win64.zip'
 $electronBuilderCli = Join-Path $electronDir 'node_modules\electron-builder\cli.js'
 $appBuilderPath = Join-Path $electronDir 'node_modules\app-builder-bin\win\x64\app-builder.exe'
 $packageLockPath = Join-Path $electronDir 'package-lock.json'
@@ -203,17 +201,7 @@ if (-not $SkipDotnetRestore) {
 Invoke-ExternalCommand -FilePath 'dotnet' -Arguments $publishArguments
 
 if ($Mode -eq 'offline') {
-    Write-Step 'Copying offline Chromium archive'
-
-    if (-not (Test-Path -LiteralPath $offlineArchiveSource)) {
-        throw "Offline mode requires chrome-win64.zip at repo root: $offlineArchiveSource"
-    }
-
-    Copy-Item -LiteralPath $offlineArchiveSource -Destination $offlineArchiveTarget -Force
-}
-elseif (Test-Path -LiteralPath $offlineArchiveTarget) {
-    Write-Step 'Removing stale offline Chromium archive'
-    Remove-Item -LiteralPath $offlineArchiveTarget -Force
+    Write-Step 'Legacy offline packaging mode is deprecated; chrome-win64.zip is no longer bundled into the app package'
 }
 
 if (-not (Test-Path -LiteralPath $electronBuilderCli)) {
