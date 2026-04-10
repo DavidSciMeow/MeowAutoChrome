@@ -12,6 +12,13 @@ public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
 {
     private const string DefaultInstanceId = "ExamplePluginInstance";
 
+    public enum ExampleChoice
+    {
+        Alpha,
+        Beta,
+        Gamma
+    }
+
     /// <summary>
     /// 启动插件。若当前已存在该插件名下实例则优先复用，否则由宿主创建一个新实例。宿主在返回成功后会自行切换运行状态。<br/>
     /// Start the plugin. Reuse a plugin-owned instance when possible; otherwise ask the host to create a new one. The host updates runtime state after success is returned.
@@ -123,6 +130,51 @@ public sealed class MinimalExamplePlugin : PluginBase, IAsyncDisposable
     /// </summary>
     [PAction(Name = "ValueTaskResult")]
     public ValueTask<Result<string>> ValueTaskResultAsync() => new(Result<string>.Ok("value-task-result"));
+
+    /// <summary>
+    /// 接收可选文本输入，演示 PInput 触发参数模态框以及 textarea 渲染。<br/>
+    /// Accept optional text input to demonstrate PInput-driven argument modal rendering with a textarea.
+    /// </summary>
+    [PAction(Name = "EchoText")]
+    public Task<IResult> EchoTextAsync(
+        [PInput(Label = "文本", Description = "可留空，支持多行输入。", InputType = "textarea", Rows = 8)]
+        string? text = null)
+        => Task.FromResult<IResult>(Result.Ok(new
+        {
+            text = text ?? string.Empty,
+            length = text?.Length ?? 0
+        }));
+
+    /// <summary>
+    /// 展示当前可识别的所有输入类型，便于手工验证参数窗渲染与参数绑定。<br/>
+    /// Showcase every currently recognized input type so the argument modal and parameter binding can be tested manually.
+    /// </summary>
+    [PAction(Name = "InputTypeShowcase")]
+    public Task<IResult> InputTypeShowcaseAsync(
+        [PInput(Label = "单行文本", Description = "默认渲染为 text。")]
+        string text,
+        [PInput(Label = "多行文本", Description = "使用 Multiline 语义糖渲染为 textarea。", Multiline = true, Rows = 6)]
+        string? multilineText,
+        [PInput(Label = "数字", Description = "decimal 会自动渲染为 number。")]
+        decimal amount,
+        [PInput(Label = "日期时间", Description = "DateTime 会自动渲染为 datetime-local。")]
+        DateTime scheduledAt,
+        [PInput(Label = "唯一标识", Description = "Guid 会自动渲染为 guid 文本输入。")]
+        Guid requestId,
+        [PInput(Label = "布尔开关", Description = "bool 会自动渲染为 checkbox。")]
+        bool enabled,
+        [PInput(Label = "枚举选择", Description = "enum 会自动渲染为 select。")]
+        ExampleChoice choice = ExampleChoice.Alpha)
+        => Task.FromResult<IResult>(Result.Ok(new
+        {
+            text,
+            multilineText = multilineText ?? string.Empty,
+            amount,
+            scheduledAt,
+            requestId,
+            enabled,
+            choice = choice.ToString()
+        }));
 
     /// <summary>
     /// 在当前活动页面上执行 JavaScript 并返回标题。<br/>

@@ -103,6 +103,45 @@
         });
     }
 
+    async function executePluginTarget(btn, pluginId, targetId, endpointKey, fallbackUrl, requestBodyFactory, onSuccess) {
+        btn.disabled = true;
+        try {
+            const url = api(endpointKey, fallbackUrl);
+            const response = await postJsonUrl(url, requestBodyFactory());
+            pushExecutionResponseToPluginOutput(pluginId, targetId, response);
+            if (typeof onSuccess === 'function')
+                await onSuccess(response);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function openPluginInvocation(plugin, target, btn, options) {
+        const parameters = Array.isArray(target?.parameters) ? target.parameters : [];
+        const invoke = async (argumentsPayload) => {
+            await executePluginTarget(
+                btn,
+                plugin.id,
+                options.targetId,
+                options.endpointKey,
+                options.fallbackUrl,
+                () => options.requestBodyFactory(argumentsPayload || {}),
+                options.onSuccess);
+        };
+
+        if (!parameters.length || !window.BrowserPlugins?.openPluginArgumentModal) {
+            await invoke({});
+            return;
+        }
+
+        window.BrowserPlugins.openPluginArgumentModal(
+            target.name || target.command || '插件参数',
+            target.description || '',
+            parameters,
+            options.submitText,
+            invoke);
+    }
+
     window.renderPlugins = function (plugins) {
         pluginHost.replaceChildren();
         window.BrowserUI = window.BrowserUI || {};
@@ -181,11 +220,16 @@
 
                     btn.addEventListener('click', async () => {
                         try {
-                            btn.disabled = true;
-                            const url = api('pluginsControl', '/api/plugins/control');
-                            const res = await postJsonUrl(url, { pluginId: plugin.id, command: c.command, arguments: {} });
-                            pushExecutionResponseToPluginOutput(plugin.id, c.command, res);
-                            await (window.BrowserUI.loadPlugins?.() || Promise.resolve());
+                            await openPluginInvocation(plugin, c, btn, {
+                                targetId: c.command,
+                                endpointKey: 'pluginsControl',
+                                fallbackUrl: '/api/plugins/control',
+                                submitText: c.name || '执行',
+                                requestBodyFactory: (argumentsPayload) => ({ pluginId: plugin.id, command: c.command, arguments: argumentsPayload }),
+                                onSuccess: async () => {
+                                    await (window.BrowserUI.loadPlugins?.() || Promise.resolve());
+                                }
+                            });
                         } catch (e) { showToast('控制失败', formatRequestError(e), true); } finally { btn.disabled = false; }
                     });
                     controlsWrap.appendChild(btn);
@@ -200,10 +244,13 @@
                     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn btn-sm btn-outline-primary'; btn.textContent = fn.name || fn.id;
                     btn.addEventListener('click', async () => {
                         try {
-                            btn.disabled = true;
-                            const url = api('pluginsRun', '/api/plugins/run');
-                            const res = await postJsonUrl(url, { pluginId: plugin.id, functionId: fn.id, arguments: {} });
-                            pushExecutionResponseToPluginOutput(plugin.id, fn.id, res);
+                            await openPluginInvocation(plugin, fn, btn, {
+                                targetId: fn.id,
+                                endpointKey: 'pluginsRun',
+                                fallbackUrl: '/api/plugins/run',
+                                submitText: fn.name || '执行',
+                                requestBodyFactory: (argumentsPayload) => ({ pluginId: plugin.id, functionId: fn.id, arguments: argumentsPayload })
+                            });
                         } catch (e) { showToast('执行失败', formatRequestError(e), true); } finally { btn.disabled = false; }
                     });
                     functionsWrap.appendChild(btn);

@@ -65,6 +65,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
                                     parameter.DefaultValue,
                                     parameter.Required,
                                     parameter.InputType,
+                                    parameter.Rows,
                                     [.. parameter.Options.Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))]))]))],
                     [.. plugin.Actions
                         .Select(action => new BrowserPluginFunctionDescriptor(
@@ -79,6 +80,7 @@ namespace MeowAutoChrome.Core.Services.PluginHost
                                     parameter.DefaultValue,
                                     parameter.Required,
                                     parameter.InputType,
+                                    parameter.Rows,
                                     [.. parameter.Options.Select(option => new BrowserPluginActionParameterOptionDescriptor(option.Value, option.Label))]))]))]);
             }
             catch (Exception ex)

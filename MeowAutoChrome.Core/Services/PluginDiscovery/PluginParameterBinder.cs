@@ -48,13 +48,7 @@ internal static class PluginParameterBinder
 
             try
             {
-                var targetType = p.ParameterType;
-                if (targetType == typeof(string))
-                    args[i] = rawValue;
-                else if (targetType.IsEnum)
-                    args[i] = Enum.Parse(targetType, rawValue, ignoreCase: true);
-                else
-                    args[i] = Convert.ChangeType(rawValue, targetType, CultureInfo.InvariantCulture);
+                args[i] = ConvertPluginArgument(rawValue, p.ParameterType);
             }
             catch
             {
@@ -84,6 +78,13 @@ internal static class PluginParameterBinder
     /// <returns>运行时参数描述符 / runtime parameter descriptor.</returns>
     public static RuntimeBrowserPluginParameter CreateActionParameter(ParameterInfo parameter, PInputAttribute? attribute, PInputAttribute? legacy)
     {
+        var inputType = ResolveInputType(parameter, attribute, legacy);
+        int? rows = attribute?.Rows > 0
+            ? attribute.Rows
+            : legacy?.Rows > 0
+                ? legacy.Rows
+                : null;
+
         var param = new RuntimeBrowserPluginParameter
         {
             Name = parameter.Name ?? string.Empty,
@@ -91,10 +92,94 @@ internal static class PluginParameterBinder
             Description = attribute?.Description ?? legacy?.Description,
             DefaultValue = attribute?.DefaultValue ?? legacy?.DefaultValue,
             Required = attribute?.Required ?? legacy?.Required ?? false,
-            InputType = attribute?.InputType ?? legacy?.InputType ?? "text",
-            Options = []
+            InputType = inputType,
+            Rows = rows,
+            Options = ResolveOptions(parameter, inputType)
         };
 
         return param;
+    }
+
+    private static object? ConvertPluginArgument(string rawValue, Type parameterType)
+    {
+        var targetType = Nullable.GetUnderlyingType(parameterType) ?? parameterType;
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            if (targetType == typeof(string))
+                return rawValue;
+
+            if (Nullable.GetUnderlyingType(parameterType) is not null)
+                return null;
+        }
+
+        if (targetType == typeof(string))
+            return rawValue;
+
+        if (targetType == typeof(Guid))
+            return Guid.Parse(rawValue);
+
+        if (targetType == typeof(DateTime))
+            return DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal);
+
+        if (targetType == typeof(DateTimeOffset))
+            return DateTimeOffset.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal);
+
+        if (targetType.IsEnum)
+            return Enum.Parse(targetType, rawValue, ignoreCase: true);
+
+        return Convert.ChangeType(rawValue, targetType, CultureInfo.InvariantCulture);
+    }
+
+    private static string ResolveInputType(ParameterInfo parameter, PInputAttribute? attribute, PInputAttribute? legacy)
+    {
+        var explicitInputType = attribute?.InputType ?? legacy?.InputType;
+        var multiline = attribute?.Multiline == true || legacy?.Multiline == true;
+
+        if (!string.IsNullOrWhiteSpace(explicitInputType))
+        {
+            var normalized = explicitInputType.Trim();
+            if (multiline && string.Equals(normalized, "text", StringComparison.OrdinalIgnoreCase))
+                return "textarea";
+
+            return normalized;
+        }
+
+        if (multiline)
+            return "textarea";
+
+        var targetType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+        if (targetType == typeof(bool))
+            return "checkbox";
+        if (targetType.IsEnum)
+            return "select";
+        if (targetType == typeof(Guid))
+            return "guid";
+        if (targetType == typeof(DateTime) || targetType == typeof(DateTimeOffset))
+            return "datetime-local";
+        if (targetType == typeof(byte)
+            || targetType == typeof(sbyte)
+            || targetType == typeof(short)
+            || targetType == typeof(ushort)
+            || targetType == typeof(int)
+            || targetType == typeof(uint)
+            || targetType == typeof(long)
+            || targetType == typeof(ulong)
+            || targetType == typeof(float)
+            || targetType == typeof(double)
+            || targetType == typeof(decimal))
+            return "number";
+
+        return "text";
+    }
+
+    private static IReadOnlyList<(string Value, string Label)> ResolveOptions(ParameterInfo parameter, string inputType)
+    {
+        var targetType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+        if (!string.Equals(inputType, "select", StringComparison.OrdinalIgnoreCase) || !targetType.IsEnum)
+            return [];
+
+        return Enum.GetNames(targetType)
+            .Select(name => (name, name))
+            .ToArray();
     }
 }

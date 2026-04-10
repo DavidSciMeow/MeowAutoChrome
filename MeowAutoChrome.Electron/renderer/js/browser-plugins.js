@@ -230,9 +230,78 @@
         }
     }
 
-    function createPluginParameterField(parameter, parameterInputs) { const field = document.createElement('div'); const label = document.createElement('label'); label.className = 'form-label mb-1'; label.textContent = parameter.label + (parameter.required ? ' *' : ''); field.appendChild(label); let input; if (parameter.inputType === 'checkbox') { input = document.createElement('input'); input.type = 'checkbox'; input.className = 'form-check-input'; input.checked = String(parameter.defaultValue || 'false').toLowerCase() === 'true'; const wrapper = document.createElement('div'); wrapper.className = 'form-check'; wrapper.appendChild(input); field.appendChild(wrapper); } else if (parameter.inputType === 'select') { input = document.createElement('select'); input.className = 'form-select form-select-sm'; if (!parameter.required) { const emptyOption = document.createElement('option'); emptyOption.value = ''; emptyOption.textContent = '请选择'; input.appendChild(emptyOption); } for (const option of parameter.options || []) { const element = document.createElement('option'); element.value = option.value; element.textContent = option.label; if ((parameter.defaultValue ?? '') === option.value) element.selected = true; input.appendChild(element); } field.appendChild(input); } else { input = document.createElement('input'); input.type = parameter.inputType === 'number' ? 'number' : parameter.inputType === 'datetime-local' ? 'datetime-local' : 'text'; input.className = 'form-control form-control-sm'; input.value = parameter.defaultValue ?? ''; input.placeholder = parameter.description || parameter.label; if (parameter.inputType === 'number') input.step = 'any'; if (parameter.inputType === 'datetime-local') input.step = '1'; if (parameter.inputType === 'guid') { input.placeholder = parameter.description || '00000000-0000-0000-0000-000000000000'; input.pattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; input.spellcheck = false; input.autocomplete = 'off'; } field.appendChild(input); } if (parameter.description) { const help = document.createElement('div'); help.className = 'form-text mt-1'; help.textContent = parameter.description; field.appendChild(help); } parameterInputs[parameter.name] = { input, parameter }; return field; }
+    function createPluginParameterField(parameter, parameterInputs) {
+        const field = document.createElement('div');
+        const label = document.createElement('label');
+        const inputType = String(parameter.inputType || 'text').toLowerCase();
+        label.className = 'form-label mb-1';
+        label.textContent = parameter.label + (parameter.required ? ' *' : '');
+        field.appendChild(label);
 
-    function collectPluginArguments(parameterInputs) { const argumentsPayload = {}; for (const [name, entry] of Object.entries(parameterInputs || {})) { if (typeof entry.input.checkValidity === 'function' && !entry.input.checkValidity()) { entry.input.reportValidity(); entry.input.focus(); return null; } if (entry.parameter.inputType === 'checkbox') { argumentsPayload[name] = entry.input.checked ? 'true' : 'false'; continue; } const value = (entry.input.value || '').trim(); if (entry.parameter.required && !value) { showError('请填写参数：' + entry.parameter.label); entry.input.focus(); return null; } if (value) argumentsPayload[name] = value; } return argumentsPayload; }
+        let input;
+        if (inputType === 'checkbox') {
+            input = document.createElement('input');
+            input.type = 'checkbox';
+            input.className = 'form-check-input';
+            input.checked = String(parameter.defaultValue || 'false').toLowerCase() === 'true';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-check';
+            wrapper.appendChild(input);
+            field.appendChild(wrapper);
+        } else if (inputType === 'select') {
+            input = document.createElement('select');
+            input.className = 'form-select form-select-sm';
+            if (!parameter.required) {
+                const emptyOption = document.createElement('option');
+                emptyOption.value = '';
+                emptyOption.textContent = '请选择';
+                input.appendChild(emptyOption);
+            }
+            for (const option of parameter.options || []) {
+                const element = document.createElement('option');
+                element.value = option.value;
+                element.textContent = option.label;
+                if ((parameter.defaultValue ?? '') === option.value) element.selected = true;
+                input.appendChild(element);
+            }
+            field.appendChild(input);
+        } else if (inputType === 'textarea') {
+            input = document.createElement('textarea');
+            input.className = 'form-control form-control-sm';
+            input.value = parameter.defaultValue ?? '';
+            input.placeholder = parameter.description || parameter.label;
+            const configuredRows = Number(parameter.rows);
+            input.rows = Number.isFinite(configuredRows) && configuredRows > 0 ? Math.floor(configuredRows) : 4;
+            field.appendChild(input);
+        } else {
+            input = document.createElement('input');
+            input.type = inputType === 'number' ? 'number' : inputType === 'datetime-local' ? 'datetime-local' : 'text';
+            input.className = 'form-control form-control-sm';
+            input.value = parameter.defaultValue ?? '';
+            input.placeholder = parameter.description || parameter.label;
+            if (inputType === 'number') input.step = 'any';
+            if (inputType === 'datetime-local') input.step = '1';
+            if (inputType === 'guid') {
+                input.placeholder = parameter.description || '00000000-0000-0000-0000-000000000000';
+                input.pattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+                input.spellcheck = false;
+                input.autocomplete = 'off';
+            }
+            field.appendChild(input);
+        }
+
+        if (parameter.description) {
+            const help = document.createElement('div');
+            help.className = 'form-text mt-1';
+            help.textContent = parameter.description;
+            field.appendChild(help);
+        }
+
+        parameterInputs[parameter.name] = { input, parameter: { ...parameter, inputType } };
+        return field;
+    }
+
+    function collectPluginArguments(parameterInputs) { const argumentsPayload = {}; for (const [name, entry] of Object.entries(parameterInputs || {})) { if (typeof entry.input.checkValidity === 'function' && !entry.input.checkValidity()) { entry.input.reportValidity(); entry.input.focus(); return null; } if (entry.parameter.inputType === 'checkbox') { argumentsPayload[name] = entry.input.checked ? 'true' : 'false'; continue; } const rawValue = entry.input.value ?? ''; const value = entry.parameter.inputType === 'textarea' ? String(rawValue) : String(rawValue).trim(); if (entry.parameter.required && !value) { showError('请填写参数：' + entry.parameter.label); entry.input.focus(); return null; } if (value) argumentsPayload[name] = value; } return argumentsPayload; }
 
     function openPluginArgumentModal(title, description, parameters, submitText, onSubmit) { if (!pluginArgumentModal) return; const parameterInputs = {}; pluginArgumentModalTitle.textContent = title || '插件参数'; pluginArgumentModalDescription.textContent = description || ''; pluginArgumentModalDescription.classList.toggle('d-none', !description); pluginArgumentForm.replaceChildren(); for (const parameter of parameters || []) pluginArgumentForm.appendChild(createPluginParameterField(parameter, parameterInputs)); pluginArgumentSubmitBtn.textContent = submitText || '执行'; pendingPluginInvocation = { parameterInputs, onSubmit }; pluginArgumentModal.show(); setTimeout(() => { const firstInput = pluginArgumentForm.querySelector('input, select, textarea'); if (firstInput) firstInput.focus(); }, 150); }
 

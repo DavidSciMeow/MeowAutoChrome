@@ -39,4 +39,14 @@ public sealed class PInputAttribute : Attribute
     /// Hint for input type (e.g., text, password).
     /// </summary>
     public string? InputType { get; set; }
+    /// <summary>
+    /// 是否使用多行文本输入；当未显式指定 InputType 或 InputType 为 text 时，会按 textarea 渲染。<br/>
+    /// Whether to use multiline text input; when InputType is omitted or set to text, this will render as a textarea.
+    /// </summary>
+    public bool Multiline { get; set; }
+    /// <summary>
+    /// 当输入类型为 textarea 时的可见行数。<br/>
+    /// Visible row count when the input type is textarea.
+    /// </summary>
+    public int Rows { get; set; }
 }

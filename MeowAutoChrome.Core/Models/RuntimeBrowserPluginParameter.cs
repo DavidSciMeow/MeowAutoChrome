@@ -37,6 +37,11 @@ public sealed class RuntimeBrowserPluginParameter
     /// </summary>
     public string InputType { get; init; } = "text";
     /// <summary>
+    /// 当输入类型为 textarea 时的可见行数。<br/>
+    /// Visible row count when the input type is textarea.
+    /// </summary>
+    public int? Rows { get; init; }
+    /// <summary>
     /// 可选值列表（Value, Label）。<br/>
     /// Option list of (Value, Label) pairs.
     /// </summary>

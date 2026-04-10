@@ -18,6 +18,7 @@ public sealed record BrowserPluginActionParameterOptionDescriptor(string Value, 
 /// <param name="DefaultValue">默认值（可空）/ default value (nullable).</param>
 /// <param name="Required">是否必填 / whether required.</param>
 /// <param name="InputType">输入类型提示 / input type hint.</param>
+/// <param name="Rows">textarea 可见行数 / visible textarea rows.</param>
 /// <param name="Options">可选项列表 / list of options.</param>
 public sealed record BrowserPluginActionParameterDescriptor(
     string Name,
@@ -26,6 +27,7 @@ public sealed record BrowserPluginActionParameterDescriptor(
     string? DefaultValue,
     bool Required,
     string InputType,
+    int? Rows,
     IReadOnlyList<BrowserPluginActionParameterOptionDescriptor> Options);
 
 /// <summary>
