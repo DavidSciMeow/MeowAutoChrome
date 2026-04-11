@@ -578,70 +578,79 @@
             </section>
 
             <section class="app-page d-none app-page-surface" data-page="plugin-upload">
-                <div class="d-flex align-items-start gap-4 flex-wrap flex-xl-nowrap">
-                    <div class="flex-shrink-0" style="width:520px; max-width:100%;">
-                        <h2 class="h4 mb-3">插件上传与管理</h2>
-                        <div class="card">
-                            <div class="card-body">
-                                <div id="uploadDropZone" class="border rounded p-3 mb-3"
-                                    style="min-height:140px; display:flex; align-items:center;">
-                                    <div class="w-100">
-                                        <label class="form-label fw-semibold">选择要上传的插件文件或文件夹</label>
-                                        <div class="small text-muted mb-2">支持 DLL、ZIP。Chrome/Chromium 支持目录上传。也可将插件目录打包为
-                                            ZIP 后上传以兼容更多浏览器。</div>
-                                        <input id="pluginUploadInput" type="file" webkitdirectory directory multiple
-                                            accept=".dll,.zip" class="form-control mb-2" />
-                                        <div class="d-flex gap-2 align-items-center flex-wrap">
-                                            <button id="pluginUploadBtn" class="btn btn-primary"
-                                                type="button">上传并扫描</button>
-                                            <button id="pluginClearBtn" type="button"
-                                                class="btn btn-outline-secondary">清除选择</button>
-                                            <!-- 打开插件目录按钮已移除；请使用设置页中的插件目录控件 -->
-                                            <div id="uploadSpinner" class="spinner-border text-primary" role="status"
-                                                style="display:none; width:1.2rem; height:1.2rem;"></div>
-                                        </div>
-                                        <div id="uploadHint" class="form-text small text-muted mt-2">提示：请选择 DLL 或 ZIP
-                                            文件，或直接选择包含 DLL 的文件夹。</div>
-                                    </div>
-                                </div>
-                                <div id="selectedFilesInfo" class="small text-muted">尚未选择文件。</div>
-                            </div>
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+                        <div>
+                            <h2 class="h4 mb-1">插件管理</h2>
+                            <div class="small text-muted">这里只管理已安装插件程序集的开关。上传和扫描结果会在模态框中显示。</div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button id="openPluginUploadModalBtn" type="button" class="btn btn-primary">上传插件</button>
+                            <button id="openPluginDirectoryBtn" type="button"
+                                class="btn btn-outline-secondary">打开插件目录</button>
                         </div>
                     </div>
 
-                    <div class="flex-grow-1 min-w-0">
-                        <h2 class="h5 mb-3">扫描结果</h2>
-                        <div id="uploadResult" class="card" style="min-height:160px;">
-                            <div class="card-body">
-                                <div id="resultPlaceholder" class="text-muted">上传并扫描后，这里会显示每个 DLL 的解析结果。</div>
-                                <div id="resultList" class="accordion mt-2"></div>
-                            </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="installedAssembliesPlaceholder" class="text-muted">正在加载已安装插件列表…</div>
+                            <div id="installedAssembliesList" class="list-group plugin-assembly-list mt-2"></div>
                         </div>
+                    </div>
+                </div>
 
-                        <h2 class="h5 mt-4 mb-3">已安装插件 <button id="refreshPluginsBtn"
-                                class="btn btn-sm btn-outline-secondary ms-2">刷新插件</button></h2>
-                        <div id="installedPlugins" class="card">
-                            <div class="card-body">
-                                <div id="installedPlaceholder" class="text-muted">正在加载已安装插件列表…</div>
-                                <div id="installedList" class="list-group mt-2"></div>
+                <div class="modal fade" id="pluginUploadModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">上传插件</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                    aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="pluginUploadDropZone" class="plugin-upload-dropzone mb-3">
+                                    <div class="plugin-upload-dropzone-title">拖动 DLL、ZIP 或插件文件夹到这里</div>
+                                    <div class="small text-muted">也可以手动选择文件或文件夹。目录上传会保留相对路径，便于上传完整插件包。</div>
+                                </div>
+                                <input id="pluginUploadFileInput" type="file" multiple accept=".dll,.zip"
+                                    class="d-none" />
+                                <input id="pluginUploadDirectoryInput" type="file" webkitdirectory directory multiple
+                                    class="d-none" />
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    <button id="pluginSelectFilesBtn" type="button"
+                                        class="btn btn-outline-secondary">选择文件</button>
+                                    <button id="pluginSelectDirectoryBtn" type="button"
+                                        class="btn btn-outline-secondary">选择文件夹</button>
+                                    <button id="pluginClearSelectionBtn" type="button"
+                                        class="btn btn-link text-decoration-none px-1">清空选择</button>
+                                </div>
+                                <div id="pluginSelectedFilesInfo" class="small text-muted">尚未选择文件。</div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary"
+                                    data-bs-dismiss="modal">取消</button>
+                                <div id="pluginUploadSpinner" class="spinner-border text-primary me-2" role="status"
+                                    style="display:none; width:1.15rem; height:1.15rem;"></div>
+                                <button id="pluginUploadSubmitBtn" type="button" class="btn btn-primary">上传并扫描</button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog">
+                <div class="modal fade" id="pluginScanResultModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h5 class="modal-title" id="confirmModalTitle">确认</h5>
+                                <h5 class="modal-title">扫描结果</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"
                                     aria-label="Close"></button>
                             </div>
-                            <div class="modal-body" id="confirmModalBody">确认操作？</div>
+                            <div class="modal-body">
+                                <div id="pluginScanResultPlaceholder" class="text-muted">上传完成后，这里会显示每个 DLL 的扫描结果。</div>
+                                <div id="pluginScanResultList" class="vstack gap-3 mt-3"></div>
+                            </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-outline-secondary"
-                                    data-bs-dismiss="modal">取消</button>
-                                <button id="confirmModalOk" type="button" class="btn btn-danger">确认删除</button>
+                                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">关闭</button>
                             </div>
                         </div>
                     </div>

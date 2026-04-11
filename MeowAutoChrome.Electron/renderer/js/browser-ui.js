@@ -116,6 +116,7 @@
     let globalHeadless = false;
     let screenshotPreviewUrl = null;
     let currentScreencastTargetFps = 10;
+    let lastPluginCatalogErrors = [];
 
     function clampScreencastFps(value) {
         return Math.max(1, Math.min(60, Math.round(Number(value) || 10)));
@@ -932,8 +933,26 @@
             const payload = await response.json();
             const plugins = payload?.plugins || [];
             window.renderPlugins?.(plugins);
-            const errors = Array.isArray(payload?.errors) ? payload.errors.filter(Boolean) : [];
-            if (errors.length) showError(errors.join('； '), 'warning');
+            const errors = Array.isArray(payload?.errors)
+                ? Array.from(new Set(payload.errors.filter(Boolean)))
+                : [];
+            const errorText = errors.join('； ');
+            if (errorText) {
+                if (browserError) {
+                    browserError.textContent = errorText;
+                    browserError.classList.remove('d-none', 'alert-danger', 'alert-warning');
+                    browserError.classList.add('alert-warning');
+                }
+
+                const newErrors = errors.filter(error => !lastPluginCatalogErrors.includes(error));
+                newErrors.forEach(error => window.showNotification?.(error, 'warning'));
+                lastPluginCatalogErrors = errors;
+            } else if (lastPluginCatalogErrors.length) {
+                if (browserError?.textContent) {
+                    clearError();
+                }
+                lastPluginCatalogErrors = [];
+            }
         } catch (error) {
             if (pluginHost) {
                 pluginHost.replaceChildren();

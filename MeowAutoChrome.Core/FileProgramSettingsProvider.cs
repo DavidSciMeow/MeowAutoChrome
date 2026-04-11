@@ -116,6 +116,19 @@ public sealed class FileProgramSettingsProvider : IProgramSettingsProvider
         settings.UserAgent = string.IsNullOrWhiteSpace(settings.UserAgent) ? null : settings.UserAgent.Trim();
         settings.ScreencastFps = Math.Clamp(settings.ScreencastFps <= 0 ? Struct.ProgramSettings.DefaultScreencastFps : settings.ScreencastFps, 1, 60);
         settings.PluginPanelWidth = Math.Clamp(settings.PluginPanelWidth <= 0 ? Struct.ProgramSettings.DefaultPluginPanelWidth : settings.PluginPanelWidth, Struct.ProgramSettings.MinPluginPanelWidth, Struct.ProgramSettings.MaxPluginPanelWidth);
+        settings.DisabledPluginAssemblies = (settings.DisabledPluginAssemblies ?? [])
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path =>
+            {
+                var trimmed = path.Trim();
+                if (Path.IsPathRooted(trimmed))
+                    return Path.GetFullPath(trimmed);
+
+                return Path.GetFullPath(Path.Combine(settings.PluginDirectory, trimmed));
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private void EnsureSettingsFileMigrated()

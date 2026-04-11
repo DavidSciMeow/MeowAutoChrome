@@ -16,6 +16,7 @@ internal sealed class BrowserPluginDiscovery
     private readonly IPluginAssemblyLoader _assemblyLoader;
     private readonly ILogger _logger;
     private readonly IPluginInstanceManager _instanceManager;
+    private readonly IProgramSettingsProvider? _settingsProvider;
 
     private CoreModels.PluginDiscoverySnapshot _latestSnapshot = new([], [], []);
     private readonly object _snapshotLock = new();
@@ -29,16 +30,17 @@ internal sealed class BrowserPluginDiscovery
     /// <param name="assemblyLoader">用于加载程序集的装载器 / assembly loader used to load plugin assemblies.</param>
     /// <param name="logger">日志记录器 / logger instance.</param>
     /// <param name="instanceManager">插件实例管理器 / plugin instance manager.</param>
-    public BrowserPluginDiscovery(IPluginDiscoveryService discovery, IPluginAssemblyLoader assemblyLoader, ILogger logger, IPluginInstanceManager instanceManager)
+    public BrowserPluginDiscovery(IPluginDiscoveryService discovery, IPluginAssemblyLoader assemblyLoader, ILogger logger, IPluginInstanceManager instanceManager, IProgramSettingsProvider? settingsProvider = null)
     {
         _discovery = discovery;
         _assemblyLoader = assemblyLoader;
         _logger = logger;
         _instanceManager = instanceManager;
+        _settingsProvider = settingsProvider;
 
         try
         {
-            _latestSnapshot = _discovery.DiscoverAll(_assemblyLoader);
+            _latestSnapshot = DiscoverPluginsCore();
         }
         catch (Exception ex)
         {
@@ -79,6 +81,7 @@ internal sealed class BrowserPluginDiscovery
         var plugins = new List<CoreModels.RuntimeBrowserPlugin>();
         var errors = new List<string>();
         var errorsDetailed = new List<CoreModels.BrowserPluginErrorDescriptor>();
+        var disabledAssemblyPaths = GetDisabledAssemblyPaths();
 
         // Use the discovery service to enumerate assemblies so that multiple
         // root paths (separated by ';' or '|') and other discovery policies
@@ -86,32 +89,14 @@ internal sealed class BrowserPluginDiscovery
         // performs recursive enumeration under each configured root.
         foreach (var pluginPath in _discovery.EnumeratePluginAssemblies())
         {
-            string[] candidateTypeNames;
-
-            try
-            {
-                candidateTypeNames = PluginMetadataScanner.DiscoverPluginTypeNames(pluginPath);
-            }
-            catch (Exception ex)
-            {
-                var detail = ex.ToString();
-                var message = $"插件程序集 {Path.GetFileName(pluginPath)} 元数据扫描失败：{detail}";
-                _logger.LogError(ex, "插件程序集 {PluginAssembly} 元数据扫描失败。", pluginPath);
-                errors.Add(message);
-                errorsDetailed.Add(new CoreModels.BrowserPluginErrorDescriptor(Path.GetFileName(pluginPath), ex.Message, detail));
-                continue;
-            }
-
-            if (candidateTypeNames.Length == 0)
+            var fullPath = Path.GetFullPath(pluginPath);
+            if (disabledAssemblyPaths.Contains(fullPath))
                 continue;
 
-            var assembly = _assemblyLoader.Load(pluginPath, errors);
-            if (assembly is null)
-                continue;
-
-            var discovered = DiscoverPlugins(assembly, pluginPath, candidateTypeNames, errors);
-            plugins.AddRange(discovered);
-            _assemblyLoader.RegisterPlugins(pluginPath, discovered.Select(p => p.Id));
+            var discovered = _discovery.DiscoverFromAssembly(fullPath, _assemblyLoader);
+            plugins.AddRange(discovered.Plugins);
+            errors.AddRange(discovered.Errors);
+            errorsDetailed.AddRange(discovered.ErrorsDetailed);
         }
 
         var snapshot = new CoreModels.PluginDiscoverySnapshot(
@@ -167,13 +152,20 @@ internal sealed class BrowserPluginDiscovery
                 return (false, errors);
             }
 
+            var removedPluginIds = GetLatestSnapshot().Plugins
+                .Where(plugin => string.Equals(_assemblyLoader.GetAssemblyPathForPluginId(plugin.Id), path, StringComparison.OrdinalIgnoreCase))
+                .Select(plugin => plugin.Id)
+                .Append(pluginId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             _instanceManager.RemoveInstanceByPluginId(pluginId);
             _assemblyLoader.UnregisterPlugins(path);
             _assemblyLoader.Unload(path);
 
             lock (_snapshotLock)
             {
-                var remaining = _latestSnapshot.Plugins.Where(p => p.Id != pluginId).ToArray();
+                var remaining = _latestSnapshot.Plugins.Where(p => !removedPluginIds.Contains(p.Id)).ToArray();
                 _latestSnapshot = new CoreModels.PluginDiscoverySnapshot(remaining, _latestSnapshot.Errors, _latestSnapshot.ErrorsDetailed);
             }
 
@@ -257,7 +249,7 @@ internal sealed class BrowserPluginDiscovery
         {
             try
             {
-                var snapshot = _discovery.DiscoverAll(_assemblyLoader);
+                var snapshot = DiscoverPluginsCore();
                 lock (_snapshotLock)
                 {
                     _latestSnapshot = snapshot;
@@ -269,6 +261,25 @@ internal sealed class BrowserPluginDiscovery
             }
 
             try { await Task.Delay(_scanInterval, cancellationToken); } catch { }
+        }
+    }
+
+    private HashSet<string> GetDisabledAssemblyPaths()
+    {
+        if (_settingsProvider is null)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var settings = _settingsProvider.GetAsync().GetAwaiter().GetResult();
+            return new HashSet<string>((settings.DisabledPluginAssemblies ?? [])
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取禁用插件程序集列表失败。将按全部启用继续扫描。");
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 }

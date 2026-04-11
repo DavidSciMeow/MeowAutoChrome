@@ -81,3 +81,24 @@ public class PluginIdRequest
     [RegularExpression(@"\S+", ErrorMessage = "pluginId required")]
     public string PluginId { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// 插件程序集启用状态切换请求。<br/>
+/// Request used to toggle one plugin assembly on or off.
+/// </summary>
+public class PluginAssemblyStateRequest
+{
+    /// <summary>
+    /// 插件程序集路径。<br/>
+    /// Plugin assembly path.
+    /// </summary>
+    [Required]
+    [RegularExpression(@"\S+", ErrorMessage = "assemblyPath required")]
+    public string AssemblyPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 是否启用该程序集。<br/>
+    /// Whether the assembly should be enabled.
+    /// </summary>
+    public bool Enabled { get; set; }
+}

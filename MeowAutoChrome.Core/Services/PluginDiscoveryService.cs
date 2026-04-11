@@ -95,6 +95,18 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
         {
             try
             {
+                var contractReference = PluginAssemblyInspector.InspectContractReference(pluginPath);
+                if (!contractReference.ReferencesContracts)
+                    continue;
+
+                if (!contractReference.IsContractVersionMatch)
+                {
+                    var message = $"插件程序集 {Path.GetFileName(pluginPath)} Contract 版本不兼容：{contractReference.CompatibilityMessage}";
+                    errors.Add(message);
+                    errorsDetailed.Add(new BrowserPluginErrorDescriptor(Path.GetFileName(pluginPath), "Plugin contract version mismatch", contractReference.CompatibilityMessage));
+                    continue;
+                }
+
                 var candidateTypeNames = PluginMetadataScanner.DiscoverPluginTypeNames(pluginPath);
                 Assembly? assembly = null;
                 if (candidateTypeNames.Length == 0 && PluginMetadataScanner.ReferencesAssembly(pluginPath, typeof(Contracts.IPlugin).Assembly.GetName().Name ?? "MeowAutoChrome.Contracts"))
@@ -150,6 +162,18 @@ public sealed class PluginDiscoveryService(string? pluginRootPath = null) : IPlu
 
         try
         {
+            var contractReference = PluginAssemblyInspector.InspectContractReference(pluginPath);
+            if (!contractReference.ReferencesContracts)
+                return (plugins, errors, errorsDetailed);
+
+            if (!contractReference.IsContractVersionMatch)
+            {
+                var message = $"插件程序集 {Path.GetFileName(pluginPath)} Contract 版本不兼容：{contractReference.CompatibilityMessage}";
+                errors.Add(message);
+                errorsDetailed.Add(new BrowserPluginErrorDescriptor(Path.GetFileName(pluginPath), "Plugin contract version mismatch", contractReference.CompatibilityMessage));
+                return (plugins, errors, errorsDetailed);
+            }
+
             var candidateTypeNames = PluginMetadataScanner.DiscoverPluginTypeNames(pluginPath);
             Assembly? assembly = null;
             if (candidateTypeNames.Length == 0 && PluginMetadataScanner.ReferencesAssembly(pluginPath, typeof(Contracts.IPlugin).Assembly.GetName().Name ?? "MeowAutoChrome.Contracts"))

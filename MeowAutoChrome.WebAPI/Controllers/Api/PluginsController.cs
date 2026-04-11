@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MeowAutoChrome.Core.Services.PluginDiscovery;
 using MeowAutoChrome.WebAPI.Models;
 using MeowAutoChrome.Core.Interface;
 
@@ -62,11 +63,92 @@ public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvi
         var processed = new List<object>();
         foreach (var dll in dlls)
         {
+            var inspection = PluginAssemblyInspector.InspectAssembly(dll);
+            if (!inspection.ReferencesContracts)
+                continue;
+
+            if (!inspection.IsContractVersionMatch)
+            {
+                processed.Add(new
+                {
+                    path = dll,
+                    plugins = Array.Empty<object>(),
+                    inspection,
+                    errors = new[] { inspection.CompatibilityMessage }.Concat(inspection.Errors).ToArray(),
+                    errorsDetailed = Array.Empty<object>()
+                });
+                continue;
+            }
+
             var result = await pluginHost.LoadPluginAssemblyAsync(dll);
-            processed.Add(new { path = dll, plugins = result.Plugins, errors = result.Errors, errorsDetailed = result.ErrorsDetailed });
+            processed.Add(new
+            {
+                path = dll,
+                inspection,
+                plugins = result.Plugins,
+                errors = result.Errors,
+                errorsDetailed = result.ErrorsDetailed
+            });
         }
 
         return Ok(new { uploaded = true, uploadDir, processed });
+    }
+
+    /// <summary>
+    /// 获取插件目录中的已安装插件程序集及启用状态。<br/>
+    /// Get installed plugin assemblies from the plugin directory with their enabled state.
+    /// </summary>
+    [HttpGet("installed")]
+    public async Task<IActionResult> Installed()
+    {
+        try
+        {
+            pluginHost.EnsurePluginDirectoryExists();
+            var settings = await settingsProvider.GetAsync();
+            var disabledAssemblies = new HashSet<string>((settings.DisabledPluginAssemblies ?? [])
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+            var catalog = pluginHost.GetPluginCatalog();
+            var loadedPluginIds = new HashSet<string>(catalog.Plugins
+                .Where(plugin => plugin is not null)
+                .Select(plugin => plugin!.Id), StringComparer.OrdinalIgnoreCase);
+
+            var assemblies = EnumeratePluginAssemblies(pluginHost.PluginRootPath)
+                .Select(PluginAssemblyInspector.InspectAssembly)
+                .Where(item => item.ReferencesContracts)
+                .OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+                .Select(item =>
+                {
+                    var pluginIds = item.Plugins
+                        .Select(plugin => plugin.Id)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Cast<string>()
+                        .ToArray();
+                    var isLoaded = pluginIds.Any(loadedPluginIds.Contains);
+
+                    return new
+                    {
+                        assemblyPath = item.AssemblyPath,
+                        fileName = item.FileName,
+                        plugins = item.Plugins,
+                        hostContractsVersion = item.HostContractsVersion,
+                        referencedContractsVersion = item.ReferencedContractsVersion,
+                        referencesContracts = item.ReferencesContracts,
+                        contractVersionMatches = item.IsContractVersionMatch,
+                        compatibilityMessage = item.CompatibilityMessage,
+                        errors = item.Errors,
+                        enabled = !disabledAssemblies.Contains(item.AssemblyPath),
+                        loaded = isLoaded
+                    };
+                })
+                .ToArray();
+
+            return Ok(new { assemblies });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "加载已安装插件失败", detail = ex.Message });
+        }
     }
 
     /// <summary>
@@ -188,6 +270,71 @@ public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvi
     }
 
     /// <summary>
+    /// 启用或禁用指定插件程序集。<br/>
+    /// Enable or disable the specified plugin assembly.
+    /// </summary>
+    [HttpPost("assembly-state")]
+    public async Task<IActionResult> SetAssemblyState([FromBody] PluginAssemblyStateRequest request)
+    {
+        var assemblyPath = Path.GetFullPath(request.AssemblyPath);
+        if (!System.IO.File.Exists(assemblyPath))
+            return NotFound(new { error = "插件程序集不存在", assemblyPath });
+
+        if (!IsPathUnderPluginRoots(assemblyPath, pluginHost.PluginRootPath))
+            return BadRequest(new { error = "插件程序集不在当前插件目录下", assemblyPath });
+
+        var inspection = PluginAssemblyInspector.InspectAssembly(assemblyPath);
+        var settings = await settingsProvider.GetAsync();
+        var disabledAssemblies = new HashSet<string>((settings.DisabledPluginAssemblies ?? [])
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+
+        if (request.Enabled)
+        {
+            if (!inspection.IsContractVersionMatch)
+            {
+                return BadRequest(new
+                {
+                    error = inspection.CompatibilityMessage,
+                    inspection
+                });
+            }
+
+            disabledAssemblies.Remove(assemblyPath);
+            settings.DisabledPluginAssemblies = disabledAssemblies.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            await settingsProvider.SaveAsync(settings);
+            var loadResult = await pluginHost.LoadPluginAssemblyAsync(assemblyPath);
+            return Ok(new
+            {
+                success = !loadResult.Errors.Any(),
+                enabled = true,
+                assemblyPath,
+                inspection,
+                errors = loadResult.Errors,
+                errorsDetailed = loadResult.ErrorsDetailed
+            });
+        }
+
+        disabledAssemblies.Add(assemblyPath);
+        settings.DisabledPluginAssemblies = disabledAssemblies.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+        await settingsProvider.SaveAsync(settings);
+
+        var loadedPluginId = inspection.Plugins
+            .Select(plugin => plugin.Id)
+            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id) && pluginHost.GetPluginCatalog().Plugins.Any(plugin => string.Equals(plugin?.Id, id, StringComparison.OrdinalIgnoreCase)));
+        if (!string.IsNullOrWhiteSpace(loadedPluginId))
+            await pluginHost.UnloadPluginAsync(loadedPluginId);
+
+        return Ok(new
+        {
+            success = true,
+            enabled = false,
+            assemblyPath,
+            inspection
+        });
+    }
+
+    /// <summary>
     /// 执行插件控制命令。<br/>
     /// Execute a plugin control command.
     /// </summary>
@@ -239,5 +386,46 @@ public class PluginsController(IPluginHostCore pluginHost, IProgramSettingsProvi
                 logCategory = $"Plugin.{request.PluginId}"
             });
         }
+    }
+
+    private static IEnumerable<string> EnumeratePluginAssemblies(string rawPluginRootPath)
+    {
+        var roots = rawPluginRootPath
+            .Split([';', '|'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Trim())
+            .Where(path => !string.IsNullOrWhiteSpace(path));
+
+        foreach (var root in roots)
+        {
+            if (!Directory.Exists(root))
+                continue;
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+                yield return Path.GetFullPath(file);
+        }
+    }
+
+    private static bool IsPathUnderPluginRoots(string candidatePath, string rawPluginRootPath)
+    {
+        var normalizedCandidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+        var roots = rawPluginRootPath
+            .Split([';', '|'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Trim())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar);
+
+        return roots.Any(root => normalizedCandidate.StartsWith(root, StringComparison.OrdinalIgnoreCase));
     }
 }

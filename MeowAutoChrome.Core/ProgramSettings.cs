@@ -179,4 +179,10 @@ public sealed class ProgramSettings
     /// Maximum number of DLLs processed from an upload.
     /// </summary>
     public int MaxDllsPerUpload { get; set; } = 50;
+
+    /// <summary>
+    /// 已显式禁用的插件程序集完整路径列表。<br/>
+    /// Full paths of plugin assemblies that are explicitly disabled.
+    /// </summary>
+    public string[] DisabledPluginAssemblies { get; set; } = [];
 }

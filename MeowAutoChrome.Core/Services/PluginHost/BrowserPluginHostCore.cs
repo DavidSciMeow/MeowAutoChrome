@@ -58,7 +58,7 @@ public sealed class BrowserPluginHostCore : IPluginHostCore
         _hostAddressProvider = deps.HostAddressProvider;
 
         // initialize discovery helper and start background scanning loop
-        _pluginDiscovery = new BrowserPluginDiscovery(_discovery, _assemblyLoader, _logger, _instanceManager);
+        _pluginDiscovery = new BrowserPluginDiscovery(_discovery, _assemblyLoader, _logger, _instanceManager, _settingsProvider);
         _scanTask = Task.Run(() => _pluginDiscovery.ScanLoopAsync(_scanCts.Token));
     }
 

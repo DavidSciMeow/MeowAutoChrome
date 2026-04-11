@@ -7,7 +7,7 @@
         browser: '浏览器',
         logs: '日志',
         settings: '设置',
-        'plugin-upload': '插件上传',
+        'plugin-upload': '插件管理',
         privacy: '隐私提示'
     };
     let currentPage = defaultPage;

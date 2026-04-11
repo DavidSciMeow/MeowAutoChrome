@@ -365,6 +365,8 @@
         pluginsRun: mk('/api/plugins/run'),
         pluginsUpload: mk('/api/plugins/upload'),
         pluginsRoot: mk('/api/plugins/root'),
+        pluginsInstalled: mk('/api/plugins/installed'),
+        pluginsAssemblyState: mk('/api/plugins/assembly-state'),
         pluginsLoad: mk('/api/plugins/load'),
         pluginsRefresh: mk('/api/plugins/refresh'),
         pluginsUnload: mk('/api/plugins/unload'),
