@@ -2,13 +2,13 @@
 
 此目录包含项目的用户与开发者文档：概览、架构、API、目录说明、插件开发指南、运行与发布流程、故障排查等。
 
-**主要目的**
+## 主要目的
 
 - 帮助新开发者理解仓库结构与运行原理。
 - 指导插件作者编写兼容插件。
 - 提供打包、发布与常见故障处理流程。
 
-**主要组件**
+## 主要组件
 
 - WebAPI（[MeowAutoChrome.WebAPI](MeowAutoChrome.WebAPI)）：后端 HTTP API 与 SignalR Hub。
 - Core（[MeowAutoChrome.Core](MeowAutoChrome.Core)）：业务逻辑、Playwright 运行时管理、插件主机。
@@ -35,7 +35,7 @@ dotnet run --project MeowAutoChrome.WebAPI/MeowAutoChrome.WebAPI.csproj
 
 有关 Electron 命令请查看 [MeowAutoChrome.Electron/package.json](MeowAutoChrome.Electron/package.json)。
 
-**文档结构**
+## 文档结构
 
 - README.md（本文件）：总体说明与快速上手。
 - ARCHITECTURE.md：系统架构、运行原理、组件交互。
