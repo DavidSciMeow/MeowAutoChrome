@@ -40,3 +40,136 @@ curl -X POST "http://localhost:5000/api/playwright/uninstall?all=true"
 ```
 
 请以实际端口和端点实现为准。
+
+## HTTP 使用示例（同步自 API）
+
+下面列出若干常用的 HTTP 调用示例（可直接在终端或脚本中运行）。请根据实际主机与端口替换 `http://localhost:5000`。
+
+- 上传插件（multipart/form-data，表单字段常见为 `file` 或 `files`）：
+
+```bash
+curl -F "file=@./MyPlugin.zip" "http://localhost:5000/api/plugins/upload"
+```
+
+- 调用插件动作（JSON body）：
+
+```bash
+curl -X POST "http://localhost:5000/api/plugins/run" \
+   -H "Content-Type: application/json" \
+   -d '{"pluginId":"com.example.calc","functionId":"Add","arguments":{"a":"2","b":"3"}}'
+```
+
+返回示例（简化）:
+
+```json
+{ "pluginId":"com.example.calc", "functionId":"Add", "message": null, "state":"Running", "data": { "Sum": 5 } }
+```
+
+- 创建浏览器实例：
+
+```bash
+curl -X POST "http://localhost:5000/api/instances" \
+   -H "Content-Type: application/json" \
+   -d '{"DisplayName":"MyInstance","UserDataDirectory":"C:\\Users\\me\\AppData\\MyProfile"}'
+```
+
+- 获取当前页面截图（返回 PNG）：
+
+```bash
+curl "http://localhost:5000/api/screenshot" --output shot.png
+```
+
+- Playwright 安装（示例：离线包或在线安装）：
+
+```bash
+# 离线安装（archivePath 可用作 body 或 query，视实现而定）
+curl -X POST "http://localhost:5000/api/playwright/install?mode=offline&archivePath=./chrome-win64.zip"
+
+# 在线安装
+curl -X POST "http://localhost:5000/api/playwright/install?mode=online"
+```
+
+注意：生产环境请使用 HTTPS 与认证/鉴权机制（若配置）。
+
+## SignalR 前端示例（Electron / 浏览器）
+
+下面示例展示如何使用 `@microsoft/signalr` 与两个 Hub 建立连接并收发消息：`/logHub`（日志推送）与 `/browserHub`（浏览器交互）。示例为渲染器/浏览器端用法，Electron renderer 可直接复用。
+
+示例（JavaScript / TypeScript）：
+
+```javascript
+import * as signalR from "@microsoft/signalr";
+
+// 日志推送 Hub
+const logConn = new signalR.HubConnectionBuilder()
+   .withUrl('/logHub')
+   .withAutomaticReconnect()
+   .build();
+
+logConn.on('ReceiveLog', entry => {
+   // entry: { TimestampText, LevelText, FilterLevel, Category, Message }
+   console.log('Log:', entry);
+});
+
+await logConn.start();
+
+// 浏览器交互 Hub
+const browserConn = new signalR.HubConnectionBuilder()
+   .withUrl('/browserHub')
+   .withAutomaticReconnect()
+   .build();
+
+// 接收推送的帧（服务端会调用 IBrowserClient.ReceiveFrame）
+browserConn.on('ReceiveFrame', (data, width, height) => {
+   // data 可能是 base64 编码或 data URL，视实现而定。
+   const img = new Image();
+   if (typeof data === 'string' && data.startsWith('data:')) {
+      img.src = data;
+   } else {
+      img.src = `data:image/png;base64,${data}`;
+   }
+   document.body.appendChild(img);
+});
+
+browserConn.on('ScreencastDisabled', () => {
+   console.warn('Screencast disabled by server');
+});
+
+await browserConn.start();
+
+// 发送鼠标事件到后端（服务端方法：SendMouseEvent）
+await browserConn.invoke('SendMouseEvent', {
+   Type: 'mouseMoved',
+   X: 100,
+   Y: 200,
+   Button: 'left',
+   Buttons: 1,
+   ClickCount: 0,
+   Modifiers: 0
+});
+
+// 发送键盘事件到后端（服务端方法：SendKeyEvent）
+await browserConn.invoke('SendKeyEvent', {
+   Type: 'keyDown',
+   Key: 'a',
+   Code: 'KeyA',
+   Text: 'a',
+   Modifiers: 0,
+   WindowsVirtualKeyCode: 65,
+   NativeVirtualKeyCode: 65,
+   AutoRepeat: false,
+   IsKeypad: false,
+   IsSystemKey: false
+});
+
+// 可选：在需要身份鉴权时，使用 accessTokenFactory
+// .withUrl('/browserHub', { accessTokenFactory: () => getToken() })
+```
+
+注意要点：
+
+- Hub 路径由 `Program.cs` 映射：`/browserHub` 与 `/logHub`（见 [MeowAutoChrome.WebAPI/Program.cs](MeowAutoChrome.WebAPI/Program.cs)）。
+- 事件与 DTO 定义见 `MeowAutoChrome.WebAPI/Models/InputEvents.cs`（如 `MouseEventData` / `KeyEventData`）。
+- 在 Electron 的主/渲染进程间通信时，请确保 SignalR 连接建立于渲染进程或能正确代理到 WebAPI 的地址。
+
+如果需要，我可以把这些示例转成适用于 Node.js（非浏览器）或 TypeScript + React 的完整片段，并加入到 `docs/USAGE.md` 或单独的示例文件中。
